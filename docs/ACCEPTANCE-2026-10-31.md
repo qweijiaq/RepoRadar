@@ -196,3 +196,10 @@ QQ 邮箱支持情况：
 - 引入 Playwright，覆盖登录、核心页面、设置/运维面板、仓库授权提示、移动端横向溢出、健康检查和未登录 API 401。
 - E2E 使用本地 Chrome 或 CI Chromium，独立 `.next-e2e` 构建目录，可在开发服务器运行时并行执行。
 - 本地 `pnpm test:e2e`：11 项通过；CI 已加入 Chromium 安装和 E2E 步骤。
+
+## 剩余 Dependabot PR
+
+- 将 Vitest 升级到 5.0.5，229 项单元测试通过。
+- 将 GitHub Actions 更新到 actions/checkout@v7、pnpm/action-setup@v6、actions/setup-node@v7；对应 tag 已确认存在。
+- Dependabot 配置继续对 Vitest 和以上 Actions 的后续 major 做手动审批。
+- 升级后类型检查、构建通过；PR #5 / #8 待推送后由 Dependabot 按新策略关闭或人工关闭。
