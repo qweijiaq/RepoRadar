@@ -1,0 +1,616 @@
+import {
+  addNotification,
+  buildDiscoveryQueries,
+  buildFeedbackContext,
+  checkProjectDependencies,
+  fetchIssueContext,
+  fetchMaintainerSnapshot,
+  fetchReadme,
+  fetchRepoFile,
+  findEnrichedRepos,
+  findLatestIntegrationReport,
+  findLatestIssuePlan,
+  findRepoByFullName,
+  findUserById,
+  findWatchIntent,
+  generateComparisonReport,
+  generateDiscoverabilityReport,
+  generateIntegrationReport,
+  generateIssuePlan,
+  generateMaintainerReport,
+  generatePatch,
+  generateWatchMatches,
+  isDependencyUsed,
+  listFeedStatuses,
+  listFeedbackSignals,
+  listIntegrationOutcomes,
+  listUserProjects,
+  loadConfig,
+  loadFeedback,
+  loadStoredLlmConfig,
+  loadSubscriptions,
+  rankForUser,
+  saveComparisonReport,
+  saveDiscoverabilityReport,
+  saveIntegrationReport,
+  saveIssuePlan,
+  saveMaintainerReport,
+  savePatchDraft,
+  runDependencyUpgrade,
+  saveWatchMatches,
+  saveWatchRun,
+  searchRepos,
+  selectPatchFiles,
+  syncRepoActivity,
+  updateJobProgress,
+  upsertRepo,
+  validatePatch,
+  type DbPool,
+  type JobRecord,
+  type JobResult,
+  type LlmConfig,
+} from '@repo-radar/core'
+import { decryptJobToken } from '@/lib/job-secret'
+import { generateIssueForUser } from '@/lib/issue-generation'
+import { saveIssueDraft } from '@/lib/issue-drafts'
+import { fetchGitHubRepo, loadProjectContext } from '@/lib/project-context'
+
+type Progress = (message: string) => Promise<void>
+
+function requireToken(job: JobRecord): string {
+  const token = decryptJobToken(job.payload.token)
+  if (!token) throw new Error('GitHub 授权不可用，请重新登录后再试')
+  return token
+}
+
+async function loadLlm(pool: DbPool): Promise<LlmConfig> {
+  const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
+  if (!llm) throw new Error('还没有配置 AI 模型，请先到设置页配置')
+  return llm
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function integrationJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const llm = await loadLlm(pool)
+  const token = decryptJobToken(job.payload.token)
+  const focus = job.payload.focus ?? null
+
+  const projects = await listUserProjects(pool, userId)
+  let selected = projects.filter((project) => project.active)
+  let auto = false
+  if (selected.length === 0) {
+    selected = projects.filter((project) => project.source === 'owned').slice(0, 3)
+    auto = selected.length > 0
+  }
+  if (selected.length === 0) throw new Error('还没有可分析的项目')
+  selected = selected.slice(0, 3)
+
+  await progress('读取项目上下文…')
+  const contexts = await Promise.all(selected.map((project) => loadProjectContext(project.repoFullName, token)))
+  const [feedback, signals, subscriptions, user, repos, outcomes] = await Promise.all([
+    loadFeedback(pool, userId),
+    listFeedbackSignals(pool, userId),
+    loadSubscriptions(pool, userId),
+    findUserById(pool, userId),
+    findEnrichedRepos(pool, 500),
+    listIntegrationOutcomes(pool, userId),
+  ])
+
+  const projectNames = new Set(selected.map((project) => project.repoFullName))
+  const dependencies = [...new Set(contexts.flatMap((item) => item.dependencies))]
+  const ranked = rankForUser(
+    user?.profile ?? null,
+    repos.filter((repo) => !projectNames.has(repo.fullName)),
+    Date.now(),
+    buildFeedbackContext(feedback, signals),
+    subscriptions,
+  ).slice(0, 40)
+
+  const candidateMap = new Map<string, ReturnType<typeof buildIntegrationCandidate>>()
+  for (const repo of ranked) {
+    candidateMap.set(repo.fullName, buildIntegrationCandidate(repo, dependencies))
+  }
+
+  if (token) {
+    await progress('搜索可作为补充的候选…')
+    for (const query of buildDiscoveryQueries(contexts)) {
+      if (candidateMap.size >= 60) break
+      try {
+        const found = await searchRepos(query, { token, perPage: 10 })
+        for (const repo of found) {
+          if (projectNames.has(repo.fullName) || candidateMap.has(repo.fullName)) continue
+          await upsertRepo(pool, repo)
+          candidateMap.set(repo.fullName, {
+            repo: repo.fullName,
+            summary: repo.description ?? '',
+            language: repo.language,
+            topics: repo.topics,
+            stars: repo.stars,
+            verified: false,
+            reason: 'GitHub 搜索发现',
+            alreadyUsed: isDependencyUsed(repo.fullName, dependencies),
+          })
+          if (candidateMap.size >= 60) break
+        }
+      } catch (error) {
+        console.error('[job:integration] 候选搜索失败：', error)
+      }
+      await sleep(350)
+    }
+  }
+
+  const candidates = [...candidateMap.values()]
+  if (candidates.length === 0) throw new Error('没有可用的候选仓库')
+  await progress('模型生成中…')
+  const report = await generateIntegrationReport(contexts, candidates, llm, focus, outcomes)
+  const reportId = await saveIntegrationReport(pool, userId, {
+    report,
+    usedProjects: selected.map((project) => project.repoFullName),
+    auto,
+    focus,
+    generatedAt: new Date().toISOString(),
+    model: llm.model,
+    providerId: llm.providerId ?? null,
+    candidateCount: candidates.length,
+    candidateRepos: candidates.map((candidate) => candidate.repo),
+  })
+  await addNotification(pool, userId, {
+    kind: 'integration',
+    title: '接入建议已生成',
+    body: report.projects.map((project) => project.repo).join('、'),
+    url: `/integrations?report=${reportId}`,
+  })
+  return { href: `/integrations?report=${reportId}`, label: '查看接入建议' }
+}
+
+function buildIntegrationCandidate(
+  repo: Awaited<ReturnType<typeof findEnrichedRepos>>[number],
+  dependencies: string[],
+) {
+  return {
+    repo: repo.fullName,
+    summary: repo.summary ?? repo.description ?? '',
+    language: repo.language,
+    topics: repo.topics,
+    stars: repo.stars,
+    verified: repo.verifyStatus === 'verified',
+    reason: repo.reason,
+    alreadyUsed: dependencies.some((dependency) => {
+      const normalized = dependency.toLowerCase().replace(/^@/, '')
+      return (
+        normalized === repo.fullName.toLowerCase() ||
+        normalized === repo.name.toLowerCase()
+      )
+    }),
+  }
+}
+
+async function maintainerJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const llm = await loadLlm(pool)
+  const token = requireToken(job)
+  const completed = new Set((await listFeedStatuses(pool, userId)).map((status) => status.key))
+  const projects = await listUserProjects(pool, userId)
+  let selected = projects.filter((project) => project.active)
+  if (selected.length === 0) selected = projects.filter((project) => project.source === 'owned')
+  selected = selected.slice(0, 3)
+  if (selected.length === 0) throw new Error('还没有可分析的项目')
+
+  const inputs = []
+  const warnings: string[] = []
+  for (const project of selected) {
+    await progress(`读取 ${project.repoFullName}…`)
+    const context = await loadProjectContext(project.repoFullName, token)
+    const [snapshot, dependencies] = await Promise.all([
+      fetchMaintainerSnapshot(token, project.repoFullName),
+      checkProjectDependencies(context.manifestName, context.manifest, {
+          token,
+          limit: 12,
+          lockfile:
+            context.lockfileName && context.lockfile
+              ? { name: context.lockfileName, content: context.lockfile }
+              : null,
+        }),
+    ])
+    warnings.push(...snapshot.warnings)
+    if (dependencies.supported && dependencies.note) warnings.push(`${project.repoFullName}：${dependencies.note}`)
+    inputs.push({
+      repo: project.repoFullName,
+      description: context.description,
+      language: context.language,
+      topics: context.topics,
+      readme: context.readme,
+      manifestName: context.manifestName,
+      manifest: context.manifest,
+      dependencies: dependencies.items.filter(
+        (dependency) =>
+          !completed.has(
+            `dependency:${project.repoFullName}:${dependency.name}:${dependency.latest ?? 'unknown'}`,
+          ),
+      ),
+      signals: {
+        ...snapshot.signals,
+        hasTests:
+          snapshot.signals.hasTests ||
+          /"(test|vitest|jest|pytest)"\s*:/.test(context.manifest ?? '') ||
+          /pytest|vitest|jest/i.test(context.manifest ?? ''),
+      },
+      items: snapshot.items.filter(
+        (item) => !completed.has(`maintainer:${project.repoFullName}:${item.kind}:${item.number}`),
+      ),
+    })
+  }
+
+  await progress('模型生成维护周报…')
+  const report = await generateMaintainerReport(inputs, llm)
+  const reportId = await saveMaintainerReport(pool, userId, {
+    report,
+    usedProjects: selected.map((project) => project.repoFullName),
+    warnings: [...new Set(warnings)],
+    generatedAt: new Date().toISOString(),
+    model: llm.model,
+    providerId: llm.providerId ?? null,
+  })
+  await addNotification(pool, userId, {
+    kind: 'maintainer',
+    title: '维护周报已生成',
+    body: report.projects.map((project) => project.repo).join('、'),
+    url: `/maintain?report=${reportId}`,
+  })
+  return { href: `/maintain?report=${reportId}`, label: '查看维护周报' }
+}
+
+async function issueJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const llm = await loadLlm(pool)
+  await progress('生成技术周报…')
+  const generated = await generateIssueForUser(userId, llm)
+  const draftId = await saveIssueDraft(pool, {
+    userId,
+    ...generated,
+    model: llm.model,
+    providerId: llm.providerId ?? null,
+  })
+  await addNotification(pool, userId, {
+    kind: 'issue',
+    title: '新一期周报已生成',
+    body: generated.title,
+    url: `/issue?draft=${draftId}`,
+  })
+  return { href: `/issue?draft=${draftId}`, label: '查看技术周报' }
+}
+
+async function discoverabilityJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const llm = await loadLlm(pool)
+  const token = requireToken(job)
+  const repo = job.payload.repo?.trim()
+  if (!repo) throw new Error('缺少仓库参数')
+  await progress('读取仓库与 README…')
+  const fetched = await fetchGitHubRepo(repo, token)
+  if (!fetched) throw new Error('没有找到这个仓库')
+  const user = await findUserById(pool, userId)
+  if (user && fetched.owner.toLowerCase() !== user.login.toLowerCase()) throw new Error('只能分析自己拥有的仓库')
+  const readme = await fetchReadme(repo, token)
+  await progress('模型分析可发现性…')
+  const report = await generateDiscoverabilityReport(
+    {
+      repo,
+      description: fetched.description ?? '',
+      topics: fetched.topics,
+      readme,
+      language: fetched.language,
+      stars: fetched.stars,
+      forks: fetched.forks,
+      openIssues: fetched.openIssues,
+      homepage: fetched.homepage,
+      license: fetched.license,
+      pushedAt: fetched.pushedAt,
+    },
+    llm,
+  )
+  const reportId = await saveDiscoverabilityReport(pool, userId, {
+    report,
+    repo,
+    generatedAt: new Date().toISOString(),
+    model: llm.model,
+    providerId: llm.providerId ?? null,
+  })
+  await addNotification(pool, userId, {
+    kind: 'discoverability',
+    title: '曝光优化报告已生成',
+    body: repo,
+    url: `/repos/${repo}/optimize?report=${reportId}`,
+  })
+  return { href: `/repos/${repo}/optimize?report=${reportId}`, label: '查看曝光优化' }
+}
+
+async function comparisonJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const llm = await loadLlm(pool)
+  const token = requireToken(job)
+  const project = job.payload.project?.trim()
+  if (!project) throw new Error('缺少项目参数')
+  await progress('读取项目与候选…')
+  const latest = await findLatestIntegrationReport(pool, userId)
+  const projectReport = latest?.report.projects.find(
+    (item) => item.repo.toLowerCase() === project.toLowerCase(),
+  )
+  const suggestionRepos = [
+    ...new Set(projectReport?.suggestions.map((suggestion) => suggestion.repo) ?? []),
+  ]
+  if (suggestionRepos.length < 2) throw new Error('对比至少需要 2 个候选')
+
+  const context = await loadProjectContext(project, token)
+  const candidates = []
+  for (const repo of suggestionRepos.slice(0, 3)) {
+    const candidateContext = await loadProjectContext(repo, token)
+    const record = await findRepoByFullName(pool, repo)
+    candidates.push({
+      repo,
+      summary: candidateContext.description || record?.description || '',
+      language: candidateContext.language ?? record?.language ?? null,
+      topics: candidateContext.topics.length > 0 ? candidateContext.topics : (record?.topics ?? []),
+      stars: record?.stars ?? 0,
+      readme: candidateContext.readme,
+    })
+  }
+
+  await progress('模型生成选型对比…')
+  const report = await generateComparisonReport(
+    {
+      repo: project,
+      description: context.description,
+      language: context.language,
+      topics: context.topics,
+      dependencies: context.dependencies,
+      readme: context.readme,
+      manifestName: context.manifestName,
+      manifest: context.manifest,
+    },
+    candidates,
+    llm,
+  )
+  const reportId = await saveComparisonReport(pool, userId, project, {
+    report,
+    generatedAt: new Date().toISOString(),
+    model: llm.model,
+    providerId: llm.providerId ?? null,
+    candidateRepos: candidates.map((candidate) => candidate.repo),
+  })
+  await addNotification(pool, userId, {
+    kind: 'comparison',
+    title: '选型对比已生成',
+    body: `${project}：${report.recommendation.repo}`,
+    url: `/compare?project=${encodeURIComponent(project)}&report=${reportId}`,
+  })
+  return { href: `/compare?project=${encodeURIComponent(project)}&report=${reportId}`, label: '查看选型对比' }
+}
+
+async function issuePlanJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const llm = await loadLlm(pool)
+  const token = requireToken(job)
+  const repo = job.payload.repo?.trim()
+  const issueNumber = Number(job.payload.issueNumber)
+  if (!repo || !Number.isFinite(issueNumber)) throw new Error('缺少 Issue 参数')
+  await progress('读取 Issue 与仓库文件…')
+  const issue = await fetchIssueContext(token, repo, issueNumber)
+  if (!issue) throw new Error('没有找到这个 Issue')
+  const project = await loadProjectContext(repo, token)
+  await progress('模型生成修复方案…')
+  const plan = await generateIssuePlan(issue, project, llm)
+  const planId = await saveIssuePlan(pool, userId, {
+    plan,
+    repo,
+    issueNumber,
+    issueTitle: issue.title,
+    generatedAt: new Date().toISOString(),
+    model: llm.model,
+    providerId: llm.providerId ?? null,
+  })
+  await addNotification(pool, userId, {
+    kind: 'issue-plan',
+    title: 'Issue 修复方案已生成',
+    body: `${repo} #${issueNumber}：${issue.title}`,
+    url: `/issue-plan?repo=${encodeURIComponent(repo)}&number=${issueNumber}&plan=${planId}`,
+  })
+  return {
+    href: `/issue-plan?repo=${encodeURIComponent(repo)}&number=${issueNumber}&plan=${planId}`,
+    label: '查看修复方案',
+  }
+}
+
+async function patchJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const llm = await loadLlm(pool)
+  const token = requireToken(job)
+  const repo = job.payload.repo?.trim()
+  const issueNumber = Number(job.payload.issueNumber)
+  if (!repo || !Number.isFinite(issueNumber) || issueNumber <= 0) throw new Error('缺少 Issue 参数')
+
+  await progress('读取 Issue 与相关文件…')
+  const issue = await fetchIssueContext(token, repo, issueNumber)
+  if (!issue) throw new Error('没有找到这个 Issue')
+  const [plan, project] = await Promise.all([
+    findLatestIssuePlan(pool, userId, repo, issueNumber),
+    loadProjectContext(repo, token),
+  ])
+  const paths = selectPatchFiles(issue, plan?.plan ?? null, issue.files)
+  const loaded = await Promise.all(paths.map((path) => fetchRepoFile(repo, path, token)))
+  const files = loaded.filter((file): file is NonNullable<typeof file> => Boolean(file))
+  if (files.length === 0) throw new Error('没有读到可修改的文件，仓库可能太大或文件不可访问')
+
+  await progress(`模型生成补丁（${files.length} 个文件）…`)
+  const generated = await generatePatch(issue, project, plan?.plan ?? null, files, llm)
+
+  await progress('在 Docker 沙箱验证补丁…')
+  const validation = await validatePatch({
+    repoFullName: repo,
+    patch: generated.patch,
+    token,
+    timeoutMs: 300_000,
+  })
+  const succeeded =
+    validation.applies &&
+    (validation.buildStatus === 'verified' || validation.buildStatus === 'skipped')
+  const patchId = await savePatchDraft(pool, userId, {
+    repo,
+    issueNumber,
+    title: `${repo} #${issueNumber} 修复补丁`,
+    summary: generated.summary,
+    patch: generated.patch,
+    files: validation.changedFiles.length > 0 ? validation.changedFiles : generated.files,
+    validation,
+    status: succeeded ? 'validated' : 'failed',
+  })
+
+  await addNotification(pool, userId, {
+    kind: 'patch',
+    title: succeeded ? '修复补丁已验证' : '修复补丁验证未通过',
+    body: `${repo} #${issueNumber}：${generated.summary.slice(0, 120)}`,
+    url: `/patch/${patchId}`,
+  })
+
+  return {
+    href: `/patch/${patchId}`,
+    label: succeeded ? '查看已验证补丁' : '查看补丁与验证日志',
+  }
+}
+
+async function upgradeJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const repo = job.payload.repo?.trim()
+  const packageName = job.payload.packageName?.trim()
+  const targetVersion = job.payload.targetVersion?.trim()
+  const currentVersion = job.payload.currentVersion?.trim() || null
+  if (!repo || !packageName || !targetVersion) throw new Error('缺少依赖升级参数')
+  const token = requireToken(job)
+
+  await progress(`在 Docker 沙箱升级 ${packageName} 到 ${targetVersion}…`)
+  const result = await runDependencyUpgrade({
+    repoFullName: repo,
+    packageName,
+    targetVersion,
+    token,
+    timeoutMs: 420_000,
+  })
+  const succeeded =
+    result.applied &&
+    result.buildStatus !== 'failed' &&
+    result.buildStatus !== 'error'
+  const summary = `${packageName} ${currentVersion ? `${currentVersion} → ` : ''}${targetVersion}；${
+    result.buildStatus === 'verified'
+      ? '构建/测试通过'
+      : result.buildStatus === 'skipped'
+        ? '未执行完整构建'
+        : '构建/测试未通过'
+  }${result.error ? `：${result.error}` : ''}`
+  const patchId = await savePatchDraft(pool, userId, {
+    repo,
+    issueNumber: null,
+    title: `依赖升级 · ${packageName} ${targetVersion}`,
+    summary,
+    patch: result.patch || `# 没有生成文件改动
+# ${result.error ?? ''}
+`,
+    files: result.changedFiles,
+    validation: {
+      applies: result.applied,
+      buildStatus: result.buildStatus,
+      commands: result.commands,
+      changedFiles: result.changedFiles,
+      logTail: result.logTail,
+      ...(result.error ? { error: result.error } : {}),
+    },
+    status: succeeded ? 'validated' : 'failed',
+  })
+
+  await addNotification(pool, userId, {
+    kind: 'upgrade',
+    title: succeeded ? '依赖升级补丁已生成' : '依赖升级验证未通过',
+    body: `${repo}：${summary.slice(0, 140)}`,
+    url: `/patch/${patchId}`,
+  })
+
+  return {
+    href: `/patch/${patchId}`,
+    label: succeeded ? '查看升级补丁' : '查看升级结果',
+  }
+}
+
+async function watchJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {  const llm = await loadLlm(pool)
+  const intentId = Number(job.payload.intentId)
+  if (!Number.isFinite(intentId)) throw new Error('缺少关注意图')
+  const intent = await findWatchIntent(pool, userId, intentId)
+  if (!intent) throw new Error('关注意图不存在')
+  await progress('从候选池筛选匹配…')
+  const repos = await findEnrichedRepos(pool, 80)
+  const candidates = repos.map((repo) => ({
+    repo: repo.fullName,
+    summary: repo.summary ?? repo.description ?? '',
+    language: repo.language,
+    topics: repo.topics,
+    stars: repo.stars,
+  }))
+  if (candidates.length === 0) throw new Error('候选池为空，请先运行采集和富化')
+  await progress('模型判断匹配度…')
+  const matches = await generateWatchMatches(intent.text, candidates, llm)
+  const completed = new Set((await listFeedStatuses(pool, userId)).map((status) => status.key))
+  const activeMatches = matches.filter(
+    (match) => !completed.has(`watch:${intent.id}:${match.repo}`),
+  )
+  await saveWatchMatches(pool, intent.id, activeMatches)
+  await saveWatchRun(pool, intent.id, {
+    model: llm.model,
+    providerId: llm.providerId ?? null,
+    matchCount: activeMatches.length,
+  })
+  if (activeMatches.length > 0) {
+    await addNotification(pool, userId, {
+      kind: 'watch',
+      title: '订阅代理发现新匹配',
+      body: `${intent.text}：${activeMatches.slice(0, 3).map((match) => match.repo).join('、')}`,
+      url: '/watch',
+    })
+  }
+  return { href: '/watch', label: '查看关注匹配' }
+}
+
+async function activityJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const token = requireToken(job)
+  await progress('检查仓库的 star / fork / Issue / PR 动态…')
+  const user = await findUserById(pool, userId)
+  if (!user) throw new Error('用户不存在')
+  const result = await syncRepoActivity(pool, userId, user.login, token)
+  await progress('写入新动态通知…')
+  const note = result.warnings.length > 0 ? `；${result.warnings.length} 个仓库读取失败` : ''
+  return {
+    href: '/inbox',
+    label: `查看动态（新增 ${result.notifications} 条${note}）`,
+  }
+}
+
+export async function runJobHandler(pool: DbPool, job: JobRecord, userId: number): Promise<JobResult> {
+  const progress: Progress = (message) => updateJobProgress(pool, job.id, message)
+  switch (job.kind) {
+    case 'integration':
+      return integrationJob(pool, userId, job, progress)
+    case 'maintainer':
+      return maintainerJob(pool, userId, job, progress)
+    case 'issue':
+      return issueJob(pool, userId, job, progress)
+    case 'discoverability':
+      return discoverabilityJob(pool, userId, job, progress)
+    case 'comparison':
+      return comparisonJob(pool, userId, job, progress)
+    case 'issue-plan':
+      return issuePlanJob(pool, userId, job, progress)
+    case 'watch':
+      return watchJob(pool, userId, job, progress)
+    case 'activity':
+      return activityJob(pool, userId, job, progress)
+    case 'patch':
+      return patchJob(pool, userId, job, progress)
+    case 'upgrade':
+      return upgradeJob(pool, userId, job, progress)
+    default:
+      throw new Error(`未知任务类型：${job.kind}`)
+  }
+}

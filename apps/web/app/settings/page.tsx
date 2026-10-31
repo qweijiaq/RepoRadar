@@ -1,0 +1,563 @@
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import {
+  LLM_PROVIDERS,
+  envLlmSummary,
+  findLlmProvider,
+  loadMailStatus,
+  loadStoredLlmStatus,
+  loadSubscriptions,
+  loadUsageSummary,
+  resolveBaseUrlStatus,
+} from '@repo-radar/core'
+import {
+  addSubscriptionAction,
+  clearLlmConfigAction,
+  clearOAuthConfigAction,
+  loadDemoTasteAction,
+  removeSubscriptionAction,
+  resyncStarsAction,
+  saveGithubWebhookSecretAction,
+  clearMailConfigAction,
+  clearGithubWebhookSecretAction,
+  saveBaseUrlAction,
+  saveLlmConfigAction,
+  saveNotificationEmailAction,
+  saveOAuthConfigAction,
+  savePrefsAction,
+} from '@/app/actions'
+import { auth } from '@/auth'
+import { isAdminUser } from '@/lib/admin'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { getPool } from '@/lib/db'
+import { maskClientId, resolveGithubCredentials } from '@/lib/oauth-config'
+import { resolveGithubWebhookSecret } from '@/lib/webhook-config'
+import { sessionAccessToken, sessionUser } from '@/lib/session'
+import { countPushSubscriptions } from '@/lib/push'
+import { countPendingDeliveries } from '@repo-radar/core'
+import { findUserById } from '@/lib/users'
+import { LlmConfigForm } from './llm-form'
+import { MailConfigForm } from './mail-config-form'
+import { NotificationPrefsForm } from './notification-form'
+import { PushSubscribe } from './push-subscribe'
+import { WebhookSecretForm } from './webhook-secret-form'
+import { SubscriptionKindSelect } from './subscription-kind-select'
+import { TasteChips } from './taste-chips'
+
+const SUBSCRIPTION_LABELS: Record<string, string> = {
+  topic: '主题',
+  language: '语言',
+  author: '作者',
+  release: '更新',
+}
+
+export const dynamic = 'force-dynamic'
+
+interface SettingsPageProps {
+  searchParams: Promise<{
+    oauth?: string
+    sub?: string
+    llm?: string
+    sync?: string
+    notify?: string
+    webhook?: string
+    mail?: string
+    site?: string
+    admin?: string
+  }>
+}
+
+export default async function SettingsPage({ searchParams }: SettingsPageProps) {
+  const params = await searchParams
+  const session = await auth()
+  const sessionInfo = sessionUser(session)
+  if (!sessionInfo) redirect('/login')
+
+  const user = await findUserById(Number(sessionInfo.id))
+  const admin = await isAdminUser(sessionInfo)
+  const token = sessionAccessToken(session)
+  const devMode = process.env.AUTH_DEV_MODE === '1' && process.env.NODE_ENV !== 'production'
+  const oauth = await resolveGithubCredentials()
+  const subscriptions = await loadSubscriptions(getPool(), Number(sessionInfo.id))
+  const usage = await loadUsageSummary(getPool(), Number(sessionInfo.id), 30)
+  const [pendingDeliveries, pushDevices, mailStatus, siteStatus] = await Promise.all([
+    countPendingDeliveries(getPool(), Number(sessionInfo.id)),
+    countPushSubscriptions(getPool(), Number(sessionInfo.id)),
+    loadMailStatus(getPool()),
+    resolveBaseUrlStatus(getPool()),
+  ])
+  const webhook = await resolveGithubWebhookSecret()
+  const webhookUrl = `${siteStatus.url}/api/github/webhook`
+  const notificationEmail = user?.prefs.notificationEmail?.trim() || ''
+  const fallbackEmail = user?.email?.trim() || ''
+  const webhookUrlIsLocal = webhookUrl
+    ? /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(webhookUrl)
+    : false
+  const envLlm = envLlmSummary()
+  const storedStatus = envLlm ? null : await loadStoredLlmStatus(getPool())
+  const storedLlm = storedStatus?.summary ?? null
+  const currentLlm = envLlm ?? storedLlm
+  const currentLlmProvider = currentLlm ? findLlmProvider(currentLlm.providerId) : null
+  const llmProviderOptions = LLM_PROVIDERS.map((provider) => ({
+    id: provider.id,
+    name: provider.name,
+    keyUrl: provider.keyUrl,
+    defaultModel: provider.defaultModel,
+    baseUrl: provider.baseUrl,
+    ...(provider.baseUrlOptions ? { baseUrlOptions: provider.baseUrlOptions } : {}),
+    models: provider.models,
+  }))
+  const topics = Object.entries(user?.profile?.topicWeights ?? {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+  const languages = Object.entries(user?.profile?.languageWeights ?? {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+
+  return (
+    <div className="page narrow">
+      <div className="settings-heading">
+        <div>
+          <p className="eyebrow">设置</p>
+          <h1>偏好与配置</h1>
+          <p className="muted small">
+            已同步 {user?.profile?.starredCount ?? 0} 个 star
+            {user?.profile?.sourceCounts?.owned ? ` · ${user.profile.sourceCounts.owned} 个活跃仓库` : ''}
+            {user?.profile?.sourceCounts?.events ? ` · ${user.profile.sourceCounts.events} 个近期事件` : ''}
+            {user?.starsSyncedAt ? ` · ${new Date(user.starsSyncedAt).toLocaleString('zh-CN')}` : ''}
+          </p>
+        </div>
+      </div>
+
+      {params.oauth === 'saved' ? <div className="notice success">OAuth 凭据已更新。</div> : null}
+      {params.oauth === 'cleared' ? <div className="notice success">OAuth 配置已清除。</div> : null}
+      {params.oauth === 'invalid' ? <div className="notice">Client ID 或 Client Secret 格式不正确。</div> : null}
+      {params.sub === 'invalid' ? <div className="notice">订阅值格式不正确，请检查后重试。</div> : null}
+      {params.llm === 'saved' ? <div className="notice success">模型配置已保存。</div> : null}
+      {params.llm === 'cleared' ? <div className="notice success">模型配置已清除。</div> : null}
+      {params.llm === 'invalid' ? <div className="notice">模型配置不完整或格式不正确。</div> : null}
+      {params.llm === 'key-required' ? <div className="notice">更换服务商后需要重新填写 API Key。</div> : null}
+      {params.llm === 'env' ? <div className="notice">当前使用环境变量配置，页面修改不会生效。</div> : null}
+      {params.llm === 'missing' ? <div className="notice">生成周报前需要先在下方配置 AI 模型。</div> : null}
+      {storedStatus?.state === 'unreadable' ? (
+        <div className="notice">
+          检测到已保存的模型配置，但当前服务无法解密（通常是 AUTH_SECRET 发生变化）。请重新填写一次 API
+          Key，之后同步画像不会再清除它。
+        </div>
+      ) : null}
+      {params.sync === 'ok' ? <div className="notice success">口味画像已更新。</div> : null}
+      {params.notify === 'saved' ? <div className="notice success">通知偏好已保存。</div> : null}
+      {params.webhook === 'saved' ? <div className="notice success">Webhook Secret 已保存。</div> : null}
+      {params.webhook === 'cleared' ? <div className="notice success">Webhook Secret 已清除。</div> : null}
+      {params.webhook === 'invalid' ? <div className="notice">Webhook Secret 需要 8-256 个字符。</div> : null}
+      {params.webhook === 'key-required' ? <div className="notice">还没有保存 Secret，请先填写一个。</div> : null}
+      {params.webhook === 'env' ? <div className="notice">当前使用环境变量 GITHUB_WEBHOOK_SECRET，页面修改不会生效。</div> : null}
+      {params.notify === 'email-saved' ? <div className="notice success">通知邮箱已保存。</div> : null}
+      {params.notify === 'email-invalid' ? <div className="notice">通知邮箱格式不正确。</div> : null}
+      {params.mail === 'saved' ? <div className="notice success">邮件通道已保存。</div> : null}
+      {params.mail === 'cleared' ? <div className="notice success">邮件通道已清除。</div> : null}
+      {params.mail === 'invalid' ? <div className="notice">邮件配置不完整或格式不正确，请检查服务器、端口和邮箱。</div> : null}
+      {params.mail === 'env' ? <div className="notice">当前使用环境变量 SMTP_URL，页面修改不会生效。</div> : null}
+      {params.site === 'saved' ? <div className="notice success">站点地址已保存。</div> : null}
+      {params.site === 'invalid' ? <div className="notice">站点地址需要是 http:// 或 https:// 开头的完整地址。</div> : null}
+      {params.site === 'env' ? <div className="notice">当前使用环境变量 RADAR_BASE_URL，页面修改不会生效。</div> : null}
+      {params.admin === 'denied' ? <div className="notice">只有管理员可以修改全局配置。</div> : null}
+      {!admin ? (
+        <div className="notice">
+          当前账号不是管理员。AI 模型、邮件通道、站点地址、GitHub OAuth 和 Webhook 属于全局配置，只有管理员可以修改；通知偏好、通知邮箱和订阅仍可自行设置。
+        </div>
+      ) : null}
+      {params.sync === 'error' ? (
+        <div className="notice">画像同步失败，请检查 GitHub 授权范围或稍后重试。</div>
+      ) : null}
+
+      {admin ? (
+      <section className="panel">
+        <h2>AI 模型</h2>
+        <p className="muted small">
+          用于生成周报叙事和富化摘要。支持 Anthropic、OpenAI、DeepSeek、Qwen、Gemini、Grok、GLM、Kimi 等 8
+          家服务商，共 45 个预置模型，也可以手动填写新模型。
+        </p>
+        {currentLlm ? (
+          <p className="muted">
+            当前：{currentLlmProvider?.name ?? currentLlm.providerId} · <code>{currentLlm.model}</code>
+            {currentLlm.baseUrl ? ` · ${currentLlm.baseUrl}` : ''}
+            {storedLlm?.keyHint ? ` · Key 已保存（末四位 ${storedLlm.keyHint}）` : ''}
+            {envLlm ? '（环境变量）' : ''}
+          </p>
+        ) : (
+          <p className="muted">
+            {storedStatus?.state === 'unreadable'
+              ? '配置行还在，但无法解密，需要重新填写一次 API Key。'
+              : '尚未配置。生成周报前需要在这里选择服务商并填入 API Key。'}
+          </p>
+        )}
+        {envLlm ? (
+          <p className="muted small">通过环境变量 LLM_API_KEY 配置，页面修改不会生效。</p>
+        ) : (
+          <>
+            <form action={saveLlmConfigAction} autoComplete="off">
+              <LlmConfigForm
+                providers={llmProviderOptions}
+                current={
+                  storedLlm
+                    ? {
+                        providerId: storedLlm.providerId,
+                        model: storedLlm.model,
+                        baseUrl: storedLlm.baseUrl,
+                      }
+                    : null
+                }
+                hasExistingKey={Boolean(storedLlm)}
+                keyHint={storedLlm?.keyHint}
+              />
+              <div className="form-actions">
+                <button className="btn solid" type="submit">
+                  保存模型配置
+                </button>
+              </div>
+            </form>
+            {storedLlm ? (
+              <ConfirmDialog
+                action={clearLlmConfigAction}
+                triggerLabel="清除模型配置"
+                triggerClassName="btn quiet danger"
+                title="清除模型配置"
+                description="清除后，生成周报叙事和 LLM 富化都会停止工作，已保存的 API Key 会从数据库删除。"
+                confirmLabel="确认清除"
+              />
+            ) : null}
+          </>
+        )}
+      </section>
+      ) : null}
+
+      <section className="panel">
+        <h2>后台自动化</h2>
+        <p className="muted small">
+          独立 worker 每 15 分钟同步 GitHub 动态和 release，每 30 分钟检查本周精选邮件，并持续投递邮件/浏览器推送。失败任务会进入重试并在收件箱提醒。
+        </p>
+        <ul className="maintain-list">
+          <li>待投递消息：{pendingDeliveries} 条</li>
+          <li>邮件通道：{mailStatus.summary ? `已配置（${mailStatus.source === 'env' ? '环境变量' : '页面设置'}）` : '未配置（仅站内通知）'}</li>
+          <li>已授权推送设备：{pushDevices} 台</li>
+        </ul>
+        <p className="muted small">
+          本地运行：<code>pnpm worker</code>。生产环境建议让 web 设置 <code>RADAR_INLINE_JOBS=0</code>，只由 worker 执行任务。
+        </p>
+      </section>
+
+      <section className="panel">
+        <h2>通知</h2>
+        <form action={saveNotificationEmailAction} className="webhook-form" autoComplete="off">
+          <p className="muted small">
+            当前通知邮箱：{notificationEmail || fallbackEmail || '未设置'}
+            {!notificationEmail && fallbackEmail ? '（来自 GitHub）' : ''}。
+            支持 QQ、163、Gmail 等任意邮箱；留空则继续使用 GitHub 邮箱。
+          </p>
+          <label className="field">
+            <span>通知邮箱</span>
+            <input
+              name="email"
+              type="email"
+              defaultValue={notificationEmail}
+              placeholder={fallbackEmail || 'you@qq.com'}
+              spellCheck={false}
+            />
+          </label>
+          <div className="webhook-form-actions">
+            <button className="btn quiet small" type="submit">
+              保存通知邮箱
+            </button>
+          </div>
+        </form>
+        <NotificationPrefsForm
+          initial={
+            user?.prefs.notificationPrefs ?? {
+              githubStar: true,
+              githubFork: true,
+              githubIssue: true,
+              githubPull: true,
+              githubRelease: true,
+              emailNotifications: false,
+              pushNotifications: false,
+              weeklyDigest: false,
+            }
+          }
+        />
+        <PushSubscribe />
+        {admin ? (
+        <div className="webhook-box">
+          <h3 className="maintain-subhead">实时 Webhook（可选）</h3>
+          <p className="muted small">
+            在仓库 Settings → Webhooks 填完整公网 URL，例如 <code>https://你的域名/api/github/webhook</code>（不能只填路径）。
+            选择 star、fork、issues、pull_request、release 事件，即可实时接收动态。
+          </p>
+          {webhook?.source === 'env' ? (
+            <p className="muted small">当前用环境变量 GITHUB_WEBHOOK_SECRET 配置，页面修改不会生效。</p>
+          ) : (
+            <>
+              {webhookUrl ? (
+                <div>
+                  <p className="muted small">
+                    当前配置的完整地址：<code>{webhookUrl}</code>
+                  </p>
+                  {webhookUrlIsLocal ? (
+                    <p className="job-error">
+                      这是本机地址，GitHub 无法访问。请改成公网域名，或先启动 cloudflared/ngrok 隧道。
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              <p className="muted small">
+                {webhook ? 'Webhook Secret 已加密保存在数据库，GitHub 里填同一个值。' : '还没有配置 Webhook Secret。'}
+              </p>
+              <WebhookSecretForm hasExisting={Boolean(webhook)} />
+              {webhook ? (
+                <ConfirmDialog
+                  action={clearGithubWebhookSecretAction}
+                  triggerLabel="清除 Webhook Secret"
+                  triggerClassName="btn quiet danger small"
+                  title="清除 Webhook Secret"
+                  description="清除后 GitHub Webhook 请求会被拒绝，但收件箱轮询仍可继续使用。"
+                  confirmLabel="确认清除"
+                />
+              ) : null}
+            </>
+          )}
+        </div>
+        ) : null}
+      </section>
+
+      {admin ? (
+      <>
+      <section className="panel">
+        <h2>邮件通道</h2>
+        <p className="muted small">
+          邮件通知、任务失败提醒和每周精选都通过这里发送。密码会使用 AUTH_SECRET 加密保存在数据库；QQ、163、Gmail 需要填写授权码或应用专用密码。
+        </p>
+        <MailConfigForm status={mailStatus} />
+        {mailStatus.source === 'database' ? (
+          <ConfirmDialog
+            action={clearMailConfigAction}
+            triggerLabel="清除邮件通道"
+            triggerClassName="btn quiet danger small"
+            title="清除邮件通道"
+            description="清除后邮件通知会留在队列并最终失败，站内收件箱和浏览器推送不受影响。"
+            confirmLabel="确认清除"
+          />
+        ) : null}
+      </section>
+
+      <section className="panel">
+        <h2>站点地址</h2>
+        <p className="muted small">
+          用于邮件里的项目链接和 GitHub Webhook 完整地址。填写公网地址后，别人收到的邮件才能点回你的站点。
+        </p>
+        {siteStatus.source === 'env' ? (
+          <p className="muted small">
+            当前使用环境变量 <code>RADAR_BASE_URL</code>：<code>{siteStatus.url}</code>，页面修改不会生效。
+          </p>
+        ) : (
+          <form action={saveBaseUrlAction} className="webhook-form">
+            <label className="field">
+              <span>公开地址</span>
+              <input name="siteUrl" defaultValue={siteStatus.url} placeholder="https://radar.example.com" spellCheck={false} />
+            </label>
+            <div className="webhook-form-actions">
+              <button className="btn small" type="submit">
+                保存站点地址
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+      </>
+      ) : null}
+
+      <section className="panel">
+        <h2>AI 用量（近 30 天）</h2>
+        <p className="muted">
+          {usage.calls} 次调用 · {usage.promptTokens + usage.completionTokens} tokens
+          {usage.models.length > 0 ? ` · ${usage.models.length} 个模型` : ''}
+        </p>
+        {usage.models.length > 0 ? (
+          <ul className="usage-list">
+            {usage.models.map((item) => (
+              <li key={`${item.providerId}:${item.model}`}>
+                <span>
+                  {item.providerId ? `${item.providerId} · ` : ''}
+                  {item.model}
+                </span>
+                <span className="muted small">
+                  {item.calls} 次 · {item.tokens} tokens
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted small">还没有记录到模型调用。生成报告或使用搭档后会出现在这里。</p>
+        )}
+      </section>
+
+      {topics.length > 0 || languages.length > 0 ? (
+        <section className="panel">
+          <h2>口味画像</h2>
+          <p className="muted small">
+            由最近 star、你维护的仓库和近期公开事件共同生成。点击标签可以排除该方向，再次点击恢复；想主动关注某个主题，可以在下方订阅规则里添加。
+          </p>
+          <TasteChips
+            topics={topics}
+            languages={languages}
+            initialExcludedTopics={user?.prefs.excludedTopics ?? []}
+            initialExcludedLanguages={user?.prefs.excludedLanguages ?? []}
+          />
+        </section>
+      ) : null}
+
+      <section className="panel">
+        <details>
+          <summary className="advanced-summary">高级：手动编辑排除项</summary>
+          <form action={savePrefsAction} className="advanced-form">
+            <label className="field">
+              <span>不想看到的 topics（逗号分隔）</span>
+              <input
+                name="excludedTopics"
+                defaultValue={user?.prefs.excludedTopics.join(', ') ?? ''}
+                placeholder="crypto, web3"
+              />
+            </label>
+            <label className="field">
+              <span>不想看到的语言</span>
+              <input
+                name="excludedLanguages"
+                defaultValue={user?.prefs.excludedLanguages.join(', ') ?? ''}
+                placeholder="PHP"
+              />
+            </label>
+            <div className="form-actions">
+              <button className="btn" type="submit">
+                保存并重新计算
+              </button>
+            </div>
+          </form>
+        </details>
+      </section>
+
+      <section className="panel">
+        <h2>订阅规则</h2>
+        <p className="muted small">
+          主题 / 语言 / 作者订阅会提升相关项目在 feed 中的排序；仓库更新订阅会追踪这些仓库的新版本。
+        </p>
+        {subscriptions.length > 0 ? (
+          <ul className="subscription-list">
+            {subscriptions.map((sub) => (
+              <li key={`${sub.kind}:${sub.value}`}>
+                <span className="chip subtle">{SUBSCRIPTION_LABELS[sub.kind] ?? sub.kind}</span>
+                <span className="subscription-value">{sub.value}</span>
+                <form action={removeSubscriptionAction}>
+                  <input type="hidden" name="kind" value={sub.kind} />
+                  <input type="hidden" name="value" value={sub.value} />
+                  <button className="btn quiet small" type="submit">
+                    移除
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted small">还没有订阅。</p>
+        )}
+        <form action={addSubscriptionAction} className="subscription-form">
+          <SubscriptionKindSelect />
+          <input className="input" name="value" placeholder="ai-agents / TypeScript / vercel / owner/repo" />
+          <button className="btn small" type="submit">
+            添加订阅
+          </button>
+        </form>
+      </section>
+
+      {token ? (
+        <form className="panel" action={resyncStarsAction}>
+          <h2>同步画像</h2>
+          <p className="muted small">重新读取你最近的 star、活跃仓库和公开事件，更新口味画像。</p>
+          {user?.profile && !user.profile.sourceCounts?.owned && !user.profile.sourceCounts?.events ? (
+            <p className="muted small">当前画像只来自 star，点一次同步会加入最近维护的仓库和公开事件。</p>
+          ) : null}
+          <div className="form-actions">
+            <button className="btn" type="submit">
+              重新同步
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {admin ? (
+      <section className="panel">
+        <h2>GitHub OAuth 应用</h2>
+        {oauth ? (
+          <>
+            <p className="muted">
+              已配置（{oauth.source === 'env' ? '环境变量 AUTH_GITHUB_ID / AUTH_GITHUB_SECRET' : '数据库'}）
+              {oauth.source === 'database' ? (
+                <>
+                  {' '}
+                  · Client ID <code>{maskClientId(oauth.clientId)}</code>
+                </>
+              ) : null}
+            </p>
+            {oauth.source === 'database' ? (
+              <>
+                <form action={saveOAuthConfigAction}>
+                  <label className="field">
+                    <span>Client ID</span>
+                    <input name="clientId" defaultValue={oauth.clientId} autoComplete="off" />
+                  </label>
+                  <label className="field">
+                    <span>Client Secret（留空则保持不变）</span>
+                    <input name="clientSecret" type="password" autoComplete="off" placeholder="不修改请留空" />
+                  </label>
+                  <div className="form-actions">
+                    <button className="btn" type="submit">
+                      更新凭据
+                    </button>
+                  </div>
+                </form>
+                <ConfirmDialog
+                  action={clearOAuthConfigAction}
+                  triggerLabel="清除 OAuth 配置"
+                  triggerClassName="btn quiet danger"
+                  title="清除 OAuth 配置"
+                  description="清除后 GitHub 登录会立即失效，已登录的会话会保留到过期。"
+                  confirmLabel="确认清除"
+                />
+              </>
+            ) : (
+              <p className="muted small">通过环境变量配置，修改后重启服务即可生效。</p>
+            )}
+            <p className="muted small">
+              <Link href="/setup">查看配置说明</Link>
+            </p>
+          </>
+        ) : (
+          <p className="muted">
+            尚未配置。<Link href="/setup">去配置 GitHub 登录</Link>。
+          </p>
+        )}
+      </section>
+      ) : null}
+
+      {devMode ? (
+        <form className="panel" action={loadDemoTasteAction}>
+          <h2>演示数据</h2>
+          <p className="muted small">本地演示模式：把已收录的高分项目当作你的 star，生成口味画像。</p>
+          <div className="form-actions">
+            <button className="btn" type="submit">
+              载入演示口味
+            </button>
+          </div>
+        </form>
+      ) : null}
+    </div>
+  )
+}

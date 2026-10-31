@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RepoRadar 周报 · 第 002 期</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0a0c11;
+    --panel: #121620;
+    --panel-2: #171c28;
+    --border: #232b3a;
+    --text: #e7ecf6;
+    --muted: #8b95a7;
+    --accent: #6ea8fe;
+    --accent-2: #a78bfa;
+    --good: #4ade80;
+    --warn: #ffd789;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(900px 420px at 12% -8%, rgba(110, 168, 254, 0.16), transparent 60%),
+      radial-gradient(760px 380px at 92% 0%, rgba(167, 139, 250, 0.12), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Segoe UI", Roboto, sans-serif;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 56px 24px 80px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .3px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: conic-gradient(from 200deg, var(--accent), var(--accent-2), var(--accent)); box-shadow: 0 0 16px rgba(110,168,254,.8); }
+  .issue { margin-left: auto; font-size: 13px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; }
+  h1 { font-size: 38px; line-height: 1.15; letter-spacing: -1px; margin: 36px 0 14px; }
+  .meta { color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip { font-size: 12px; color: #a8c6ff; border: 1px solid rgba(110,168,254,.35); background: rgba(110,168,254,.08); border-radius: 999px; padding: 2px 10px; }
+  .chip.muted { color: var(--muted); border-color: var(--border); background: var(--panel-2); }
+  .notice { margin: 26px 0 0; padding: 14px 16px; border: 1px solid rgba(255, 215, 137, .3); background: rgba(255, 215, 137, .07); color: var(--warn); border-radius: 12px; font-size: 14px; }
+  .summary { margin: 32px 0 44px; padding: 26px 26px 10px; border: 1px solid var(--border); border-radius: 18px; background: linear-gradient(180deg, rgba(23,28,40,.85), rgba(18,22,32,.65)); }
+  .summary h2 { margin: 0 0 14px; font-size: 16px; letter-spacing: .4px; color: var(--muted); text-transform: uppercase; }
+  .summary ol { margin: 0; padding-left: 20px; }
+  .summary li { margin-bottom: 12px; }
+  .summary strong { color: #fff; }
+  section { margin: 52px 0; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 22px; }
+  .sec-no { font-size: 30px; font-weight: 800; color: var(--accent); letter-spacing: -1px; }
+  .sec-head h2 { margin: 0; font-size: 23px; letter-spacing: -.4px; }
+  .lead { color: #c3cbdb; font-size: 16px; }
+  .item { margin: 22px 0; padding: 20px 22px; border: 1px solid var(--border); border-left: 3px solid rgba(110,168,254,.55); border-radius: 14px; background: rgba(18,22,32,.72); }
+  .item h3 { margin: 0 0 14px; font-size: 18px; }
+  .item h3 a { color: #fff; text-decoration: none; }
+  .item h3 a:hover { color: var(--accent); }
+  .item .stars { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 6px; }
+  .row { display: grid; grid-template-columns: 82px 1fr; gap: 10px; padding: 5px 0; font-size: 14.5px; }
+  .row .k { color: var(--muted); }
+  .row .v { color: #c9d2e2; }
+  .row .v strong { color: #fff; }
+  .action { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+  .action.try { color: #9df0bb; background: rgba(74,222,128,.1); border: 1px solid rgba(74,222,128,.4); }
+  .action.watch { color: #ffe2a1; background: rgba(255,215,137,.08); border: 1px solid rgba(255,215,137,.35); }
+  .action.ignore { color: #b9c2d4; background: rgba(139,149,167,.1); border: 1px solid var(--border); }
+  .judgment { margin-top: 24px; padding: 18px 22px; border-radius: 14px; background: linear-gradient(135deg, rgba(110,168,254,.08), rgba(167,139,250,.08)); border: 1px solid rgba(110,168,254,.25); font-size: 15px; }
+  .judgment strong { color: #fff; }
+  .checklist { margin: 0; padding: 0; list-style: none; }
+  .checklist li { display: flex; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 14.5px; }
+  .checklist li:last-child { border-bottom: 0; }
+  .checklist .name { color: #fff; font-weight: 600; min-width: 150px; }
+  .checklist .ver { color: #a8c6ff; min-width: 120px; }
+  .checklist .note { color: var(--muted); }
+  .tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; margin-left: 8px; white-space: nowrap; }
+  .tag.up { color: #9df0bb; background: rgba(74,222,128,.1); border: 1px solid rgba(74,222,128,.4); }
+  .tag.steady { color: var(--muted); background: var(--panel-2); border: 1px solid var(--border); }
+  .tag.watch { color: #ffe2a1; background: rgba(255,215,137,.08); border: 1px solid rgba(255,215,137,.35); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 8px; }
+  th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; letter-spacing: .4px; text-transform: uppercase; }
+  td:first-child { color: #fff; font-weight: 600; white-space: nowrap; }
+  td:nth-child(2) { color: #a8c6ff; white-space: nowrap; }
+  td:nth-child(3) { color: var(--muted); white-space: nowrap; }
+  td:nth-child(4) { color: var(--muted); white-space: nowrap; }
+  .ignore-list { margin: 0; padding: 0; list-style: none; }
+  .ignore-list li { padding: 14px 0; border-bottom: 1px solid var(--border); font-size: 14.5px; }
+  .ignore-list li:last-child { border-bottom: 0; }
+  .ignore-list strong { color: #fff; }
+  .ignore-list span { color: var(--muted); }
+  .next { margin-top: 40px; padding: 22px 24px; border: 1px solid var(--border); border-radius: 16px; background: rgba(18,22,32,.72); }
+  .next h2 { margin: 0 0 10px; font-size: 17px; }
+  .next ul { margin: 0; padding-left: 18px; color: #c3cbdb; }
+  .next li { margin-bottom: 6px; }
+  footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+  footer p { margin: 6px 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { padding: 1px 6px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border); font-size: .9em; }
+  @media (max-width: 640px) {
+    .wrap { padding: 32px 16px 56px; }
+    h1 { font-size: 29px; }
+    .row { grid-template-columns: 72px 1fr; }
+    .sec-head h2 { font-size: 20px; }
+    table { font-size: 13px; }
+    .checklist .name { min-width: 110px; }
+    .checklist .ver { min-width: 92px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="dot"></span> RepoRadar <span class="issue">第 002 期</span></div>
+    <h1>终端 agent 分成了三类角色，token 成本开始被单独产品化</h1>
+    <div class="meta">2026-10-30 · 给 tsdev 的个性化技术简报</div>
+    <div class="chips">
+      <span class="chip">CLI 100%</span>
+      <span class="chip">开发者工具 90%</span>
+      <span class="chip">终端 70%</span>
+      <span class="chip muted">TypeScript 60%</span>
+      <span class="chip muted">MCP 50%</span>
+    </div>
+    <div class="notice">第二期样刊：选题由 <code>pnpm radar issue --user=tsdev</code> 的证据包整理而来，release / star / 推送时间都是真实数据，叙事为人工撰写。本期项目均未经沙箱构建验证。</div>
+  </header>
+
+  <div class="summary">
+    <h2>本期结论 · 30 秒</h2>
+    <ol>
+      <li><strong>终端 agent 正在分成三类角色。</strong>模型厂商的官方入口（Gemini CLI）、自主执行（OpenHands）、agent 运行时（herdr）。</li>
+      <li><strong>token 成本开始被单独产品化。</strong>rtk 用 CLI 代理把常见开发命令的 token 消耗降低 60–90%。</li>
+      <li><strong>老牌 CLI 工具很稳定。</strong>本周只有 GitHub CLI 和 lazygit 值得升级；bat、zx 的发布节奏值得留意。</li>
+    </ol>
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">01</span><h2>终端成为 AI coding 的主界面</h2></div>
+    <p class="lead">同一个赛道里，三种定位正在分化：官方入口、自主执行、运行时。</p>
+
+    <div class="item">
+      <h3>Google Gemini CLI <span class="stars">v0.66.0 · 108,624 stars · TypeScript</span></h3>
+      <div class="row"><span class="k">变化</span><span class="v"><strong>本周发布 0.66 版本。</strong>Google 把 Gemini 直接放进终端的官方 agent 入口。</span></div>
+      <div class="row"><span class="k">证据</span><span class="v">2026-10-27 发布；topics 包含 <code>cli</code>、<code>ai-agents</code>、<code>mcp-client</code>、<code>mcp-server</code>。</span></div>
+      <div class="row"><span class="k">对你的意义</span><span class="v">如果你已经在终端里用 agent，这是最接近「厂商官方终端入口」的项目；和你在用的 Claude Code 属于同一层，差异在模型和 MCP 生态。</span></div>
+      <div class="row"><span class="k">行动</span><span class="v"><span class="action try">值得试</span> npm 全局安装，估计 2 分钟；需要一个 Gemini API key。</span></div>
+    </div>
+
+    <div class="item">
+      <h3>OpenHands <span class="stars">v1.34.0 · 92,230 stars · TypeScript</span></h3>
+      <div class="row"><span class="k">变化</span><span class="v"><strong>本周发布 1.34 版本。</strong>定位是「AI 驱动的开发」——不只是补全，而是自主执行任务。</span></div>
+      <div class="row"><span class="k">证据</span><span class="v">2026-10-27 发布；最近推送就在今天。</span></div>
+      <div class="row"><span class="k">对你的意义</span><span class="v">和 Gemini CLI 相比，它更偏「让 agent 自己跑任务」，权限模型会更激进。如果你在评估自动化的边界，可以把它当作对照组。</span></div>
+      <div class="row"><span class="k">行动</span><span class="v"><span class="action watch">观望</span> 先看它怎么在你的项目里写文件、跑命令。</span></div>
+    </div>
+
+    <div class="item">
+      <h3>Continue <span class="stars">36,372 stars · TypeScript · 候选中</span></h3>
+      <div class="row"><span class="k">变化</span><span class="v"><strong>证据包里排进 CLI 分组的新候选</strong>，开源 coding agent，今天仍在推送。</span></div>
+      <div class="row"><span class="k">证据</span><span class="v">topics 包含 <code>agent</code>、<code>cli</code>、<code>developer-tools</code>；开源、可自托管。</span></div>
+      <div class="row"><span class="k">对你的意义</span><span class="v">如果你在意「agent 完全跑在自己的环境里」，这个方向比厂商入口更可控。</span></div>
+      <div class="row"><span class="k">行动</span><span class="v"><span class="action watch">观察</span> 把它和 Gemini CLI 放在一起比较权限模型。</span></div>
+    </div>
+
+    <div class="item">
+      <h3>herdr <span class="stars">v0.9.5 · 46,709 stars · Rust</span></h3>
+      <div class="row"><span class="k">变化</span><span class="v"><strong>10-14 发布小版本。</strong>定位是「coding agents 生活的运行时」——一个面向多 agent 的终端复用器。</span></div>
+      <div class="row"><span class="k">证据</span><span class="v">topics 包含 <code>terminal-multiplexer</code>、<code>agent-orchestration</code>、<code>cli</code>。</span></div>
+      <div class="row"><span class="k">行动</span><span class="v"><span class="action watch">观望</span> 如果你同时跑多个 terminal agent，这是值得关注的工作流层。</span></div>
+    </div>
+
+    <div class="judgment"><strong>判断：</strong>终端 agent 的竞争已经从模型能力转向三件事——权限边界、可观测性、和多 agent 的协作方式。</div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">02</span><h2>Token 成本开始被工程化</h2></div>
+
+    <div class="item">
+      <h3>rtk <span class="stars">v1.1.0 · 85,017 stars · Rust</span></h3>
+      <div class="row"><span class="k">变化</span><span class="v"><strong>本周发布 1.1 版本。</strong>一个 CLI 代理，把常见开发命令的 LLM token 消耗降低 60–90%。</span></div>
+      <div class="row"><span class="k">证据</span><span class="v">2026-10-25 发布；topics 包含 <code>token-optimization</code>、<code>cost-reduction</code>、<code>command-line-tool</code>。</span></div>
+      <div class="row"><span class="k">对你的意义</span><span class="v">你每天在终端里跑大量命令。如果这些输出会进入 agent 上下文，rtk 这类代理比「换更便宜的模型」更直接。</span></div>
+      <div class="row"><span class="k">行动</span><span class="v"><span class="action try">值得试</span> 单二进制，估计 1 分钟安装；先拿一周真实命令统计节省量。</span></div>
+    </div>
+
+    <div class="judgment"><strong>上下文：</strong>上一期提到的 Caveman（压缩 65%）和 ECC（harness 优化）是同一方向——成本优化正在从「模型层」下沉到「上下文层」。只挑一个试的话，rtk 的收益最可量化。</div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">03</span><h2>CLI 工具链本周体检</h2></div>
+    <p class="lead">终端工具链非常稳定，不需要每周追新。</p>
+    <ul class="checklist">
+      <li><span class="name">GitHub CLI</span><span class="ver">v2.103.3 · 10-26</span><span class="note">本周唯一的常用工具更新。<span class="tag up">值得升级</span></span></li>
+      <li><span class="name">lazygit</span><span class="ver">v0.66.2 · 10-16</span><span class="note">两周内的维护版本。<span class="tag up">值得升级</span></span></li>
+      <li><span class="name">fzf</span><span class="ver">v0.74.5 · 10-11</span><span class="note">常规更新，按需升级。<span class="tag steady">稳定</span></span></li>
+      <li><span class="name">ripgrep</span><span class="ver">15.2.0 · 07-15</span><span class="note">稳定，无需动作。<span class="tag steady">稳定</span></span></li>
+      <li><span class="name">bat</span><span class="ver">v0.26.1 · 2025-12-02</span><span class="note">接近一年没有新版本，注意维护状态。<span class="tag watch">留意</span></span></li>
+      <li><span class="name">zx</span><span class="ver">8.8.5 · 2025-10-19</span><span class="note">一年未更新；重度依赖的话留意替代方案。<span class="tag watch">留意</span></span></li>
+      <li><span class="name">asdf</span><span class="ver">v0.20.2 · 09-22</span><span class="note">稳定。<span class="tag steady">稳定</span></span></li>
+    </ul>
+    <div class="judgment"><strong>图表工具在 agent 化：</strong>d2 <code>v0.9.0</code>（09-07）、mermaid <code>tiny@12.2.0</code>（10-13）、archify <code>v3.2.0</code>（10-19，把想法/代码库转成交互式图的 agent skill）。如果你经常让 agent 画架构图，archify 值得看一眼。</div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">04</span><h2>你 star 的项目这周发生了什么</h2></div>
+    <p class="lead">15 个项目里，有 4 个在过去 7 天发布了新版本。</p>
+    <table>
+      <thead><tr><th>项目</th><th>最新版本</th><th>日期</th><th>状态</th></tr></thead>
+      <tbody>
+        <tr><td>Gemini CLI</td><td>v0.66.0</td><td>10-27</td><td>新</td></tr>
+        <tr><td>OpenHands</td><td>v1.34.0</td><td>10-27</td><td>新</td></tr>
+        <tr><td>GitHub CLI</td><td>v2.103.3</td><td>10-26</td><td>新</td></tr>
+        <tr><td>rtk</td><td>v1.1.0</td><td>10-25</td><td>新</td></tr>
+        <tr><td>archify</td><td>v3.2.0</td><td>10-19</td><td>已知</td></tr>
+        <tr><td>lazygit</td><td>v0.66.2</td><td>10-16</td><td>已知</td></tr>
+        <tr><td>herdr</td><td>v0.9.5</td><td>10-14</td><td>已知</td></tr>
+        <tr><td>mermaid</td><td>tiny@12.2.0</td><td>10-13</td><td>已知</td></tr>
+        <tr><td>fzf</td><td>v0.74.5</td><td>10-11</td><td>已知</td></tr>
+        <tr><td>hoppscotch</td><td>2026.9.0</td><td>09-30</td><td>已知</td></tr>
+        <tr><td>asdf</td><td>v0.20.2</td><td>09-22</td><td>已知</td></tr>
+        <tr><td>d2</td><td>v0.9.0</td><td>09-07</td><td>已知</td></tr>
+        <tr><td>ripgrep</td><td>15.2.0</td><td>07-15</td><td>已知</td></tr>
+        <tr><td>bat</td><td>v0.26.1</td><td>2025-12-02</td><td>已知</td></tr>
+        <tr><td>zx</td><td>8.8.5</td><td>2025-10-19</td><td>已知</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">05</span><h2>本周可以忽略</h2></div>
+    <ul class="ignore-list">
+      <li><strong>angular/angular-cli</strong> <span>27,016 stars，但只对 Angular 用户有意义，不是通用 CLI 工具。</span></li>
+      <li><strong>FuelLabs/fuels-ts</strong> <span>42,919 stars，加密网络 SDK，和你的工作流无关。</span></li>
+      <li><strong>puppeteer/puppeteer</strong> <span>95,767 stars，浏览器自动化库，不是终端工具；需要时再单独评估。</span></li>
+      <li><strong>hoppscotch</strong> <span>80,719 stars，API 客户端 GUI。你 star 了它，但本周没有新版本，也不属于终端工作流。</span></li>
+    </ul>
+  </section>
+
+  <div class="next">
+    <h2>下期想看什么？</h2>
+    <ul>
+      <li><strong>终端 agent 横评</strong>：Gemini CLI / Continue / OpenHands 的权限模型、可观测性和成本。</li>
+      <li><strong>Token 成本实战</strong>：rtk + Caveman + ECC 组合起来能省多少。</li>
+      <li>或者你更想看的主题，直接回复我。</li>
+    </ul>
+  </div>
+
+  <footer>
+    <p>RepoRadar · 懂你口味的开源项目雷达 · 第 002 期样刊</p>
+    <p>本期由 <code>pnpm radar issue --user=tsdev</code> 生成的证据包整理；数据来源 GitHub API 与本地库，叙事为人工撰写。</p>
+  </footer>
+</div>
+</body>
+</html>

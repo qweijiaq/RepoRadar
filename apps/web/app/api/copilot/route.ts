@@ -1,0 +1,73 @@
+import { NextResponse } from 'next/server'
+import {
+  addCopilotMessage,
+  buildCopilotMessages,
+  chatCompletion,
+  getCopilotThread,
+  getOrCreateCopilotThread,
+  listCopilotMessages,
+  loadConfig,
+  loadStoredLlmConfig,
+  recordLlmUsageRows,
+  updateCopilotTitle,
+  withLlmUsage,
+} from '@repo-radar/core'
+import { auth } from '@/auth'
+import { getPool } from '@/lib/db'
+import { loadCopilotContext } from '@/lib/copilot-context'
+import { sessionUser } from '@/lib/session'
+
+export const dynamic = 'force-dynamic'
+
+export async function POST(request: Request): Promise<NextResponse> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  let body: { message?: unknown; threadId?: unknown }
+  try {
+    body = (await request.json()) as { message?: unknown; threadId?: unknown }
+  } catch {
+    return NextResponse.json({ error: '请求格式不正确' }, { status: 400 })
+  }
+
+  const message = typeof body.message === 'string' ? body.message.trim().slice(0, 2000) : ''
+  if (message.length < 1) return NextResponse.json({ error: '消息不能为空' }, { status: 400 })
+
+  const pool = getPool()
+  const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
+  if (!llm) return NextResponse.json({ error: '还没有配置 AI 模型，请先到设置页配置' }, { status: 400 })
+
+  const userId = Number(currentUser.id)
+  const requestedThread = Number(body.threadId)
+  const thread =
+    (Number.isFinite(requestedThread) && requestedThread > 0
+      ? await getCopilotThread(pool, userId, requestedThread)
+      : null) ?? (await getOrCreateCopilotThread(pool, userId))
+  const history = await listCopilotMessages(pool, thread.id)
+  await addCopilotMessage(pool, thread.id, { role: 'user', content: message })
+  await updateCopilotTitle(pool, thread.id, message)
+
+  try {
+    const context = await loadCopilotContext(pool, userId, currentUser.login)
+    const content = await withLlmUsage(
+      () =>
+        chatCompletion(llm, buildCopilotMessages(context, history, message), {
+          temperature: 0.4,
+          maxTokens: 2200,
+        }),
+      (usage) => recordLlmUsageRows(pool, userId, null, 'copilot', usage),
+    )
+    await addCopilotMessage(pool, thread.id, {
+      role: 'assistant',
+      content,
+      model: llm.model,
+      providerId: llm.providerId ?? null,
+    })
+    return NextResponse.json({ content, model: llm.model })
+  } catch (error) {
+    console.error('[copilot] 回答失败：', error)
+    const detail = error instanceof Error ? error.message : '模型调用失败'
+    return NextResponse.json({ error: detail.slice(0, 300) }, { status: 502 })
+  }
+}

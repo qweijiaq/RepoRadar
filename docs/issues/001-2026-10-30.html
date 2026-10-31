@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RepoRadar 周报 · 第 001 期</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0a0c11;
+    --panel: #121620;
+    --panel-2: #171c28;
+    --border: #232b3a;
+    --text: #e7ecf6;
+    --muted: #8b95a7;
+    --accent: #6ea8fe;
+    --accent-2: #a78bfa;
+    --good: #4ade80;
+    --warn: #ffd789;
+    --bad: #ff8f8f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(900px 420px at 12% -8%, rgba(110, 168, 254, 0.16), transparent 60%),
+      radial-gradient(760px 380px at 92% 0%, rgba(167, 139, 250, 0.12), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Segoe UI", Roboto, sans-serif;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 56px 24px 80px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .3px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: conic-gradient(from 200deg, var(--accent), var(--accent-2), var(--accent)); box-shadow: 0 0 16px rgba(110,168,254,.8); }
+  .issue { margin-left: auto; font-size: 13px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px; }
+  h1 { font-size: 38px; line-height: 1.15; letter-spacing: -1px; margin: 36px 0 14px; }
+  .meta { color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip { font-size: 12px; color: #a8c6ff; border: 1px solid rgba(110,168,254,.35); background: rgba(110,168,254,.08); border-radius: 999px; padding: 2px 10px; }
+  .chip.muted { color: var(--muted); border-color: var(--border); background: var(--panel-2); }
+  .notice { margin: 26px 0 0; padding: 14px 16px; border: 1px solid rgba(255, 215, 137, .3); background: rgba(255, 215, 137, .07); color: var(--warn); border-radius: 12px; font-size: 14px; }
+  .summary { margin: 32px 0 44px; padding: 26px 26px 10px; border: 1px solid var(--border); border-radius: 18px; background: linear-gradient(180deg, rgba(23,28,40,.85), rgba(18,22,32,.65)); }
+  .summary h2 { margin: 0 0 14px; font-size: 16px; letter-spacing: .4px; color: var(--muted); text-transform: uppercase; }
+  .summary ol { margin: 0; padding-left: 20px; }
+  .summary li { margin-bottom: 12px; }
+  .summary strong { color: #fff; }
+  section { margin: 52px 0; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 22px; }
+  .sec-no { font-size: 30px; font-weight: 800; color: var(--accent); letter-spacing: -1px; }
+  .sec-head h2 { margin: 0; font-size: 23px; letter-spacing: -.4px; }
+  .lead { color: #c3cbdb; font-size: 16px; }
+  .item { margin: 26px 0; padding: 20px 22px; border: 1px solid var(--border); border-left: 3px solid rgba(110,168,254,.55); border-radius: 14px; background: rgba(18,22,32,.72); }
+  .item h3 { margin: 0 0 14px; font-size: 18px; }
+  .item h3 a { color: #fff; text-decoration: none; }
+  .item h3 a:hover { color: var(--accent); }
+  .item .stars { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 6px; }
+  .row { display: grid; grid-template-columns: 82px 1fr; gap: 10px; padding: 5px 0; font-size: 14.5px; }
+  .row .k { color: var(--muted); }
+  .row .v { color: #c9d2e2; }
+  .row .v strong { color: #fff; }
+  .action { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+  .action.try { color: #9df0bb; background: rgba(74,222,128,.1); border: 1px solid rgba(74,222,128,.4); }
+  .action.watch { color: #ffe2a1; background: rgba(255,215,137,.08); border: 1px solid rgba(255,215,137,.35); }
+  .action.ignore { color: #b9c2d4; background: rgba(139,149,167,.1); border: 1px solid var(--border); }
+  .judgment { margin-top: 24px; padding: 18px 22px; border-radius: 14px; background: linear-gradient(135deg, rgba(110,168,254,.08), rgba(167,139,250,.08)); border: 1px solid rgba(110,168,254,.25); font-size: 15px; }
+  .judgment strong { color: #fff; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 8px; }
+  th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; letter-spacing: .4px; text-transform: uppercase; }
+  td:first-child { color: #fff; font-weight: 600; white-space: nowrap; }
+  td:nth-child(2) { color: #a8c6ff; white-space: nowrap; }
+  td:nth-child(3) { color: var(--muted); white-space: nowrap; }
+  .ignore-list { margin: 0; padding: 0; list-style: none; }
+  .ignore-list li { padding: 14px 0; border-bottom: 1px solid var(--border); font-size: 14.5px; }
+  .ignore-list li:last-child { border-bottom: 0; }
+  .ignore-list strong { color: #fff; }
+  .ignore-list span { color: var(--muted); }
+  .next { margin-top: 40px; padding: 22px 24px; border: 1px solid var(--border); border-radius: 16px; background: rgba(18,22,32,.72); }
+  .next h2 { margin: 0 0 10px; font-size: 17px; }
+  .next ul { margin: 0; padding-left: 18px; color: #c3cbdb; }
+  .next li { margin-bottom: 6px; }
+  footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+  footer p { margin: 6px 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  @media (max-width: 640px) {
+    .wrap { padding: 32px 16px 56px; }
+    h1 { font-size: 29px; }
+    .row { grid-template-columns: 72px 1fr; }
+    .sec-head h2 { font-size: 20px; }
+    table { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><span class="dot"></span> RepoRadar <span class="issue">第 001 期</span></div>
+    <h1>Agent 平台开始交付「应用」，自托管推理层一周三更</h1>
+    <div class="meta">2026-10-30 · 给 demo 的个性化技术简报</div>
+    <div class="chips">
+      <span class="chip">LLM 100%</span>
+      <span class="chip">AI 45%</span>
+      <span class="chip">MCP 35%</span>
+      <span class="chip muted">Codex 20%</span>
+      <span class="chip muted">RAG 15%</span>
+    </div>
+    <div class="notice">这是一期用于验证内容形态的样刊：数据真实（GitHub API + RepoRadar 本地库），叙事由人工撰写。如果形态成立，后续会把叙事生成做成流水线。</div>
+  </header>
+
+  <div class="summary">
+    <h2>本期结论 · 30 秒</h2>
+    <ol>
+      <li><strong>Agent 平台开始交付「应用」，而不是「框架」。</strong>Dify 1.18 和 Paperclip 在同一周发布了版本，关键词都是路由、可移植、治理。</li>
+      <li><strong>自托管推理层一周三更。</strong>vLLM、Ollama、Open WebUI 都在过去十天里发了版本，本地模型列表继续扩张。</li>
+      <li><strong>上下文工程成了新战场。</strong>代码知识图谱、token 压缩、技能包正在抢占 agent 的工作流入口。</li>
+    </ol>
+    <p class="meta" style="margin-top:14px">你的 20 个 star 里，12 个带 agent 相关 topic，所以本期偏向「agent 怎么落地」，而不是模型训练。</p>
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">01</span><h2>Agent 平台从「搭」到「交付」</h2></div>
+    <p class="lead">这周的两个版本指向同一个方向：竞争点已经不是「能不能搭起来」，而是「能不能部署、治理、观测」。</p>
+
+    <div class="item">
+      <h3><a href="https://github.com/langgenius/dify">Dify</a><span class="stars">159,956 stars · Python</span></h3>
+      <div class="row"><span class="k">变化</span><span class="v"><strong>1.18 把 Agent 路由、可移植应用和工作流可观测性做进核心。</strong>这三件事都不是编排能力，而是「交付」能力。</span></div>
+      <div class="row"><span class="k">证据</span><span class="v"><code>v1.18.0</code>，2026-10-23 发布，release 标题是 <em>Smarter Agent Routing, Portable Apps, Deeper Workflow Visibility</em>；最近一次推送就在今天。</span></div>
+      <div class="row"><span class="k">对你的意义</span><span class="v">你 star 的项目里 agent 工具占多数。Dify 正从「低代码编排」转向「可交付的应用运行时」，如果你在自建 agent 平台，这一版的路由层值得和自己的方案对照。它和 LangChain 更接近替代关系。</span></div>
+      <div class="row"><span class="k">行动</span><span class="v"><span class="action try">值得试</span> Docker Compose 启动，估计 5–10 分钟（本机尚未验证）。</span></div>
+    </div>
+
+    <div class="item">
+      <h3><a href="https://github.com/paperclipai/paperclip">Paperclip</a><span class="stars">108,746 stars · TypeScript</span></h3>
+      <div class="row"><span class="k">变化</span><span class="v"><strong>继续强化 agent 治理、项目管理和多 agent 协作。</strong>版本号 <code>v2026.1023.0</code> 就是日期，说明迭代节奏很快。</span></div>
+      <div class="row"><span class="k">证据</span><span class="v">2026-10-24 发布；topics 包含 <code>agent-orchestration</code>、<code>ai-governance</code>、<code>project-management</code>。</span></div>
+      <div class="row"><span class="k">对你的意义</span><span class="v">它和 ECC 正好互补——ECC 优化 agent 自身（skills、memory、security），Paperclip 管 agent 团队。如果你在考虑「多个 agent 怎么协作」，这两个项目可以放在一起看。</span></div>
+      <div class="row"><span class="k">行动</span><span class="v"><span class="action watch">观望</span> 定位清晰，但版本还很早期，适合先收藏。</span></div>
+    </div>
+
+    <div class="judgment"><strong>判断：</strong>如果你在选型，优先看部署、治理、可观测这三项，而不是再看一遍框架能力表。</div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">02</span><h2>自托管推理层，一周三更</h2></div>
+    <p class="lead">如果你在自托管，这是一个自然的升级窗口：三个组件在十天内先后发布了版本。</p>
+
+    <div class="item">
+      <h3>三个版本，同一个信号</h3>
+      <div class="row"><span class="k">vLLM</span><span class="v"><code>v0.32.0</code>（10-18）· 服务端推理引擎的大版本迭代。</span></div>
+      <div class="row"><span class="k">Ollama</span><span class="v"><code>v0.40.13</code>（10-28）· 本地模型列表已经覆盖 Kimi、GLM、MiniMax、DeepSeek、gpt-oss、Qwen、Gemma。</span></div>
+      <div class="row"><span class="k">Open WebUI</span><span class="v"><code>v0.12.5</code>（10-29）· 自托管 UI 同步更新。</span></div>
+      <div class="row"><span class="k">Transformers</span><span class="v"><code>v5.22.0</code>（10-29）· 加入 Mistral Large 4 支持，模型定义层在同步跟进。</span></div>
+      <div class="row"><span class="k">对你的意义</span><span class="v">三者的分工越来越清晰——Ollama 面向本地开发，vLLM 面向吞吐和服务端，Open WebUI 是门面。如果你准备自托管，这周是升级窗口。</span></div>
+      <div class="row"><span class="k">行动</span><span class="v"><span class="action try">试 Ollama 0.40.13</span> <span class="action watch">观望 vLLM 0.32</span> 大版本变化，先读 release notes 再升级。</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">03</span><h2>上下文工程成为新战场</h2></div>
+    <p class="lead">token 效率、代码知识图谱、技能分发，本质上都在解决同一个问题：怎么让 agent 在有限上下文里看到对的东西。</p>
+
+    <div class="item">
+      <h3><a href="https://github.com/Graphify-Labs/graphify">Graphify</a><span class="stars">138,884 stars · Python</span></h3>
+      <div class="row"><span class="k">变化</span><span class="v"><strong>把代码库、文档、SQL schema、配置和 PDF 变成可查询的知识图谱</strong>，作为 Claude Code、Cursor、Codex、Gemini 的技能使用。</span></div>
+      <div class="row"><span class="k">证据</span><span class="v"><code>v0.9.97</code>，2026-10-27 发布；topics 覆盖 tree-sitter、graphrag、knowledge-graph、MCP。</span></div>
+      <div class="row"><span class="k">行动</span><span class="v"><span class="action try">值得试</span> 如果你经常让 agent 读大仓库，这是本周最贴近你工作流的项目。</span></div>
+    </div>
+
+    <div class="item">
+      <h3>Caveman<span class="stars">116,153 stars · Go</span></h3>
+      <div class="row"><span class="k">变化</span><span class="v"><strong>用「山顶洞人说话」的方式给 coding agent 降低 65% token 消耗</strong>，是一个病毒式传播的技能 + 代理。</span></div>
+      <div class="row"><span class="k">证据</span><span class="v">最近一次推送 10-29；描述直接写着 “Viral skill + proxy for coding agents”。</span></div>
+      <div class="row"><span class="k">行动</span><span class="v"><span class="action watch">当实验看</span> 可以了解 token 压缩思路，不要当工程实践。</span></div>
+    </div>
+
+    <div class="item">
+      <h3>rea<span class="stars">408,880 stars · TypeScript</span></h3>
+      <div class="row"><span class="k">变化</span><span class="v"><strong>用 agent 做逆向工程，从应用行为一路分析到原生二进制。</strong></span></div>
+      <div class="row"><span class="k">行动</span><span class="v"><span class="action ignore">可忽略</span> 垂直场景，除非你做安全或逆向。</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">04</span><h2>你 star 的项目这周发生了什么</h2></div>
+    <p class="lead">抽查的 10 个项目里，有 8 个在过去 7 天发布了新版本。</p>
+    <table>
+      <thead><tr><th>项目</th><th>最新版本</th><th>日期</th><th>一句话</th></tr></thead>
+      <tbody>
+        <tr><td>Dify</td><td>1.18.0</td><td>10-23</td><td>Agent 路由 + 可移植应用</td></tr>
+        <tr><td>Paperclip</td><td>v2026.1023.0</td><td>10-24</td><td>版本号即日期，快速迭代</td></tr>
+        <tr><td>Browser Use</td><td>0.13.14</td><td>10-26</td><td>Python agent 与集成更新</td></tr>
+        <tr><td>Graphify</td><td>0.9.97</td><td>10-27</td><td>代码知识图谱</td></tr>
+        <tr><td>Ollama</td><td>0.40.13</td><td>10-28</td><td>本地模型列表继续扩张</td></tr>
+        <tr><td>LangChain Core</td><td>1.7.3</td><td>10-29</td><td>核心库迭代</td></tr>
+        <tr><td>Open WebUI</td><td>0.12.5</td><td>10-29</td><td>UI 版本更新</td></tr>
+        <tr><td>Transformers</td><td>5.22.0</td><td>10-29</td><td>支持 Mistral Large 4</td></tr>
+        <tr><td>vLLM</td><td>0.32.0</td><td>10-18</td><td>服务端推理引擎</td></tr>
+        <tr><td>Firecrawl</td><td>2.11.0</td><td>06-19</td><td>四个多月没有新 release</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-no">05</span><h2>本周可以忽略</h2></div>
+    <ul class="ignore-list">
+      <li><strong>Firecrawl 自托管</strong> <span>196,826 stars，但最新 release 停留在 6 月。只是抓网页的话，用云服务或换更活跃的库，比自托管省事。</span></li>
+      <li><strong>TradingAgents</strong> <span>多 agent 金融交易实验，118,421 stars。研究可以看，不建议用于真实交易。</span></li>
+      <li><strong>prompts.chat</strong> <span>175,128 stars，本质是 prompt 内容库，不是可以直接集成的工具。</span></li>
+    </ul>
+  </section>
+
+  <div class="next">
+    <h2>下期想看什么？</h2>
+    <ul>
+      <li>「agent 运行时」横向对比：Dify / LangChain / Paperclip 的部署和治理能力。</li>
+      <li>自托管推理部署：Ollama + Open WebUI + vLLM 的组合方案。</li>
+      <li>或者你更想看的主题，直接回复我。</li>
+    </ul>
+  </div>
+
+  <footer>
+    <p>RepoRadar · 懂你口味的开源项目雷达 · 第 001 期样刊</p>
+    <p>数据来源：GitHub API（release / star）与 RepoRadar 本地库；叙事为人工撰写，用于验证内容形态。</p>
+  </footer>
+</div>
+</body>
+</html>

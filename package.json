@@ -1,0 +1,26 @@
+{
+  "name": "repo-radar",
+  "private": true,
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@11.9.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "radar": "tsx apps/worker/src/cli.ts",
+    "db:migrate": "tsx apps/worker/src/cli.ts migrate",
+    "dev:web": "pnpm --filter @repo-radar/web dev",
+    "build": "pnpm --filter @repo-radar/web build",
+    "start": "pnpm --filter @repo-radar/web start",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && pnpm --filter @repo-radar/web run typecheck",
+    "worker": "pnpm --filter @repo-radar/web exec tsx scripts/job-worker.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.0"
+  }
+}

@@ -1,0 +1,9 @@
+packages:
+  - packages/*
+  - apps/*
+
+allowBuilds:
+  esbuild: true
+
+overrides:
+  postcss: 8.5.32
