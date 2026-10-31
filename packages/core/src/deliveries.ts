@@ -1,4 +1,5 @@
 import type { DbPool } from './db.js'
+import { deliveryAllowed } from './quotas.js'
 import { findUserById, loadNotificationPrefs, resolveNotificationEmail } from './users.js'
 
 export type DeliveryChannel = 'email' | 'push'
@@ -71,6 +72,9 @@ export async function queueNotificationDeliveries(
   const user = await findUserById(pool, userId)
   const email = resolveNotificationEmail(user)
   const prefs = await loadNotificationPrefs(pool, userId)
+  if ((prefs.emailNotifications || prefs.pushNotifications) && !(await deliveryAllowed(pool, userId))) {
+    return { queued: 0, reason: 'delivery-quota' }
+  }
 
   let queued = 0
   if (prefs.emailNotifications && email) {
@@ -117,6 +121,7 @@ export async function enqueueWeeklyDigest(
     date?: Date
   },
 ): Promise<boolean> {
+  if (!(await deliveryAllowed(pool, input.userId))) return false
   return enqueueDelivery(pool, {
     userId: input.userId,
     channel: 'email',

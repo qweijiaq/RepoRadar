@@ -16,6 +16,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
+import { guardAiQuota } from '@/lib/quota-guard'
 import { loadProjectContext } from '@/lib/project-context'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 
@@ -27,6 +28,7 @@ export async function generateMaintainerAction(): Promise<void> {
   if (!currentUser) redirect('/login')
 
   const pool = getPool()
+  await guardAiQuota(pool, Number(currentUser.id))
   const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
   if (!llm) redirect('/settings?llm=missing')
 

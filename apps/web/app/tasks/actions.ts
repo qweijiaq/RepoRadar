@@ -1,6 +1,6 @@
 'use server'
 
-import { cancelJob, getJob, recoverStaleJobs } from '@repo-radar/core'
+import { cancelJob, getJob, isQuotaError, recoverStaleJobs } from '@repo-radar/core'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
@@ -31,8 +31,13 @@ export async function cancelJobAction(formData: FormData): Promise<void> {
 export async function retryJobAction(formData: FormData): Promise<void> {
   const context = await jobContext(formData)
   if (context) {
-    await resumeJob(getPool(), context.userId, context.jobId)
-    revalidatePath('/tasks')
+    try {
+      await resumeJob(getPool(), context.userId, context.jobId)
+      revalidatePath('/tasks')
+    } catch (error) {
+      if (isQuotaError(error)) redirect(`/tasks?quota=${encodeURIComponent(error.message)}`)
+      throw error
+    }
   }
   redirect('/tasks')
 }

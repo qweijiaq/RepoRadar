@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server'
 import {
   addCopilotMessage,
+  assertCopilotQuota,
   buildCopilotMessages,
   chatCompletion,
   getCopilotThread,
   getOrCreateCopilotThread,
+  isQuotaError,
   listCopilotMessages,
   loadConfig,
   loadStoredLlmConfig,
@@ -39,6 +41,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!llm) return NextResponse.json({ error: '还没有配置 AI 模型，请先到设置页配置' }, { status: 400 })
 
   const userId = Number(currentUser.id)
+  try {
+    await assertCopilotQuota(pool, userId)
+  } catch (error) {
+    if (isQuotaError(error)) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: 429 })
+    }
+    throw error
+  }
   const requestedThread = Number(body.threadId)
   const thread =
     (Number.isFinite(requestedThread) && requestedThread > 0

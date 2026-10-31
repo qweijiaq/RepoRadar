@@ -8,7 +8,7 @@ import { sessionUser } from '@/lib/session'
 export const dynamic = 'force-dynamic'
 
 interface LoginPageProps {
-  searchParams: Promise<{ configured?: string }>
+  searchParams: Promise<{ configured?: string; error?: string }>
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
@@ -28,6 +28,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
         {params.configured === '1' ? (
           <div className="notice success">GitHub 登录已配置完成，请使用 GitHub 登录。</div>
+        ) : null}
+        {params.error ? (
+          <div className="notice">
+            登录未完成：账号不在当前内测名单，或 GitHub 授权被取消。需要加入白名单请联系管理员。
+          </div>
         ) : null}
 
         {credentials ? (

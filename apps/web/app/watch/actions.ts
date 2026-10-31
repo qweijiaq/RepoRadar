@@ -18,6 +18,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
+import { guardAiQuota } from '@/lib/quota-guard'
 import { sessionUser } from '@/lib/session'
 
 const MAX_INTENTS = 10
@@ -59,6 +60,7 @@ export async function runWatchIntentAction(formData: FormData): Promise<void> {
   if (!currentUser) redirect('/login')
 
   const pool = getPool()
+  await guardAiQuota(pool, Number(currentUser.id))
   const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
   if (!llm) redirect('/settings?llm=missing')
 

@@ -479,3 +479,6 @@ CREATE TABLE IF NOT EXISTS github_tokens (
   token JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_llm_usage_created ON llm_usage (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_delivery_queue_user_created ON delivery_queue (user_id, created_at DESC);

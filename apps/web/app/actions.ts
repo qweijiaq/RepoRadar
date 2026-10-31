@@ -7,6 +7,7 @@ import {
   buildDiscoveryQueries,
   buildFeedbackContext,
   clearMailConfig,
+  clearQuotaConfig,
   clearStoredLlmConfig,
   createCollection,
   deleteCollection,
@@ -39,6 +40,7 @@ import {
   saveIntegrationReport,
   saveMailConfig,
   saveNotificationEmail,
+  saveQuotaConfig,
   saveNotificationPrefs,
   saveStoredLlmConfig,
   searchRepos,
@@ -67,6 +69,7 @@ import {
   saveGithubWebhookSecret,
 } from '@/lib/webhook-config'
 import { requireAdmin } from '@/lib/admin'
+import { guardAiQuota } from '@/lib/quota-guard'
 import { sessionAccessToken, sessionUser } from '@/lib/session'
 import { fetchGitHubRepo, loadProjectContext } from '@/lib/project-context'
 import { rebuildProfile, syncUserTaste } from '@/lib/sync'
@@ -295,6 +298,7 @@ export async function generateIssueAction(): Promise<void> {
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
 
+  await guardAiQuota(getPool(), Number(currentUser.id))
   const llm = loadConfig().llm ?? (await loadStoredLlmConfig(getPool()))
   if (!llm) redirect('/settings?llm=missing')
 
@@ -485,6 +489,7 @@ export async function generateIntegrationAction(formData: FormData): Promise<voi
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  await guardAiQuota(getPool(), Number(currentUser.id))
 
   const pool = getPool()
   const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
@@ -714,6 +719,34 @@ export async function saveBaseUrlAction(formData: FormData): Promise<void> {
   }
   revalidatePath('/settings')
   redirect('/settings?site=saved')
+}
+
+export async function saveQuotaConfigAction(formData: FormData): Promise<void> {
+  await requireAdmin()
+  const number = (name: string): number => {
+    const value = Number(formData.get(name))
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+  }
+  await saveQuotaConfig(getPool(), {
+    aiEnabled: formData.get('aiEnabled') === '1',
+    dailyAiCalls: number('dailyAiCalls'),
+    dailyAiTokens: number('dailyAiTokens'),
+    globalDailyTokens: number('globalDailyTokens'),
+    hourlyJobs: number('hourlyJobs'),
+    dailyJobs: number('dailyJobs'),
+    maxQueuedJobs: number('maxQueuedJobs'),
+    copilotMessagesPerHour: number('copilotMessagesPerHour'),
+    dailyDeliveries: number('dailyDeliveries'),
+  })
+  revalidatePath('/settings')
+  redirect('/settings?quota=saved')
+}
+
+export async function resetQuotaConfigAction(): Promise<void> {
+  await requireAdmin()
+  await clearQuotaConfig(getPool())
+  revalidatePath('/settings')
+  redirect('/settings?quota=reset')
 }
 
 export async function saveGithubWebhookSecretAction(formData: FormData): Promise<void> {

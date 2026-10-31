@@ -1,4 +1,4 @@
-import type { DbPool } from '@repo-radar/core'
+import { isQuotaError, type DbPool } from '@repo-radar/core'
 import { enqueueJob } from '@/lib/ai-jobs/runner'
 import { encryptJobToken } from '@/lib/job-secret'
 
@@ -44,11 +44,16 @@ export async function maybeQueueActivitySync(
   const minInterval = options.minIntervalMs ?? SYNC_INTERVAL_MS
   if (lastSynced && Date.now() - new Date(lastSynced).getTime() < minInterval) return false
 
-  await enqueueJob(pool, {
-    userId,
-    kind: 'activity',
-    title: '同步 GitHub 动态',
-    payload: { token: encryptJobToken(token), origin: '/inbox' },
-  })
-  return true
+  try {
+    await enqueueJob(pool, {
+      userId,
+      kind: 'activity',
+      title: '同步 GitHub 动态',
+      payload: { token: encryptJobToken(token), origin: '/inbox' },
+    })
+    return true
+  } catch (error) {
+    if (isQuotaError(error)) return false
+    throw error
+  }
 }

@@ -25,6 +25,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
+import { guardAiQuota } from '@/lib/quota-guard'
 import { fetchGitHubRepo } from '@/lib/project-context'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 import { initialRepoActionState, type RepoActionResult } from './types'
@@ -268,6 +269,7 @@ export async function generateDiscoverabilityAction(formData: FormData): Promise
   }
 
   const pool = getPool()
+  await guardAiQuota(pool, Number(currentUser.id))
   const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
   if (!llm) redirect('/settings?llm=missing')
 

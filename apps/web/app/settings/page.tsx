@@ -5,6 +5,8 @@ import {
   envLlmSummary,
   findLlmProvider,
   loadMailStatus,
+  loadQuotaConfig,
+  loadQuotaUsage,
   loadStoredLlmStatus,
   loadSubscriptions,
   loadUsageSummary,
@@ -20,6 +22,7 @@ import {
   saveGithubWebhookSecretAction,
   clearMailConfigAction,
   clearGithubWebhookSecretAction,
+  resetQuotaConfigAction,
   saveBaseUrlAction,
   saveLlmConfigAction,
   saveNotificationEmailAction,
@@ -38,6 +41,7 @@ import { countPendingDeliveries } from '@repo-radar/core'
 import { findUserById } from '@/lib/users'
 import { LlmConfigForm } from './llm-form'
 import { MailConfigForm } from './mail-config-form'
+import { QuotaForm } from './quota-form'
 import { NotificationPrefsForm } from './notification-form'
 import { PushSubscribe } from './push-subscribe'
 import { WebhookSecretForm } from './webhook-secret-form'
@@ -64,6 +68,7 @@ interface SettingsPageProps {
     mail?: string
     site?: string
     admin?: string
+    quota?: string
   }>
 }
 
@@ -80,11 +85,13 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const oauth = await resolveGithubCredentials()
   const subscriptions = await loadSubscriptions(getPool(), Number(sessionInfo.id))
   const usage = await loadUsageSummary(getPool(), Number(sessionInfo.id), 30)
-  const [pendingDeliveries, pushDevices, mailStatus, siteStatus] = await Promise.all([
+  const [pendingDeliveries, pushDevices, mailStatus, siteStatus, quotaConfig, quotaUsage] = await Promise.all([
     countPendingDeliveries(getPool(), Number(sessionInfo.id)),
     countPushSubscriptions(getPool(), Number(sessionInfo.id)),
     loadMailStatus(getPool()),
     resolveBaseUrlStatus(getPool()),
+    loadQuotaConfig(getPool()),
+    loadQuotaUsage(getPool(), Number(sessionInfo.id)),
   ])
   const webhook = await resolveGithubWebhookSecret()
   const webhookUrl = `${siteStatus.url}/api/github/webhook`
@@ -162,6 +169,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       {params.site === 'invalid' ? <div className="notice">站点地址需要是 http:// 或 https:// 开头的完整地址。</div> : null}
       {params.site === 'env' ? <div className="notice">当前使用环境变量 RADAR_BASE_URL，页面修改不会生效。</div> : null}
       {params.admin === 'denied' ? <div className="notice">只有管理员可以修改全局配置。</div> : null}
+      {params.quota === 'saved' ? <div className="notice success">限流配置已保存。</div> : null}
+      {params.quota === 'reset' ? <div className="notice success">限流配置已恢复默认。</div> : null}
       {!admin ? (
         <div className="notice">
           当前账号不是管理员。AI 模型、邮件通道、站点地址、GitHub OAuth 和 Webhook 属于全局配置，只有管理员可以修改；通知偏好、通知邮箱和订阅仍可自行设置。
@@ -373,6 +382,24 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         )}
       </section>
       </>
+      ) : null}
+
+      {admin ? (
+      <section className="panel">
+        <h2>限流与配额</h2>
+        <p className="muted small">
+          控制每个用户的 AI 调用、任务和投递频率，以及全站每日 token 预算。公测阶段建议保持默认值或更低。
+        </p>
+        <QuotaForm config={quotaConfig} usage={quotaUsage} />
+        <ConfirmDialog
+          action={resetQuotaConfigAction}
+          triggerLabel="恢复默认限流"
+          triggerClassName="btn quiet danger small"
+          title="恢复默认限流"
+          description="恢复后使用内置默认值；已产生今天的用量不会被清零。"
+          confirmLabel="确认恢复"
+        />
+      </section>
       ) : null}
 
       <section className="panel">

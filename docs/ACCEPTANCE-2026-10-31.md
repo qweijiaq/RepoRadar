@@ -14,7 +14,7 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| `pnpm test` | 通过，41 个测试文件 / 212 项测试 |
+| `pnpm test` | 通过，42 个测试文件 / 217 项测试 |
 | `pnpm typecheck` | 通过 |
 | `pnpm --filter @repo-radar/web build` | 通过 |
 | 关键页面 GET | `/feed`、`/issue`、`/maintain`、`/copilot`、`/watch`、`/collections`、`/integrations`、`/repos`、`/inbox`、`/history`、`/settings`、`/tasks`、`/trends` 全部 200 |
@@ -140,3 +140,11 @@ QQ 邮箱支持情况：
   - 迁移服务成功退出，Web/worker 在迁移完成后启动。
 - 测试后已执行 `docker compose down -v --rmi local`，删除测试容器、网络、数据库卷和测试镜像。
 - 部署说明见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+
+## 限流与配额验证
+
+- 新增每用户 AI 调用/token、全站 token、每小时/每日任务、排队任务、Copilot 消息和邮件/推送投递配额，以及 AI 总开关。
+- 管理员设置页可保存和恢复默认配额；非管理员不可见。
+- 已实际验证：AI 总开关拒绝、每日 AI 调用上限、任务每小时上限、投递上限和 Copilot 429 响应。
+- 新增 `ALLOWED_LOGINS` 内测登录白名单。
+- 搜索和测试推送增加单进程频率限制。

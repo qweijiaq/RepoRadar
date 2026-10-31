@@ -31,7 +31,7 @@ const STATUS_LABEL: Record<JobStatus, string> = {
 }
 
 interface TasksPageProps {
-  searchParams: Promise<{ job?: string }>
+  searchParams: Promise<{ job?: string; quota?: string }>
 }
 
 export default async function TasksPage({ searchParams }: TasksPageProps) {
@@ -57,6 +57,8 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
         </div>
         {active > 0 ? <span className="chip used">运行中 {active}</span> : null}
       </section>
+
+      {params.quota ? <div className="notice">{params.quota}</div> : null}
 
       {jobs.length === 0 ? (
         <div className="empty">

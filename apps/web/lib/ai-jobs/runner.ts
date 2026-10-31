@@ -1,10 +1,14 @@
 import {
   addNotification,
+  assertAiQuota,
+  assertJobQuota,
   createJob,
   failJob,
   finishJob,
   getJob,
   isJobCancelled,
+  isQuotaError,
+  jobUsesAi,
   markJobCancelled,
   markJobRunning,
   requeueJob,
@@ -57,6 +61,24 @@ function withTimeout<T>(promise: Promise<T>): Promise<T> {
 async function executeJob(pool: DbPool, userId: number, jobId: number): Promise<void> {
   const job = await getJob(pool, userId, jobId)
   if (!job || job.status !== 'queued') return
+
+  if (jobUsesAi(job.kind)) {
+    try {
+      await assertAiQuota(pool, userId)
+    } catch (error) {
+      if (isQuotaError(error)) {
+        await failJob(pool, jobId, error.message)
+        await addNotification(pool, userId, {
+          kind: 'job',
+          title: `任务未执行：${job.title}`,
+          body: error.message,
+          url: '/tasks',
+        })
+        return
+      }
+      throw error
+    }
+  }
 
   await acquireUserSlot(userId)
   try {
@@ -118,6 +140,8 @@ export async function enqueueJob(
   },
 ): Promise<number> {
   const job: NewJob = input
+  await assertJobQuota(pool, input.userId, input.kind)
+  if (jobUsesAi(input.kind)) await assertAiQuota(pool, input.userId)
   const id = await createJob(pool, job)
   if (process.env.RADAR_INLINE_JOBS !== '0') {
     setTimeout(() => {
@@ -131,6 +155,7 @@ export async function enqueueJob(
 export async function resumeJob(pool: DbPool, userId: number, jobId: number): Promise<void> {
   const job = await getJob(pool, userId, jobId)
   if (!job || (job.status !== 'failed' && job.status !== 'cancelled')) return
+  if (jobUsesAi(job.kind)) await assertAiQuota(pool, userId)
   const { retryJob } = await import('@repo-radar/core')
   await retryJob(pool, jobId)
   setTimeout(() => {

@@ -149,3 +149,15 @@ docker compose down
 ```bash
 docker compose down -v
 ```
+
+## 9. 限流、配额与公测白名单
+
+管理员可以在设置页「限流与配额」调整每用户每日 AI 调用/token、全站 token 预算、任务频率、Copilot 消息数和邮件/推送投递数。`0` 表示不限制；关闭「启用 AI 功能」会立即阻止新的 AI 任务和 Copilot 请求，GitHub 动态同步不受影响。
+
+公测阶段建议在 `.env` 设置：
+
+```dotenv
+ALLOWED_LOGINS=alice,bob
+```
+
+设置后只有名单内的 GitHub 登录名可以登录，`ADMIN_LOGINS` 会自动包含。留空表示开放注册。

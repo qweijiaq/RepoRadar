@@ -2,6 +2,7 @@
 
 import {
   findWatchIntent,
+  isQuotaError,
   loadConfig,
   loadStoredLlmConfig,
   type LlmConfig,
@@ -37,9 +38,16 @@ async function enqueueAndGo(
   title: string,
   payload: Parameters<typeof enqueueJob>[1]['payload'],
 ): Promise<never> {
-  const jobId = await enqueueJob(pool, { userId, kind, title, payload })
-  revalidatePath('/tasks')
-  redirect(`/tasks?job=${jobId}`)
+  try {
+    const jobId = await enqueueJob(pool, { userId, kind, title, payload })
+    revalidatePath('/tasks')
+    redirect(`/tasks?job=${jobId}`)
+  } catch (error) {
+    if (isQuotaError(error)) {
+      redirect(`/tasks?quota=${encodeURIComponent(error.message)}`)
+    }
+    throw error
+  }
 }
 
 export async function enqueueIntegrationAction(formData: FormData): Promise<void> {

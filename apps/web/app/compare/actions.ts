@@ -15,6 +15,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
+import { guardAiQuota } from '@/lib/quota-guard'
 import { loadProjectContext } from '@/lib/project-context'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 
@@ -27,6 +28,7 @@ export async function generateComparisonAction(formData: FormData): Promise<void
   if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(project)) redirect('/integrations?error=compare')
 
   const pool = getPool()
+  await guardAiQuota(pool, Number(currentUser.id))
   const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
   if (!llm) redirect('/settings?llm=missing')
 

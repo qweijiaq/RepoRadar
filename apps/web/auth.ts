@@ -57,6 +57,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
     session: { strategy: 'jwt' },
     providers,
     callbacks: {
+      async signIn({ account, profile }) {
+        if (account?.provider !== 'github') return true
+        const allowed = new Set(
+          [...(process.env.ALLOWED_LOGINS ?? '').split(/[,\s]+/), ...(process.env.ADMIN_LOGINS ?? '').split(/[,\s]+/)]
+            .map((login) => login.trim().replace(/^@/, '').toLowerCase())
+            .filter(Boolean),
+        )
+        if (allowed.size === 0) return true
+        const login = (profile as { login?: string } | null)?.login?.toLowerCase()
+        return Boolean(login && allowed.has(login))
+      },
       async jwt({ token, account, profile }) {
         if (account?.provider === 'github') {
           if (account.access_token) token.accessToken = account.access_token
