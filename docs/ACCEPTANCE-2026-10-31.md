@@ -14,7 +14,7 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| `pnpm test` | 通过，44 个测试文件 / 222 项测试 |
+| `pnpm test` | 通过，45 个测试文件 / 225 项测试 |
 | `pnpm typecheck` | 通过 |
 | `pnpm --filter @repo-radar/web build` | 通过 |
 | 关键页面 GET | `/feed`、`/issue`、`/maintain`、`/copilot`、`/watch`、`/collections`、`/integrations`、`/repos`、`/inbox`、`/history`、`/settings`、`/tasks`、`/trends` 全部 200 |
@@ -158,3 +158,10 @@ QQ 邮箱支持情况：
 - 每周精选邮件增加签名退订链接，无需登录即可关闭邮件通知；退订流程已实际点击验证；
 - `/privacy` 和 `/terms` 页面已添加，页脚已加入链接；
 - 测试数据已清理，演示用户通知偏好恢复默认。
+
+## 数据保留与自动清理验证
+
+- 管理员可配置运营记录、Copilot 对话和 AI 生成内容的保留天数；`0` 表示永久保留。
+- worker 每 30 分钟检查一次，实际清理最多每 24 小时执行一次，并用 PostgreSQL advisory lock 防止多 worker 重复执行。
+- 已用临时数据验证：已读通知、已发送投递、已完成任务、动态事件、LLM 用量、采集记录和验证记录会按阈值删除；未读通知保留；AI 生成内容和 Copilot 对话默认永久保留，配置非零阈值后才会删除。
+- 设置页保存保留策略已实际验证，测试配置已清理。

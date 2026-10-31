@@ -22,6 +22,7 @@ import {
   resolveBaseUrl,
   resolveMailConfig,
   resolveNotificationEmail,
+  runRetentionIfDue,
   saveReleaseEvent,
   syncRepoActivity,
 } from '@repo-radar/core'
@@ -52,9 +53,11 @@ let draining = false
 let lastActivitySync = 0
 let lastReleaseSync = 0
 let lastDigestCheck = 0
+let lastRetentionCheck = 0
 const ACTIVITY_INTERVAL = 15 * 60 * 1000
 const RELEASE_INTERVAL = 15 * 60 * 1000
 const DIGEST_INTERVAL = 30 * 60 * 1000
+const RETENTION_CHECK_INTERVAL = 30 * 60 * 1000
 const DELIVERY_INTERVAL = 5 * 1000
 let lastDeliveryDrain = 0
 
@@ -160,6 +163,17 @@ async function scheduledWeeklyDigest(): Promise<void> {
   }
 }
 
+async function scheduledRetention(): Promise<void> {
+  if (Date.now() - lastRetentionCheck < RETENTION_CHECK_INTERVAL) return
+  lastRetentionCheck = Date.now()
+  try {
+    const counts = await runRetentionIfDue(pool)
+    if (counts) console.log(`[worker] retention cleaned ${counts.total} rows`)
+  } catch (error) {
+    console.error('[worker] retention cleanup failed:', error)
+  }
+}
+
 async function drainDeliveries(): Promise<void> {
   if (draining || Date.now() - lastDeliveryDrain < DELIVERY_INTERVAL) return
   draining = true
@@ -217,6 +231,7 @@ async function loop(): Promise<void> {
       await scheduledActivity()
       await scheduledReleases()
       await scheduledWeeklyDigest()
+      await scheduledRetention()
     } catch (error) {
       console.error('[worker] loop error:', error)
     }

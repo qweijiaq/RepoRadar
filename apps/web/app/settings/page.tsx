@@ -7,6 +7,8 @@ import {
   loadMailStatus,
   loadQuotaConfig,
   loadQuotaUsage,
+  loadRetentionConfig,
+  loadRetentionLastRun,
   loadStoredLlmStatus,
   loadSubscriptions,
   loadUsageSummary,
@@ -23,6 +25,8 @@ import {
   clearMailConfigAction,
   clearGithubWebhookSecretAction,
   resetQuotaConfigAction,
+  resetRetentionConfigAction,
+  runRetentionCleanupAction,
   saveBaseUrlAction,
   saveLlmConfigAction,
   saveNotificationEmailAction,
@@ -43,6 +47,7 @@ import { LlmConfigForm } from './llm-form'
 import { DeleteAccountForm } from './delete-account-form'
 import { MailConfigForm } from './mail-config-form'
 import { QuotaForm } from './quota-form'
+import { RetentionForm } from './retention-form'
 import { NotificationPrefsForm } from './notification-form'
 import { PushSubscribe } from './push-subscribe'
 import { WebhookSecretForm } from './webhook-secret-form'
@@ -71,6 +76,7 @@ interface SettingsPageProps {
     admin?: string
     quota?: string
     account?: string
+    retention?: string
   }>
 }
 
@@ -87,14 +93,17 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const oauth = await resolveGithubCredentials()
   const subscriptions = await loadSubscriptions(getPool(), Number(sessionInfo.id))
   const usage = await loadUsageSummary(getPool(), Number(sessionInfo.id), 30)
-  const [pendingDeliveries, pushDevices, mailStatus, siteStatus, quotaConfig, quotaUsage] = await Promise.all([
-    countPendingDeliveries(getPool(), Number(sessionInfo.id)),
-    countPushSubscriptions(getPool(), Number(sessionInfo.id)),
-    loadMailStatus(getPool()),
-    resolveBaseUrlStatus(getPool()),
-    loadQuotaConfig(getPool()),
-    loadQuotaUsage(getPool(), Number(sessionInfo.id)),
-  ])
+  const [pendingDeliveries, pushDevices, mailStatus, siteStatus, quotaConfig, quotaUsage, retentionConfig, retentionLastRun] =
+    await Promise.all([
+      countPendingDeliveries(getPool(), Number(sessionInfo.id)),
+      countPushSubscriptions(getPool(), Number(sessionInfo.id)),
+      loadMailStatus(getPool()),
+      resolveBaseUrlStatus(getPool()),
+      loadQuotaConfig(getPool()),
+      loadQuotaUsage(getPool(), Number(sessionInfo.id)),
+      loadRetentionConfig(getPool()),
+      loadRetentionLastRun(getPool()),
+    ])
   const webhook = await resolveGithubWebhookSecret()
   const webhookUrl = `${siteStatus.url}/api/github/webhook`
   const notificationEmail = user?.prefs.notificationEmail?.trim() || ''
@@ -176,6 +185,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       {params.account === 'confirm' ? <div className="notice">请输入完整登录名以确认删除账号。</div> : null}
       {params.account === 'last-admin' ? <div className="notice">当前是唯一管理员，不能删除自己。请先在 ADMIN_LOGINS 增加另一位管理员。</div> : null}
       {params.account === 'error' ? <div className="notice">账号删除失败，请稍后重试或联系管理员。</div> : null}
+      {params.retention === 'saved' ? <div className="notice success">数据保留策略已保存。</div> : null}
+      {params.retention === 'reset' ? <div className="notice success">数据保留策略已恢复默认。</div> : null}
+      {params.retention === 'ran' ? <div className="notice success">清理已完成。</div> : null}
+      {params.retention === 'error' ? <div className="notice">清理失败，请查看 worker/web 日志。</div> : null}
       {!admin ? (
         <div className="notice">
           当前账号不是管理员。AI 模型、邮件通道、站点地址、GitHub OAuth 和 Webhook 属于全局配置，只有管理员可以修改；通知偏好、通知邮箱和订阅仍可自行设置。
@@ -404,6 +417,34 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           description="恢复后使用内置默认值；已产生今天的用量不会被清零。"
           confirmLabel="确认恢复"
         />
+      </section>
+      ) : null}
+
+      {admin ? (
+      <section className="panel">
+        <h2>数据保留与自动清理</h2>
+        <p className="muted small">
+          worker 每天最多清理一次过期数据，也可以在这里手动执行。默认只清理运行日志，AI 生成内容和 Copilot 对话默认永久保留。
+        </p>
+        <RetentionForm config={retentionConfig} lastRun={retentionLastRun} />
+        <div className="webhook-form-actions">
+          <ConfirmDialog
+            action={runRetentionCleanupAction}
+            triggerLabel="立即清理过期数据"
+            triggerClassName="btn quiet small"
+            title="立即清理过期数据"
+            description="按当前保留策略删除过期记录，操作不可撤销；AI 生成内容默认不在清理范围内。"
+            confirmLabel="确认清理"
+          />
+          <ConfirmDialog
+            action={resetRetentionConfigAction}
+            triggerLabel="恢复默认保留策略"
+            triggerClassName="btn quiet danger small"
+            title="恢复默认保留策略"
+            description="恢复默认值不会立即删除数据；下一次清理会按默认策略执行。"
+            confirmLabel="确认恢复"
+          />
+        </div>
       </section>
       ) : null}
 

@@ -161,3 +161,7 @@ ALLOWED_LOGINS=alice,bob
 ```
 
 设置后只有名单内的 GitHub 登录名可以登录，`ADMIN_LOGINS` 会自动包含。留空表示开放注册。
+
+## 10. 数据保留
+
+管理员在设置页「数据保留与自动清理」配置保留天数；worker 每天最多执行一次，也可以手动清理。`0` 表示永久保留。默认清理已读通知、已发送/失败投递、已完成任务、动态事件、LLM 用量、采集记录和验证记录；AI 生成内容和 Copilot 对话默认永久保留。多 worker 使用 PostgreSQL advisory lock 避免重复清理。

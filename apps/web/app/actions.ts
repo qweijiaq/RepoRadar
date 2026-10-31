@@ -8,6 +8,7 @@ import {
   buildFeedbackContext,
   clearMailConfig,
   clearQuotaConfig,
+  clearRetentionConfig,
   clearStoredLlmConfig,
   createCollection,
   deleteCollection,
@@ -34,6 +35,7 @@ import {
   markNotificationsRead,
   rankForUser,
   resolveBaseUrlStatus,
+  runRetentionIfDue,
   removeCollectionItem,
   removeSubscription,
   removeUserProject,
@@ -42,6 +44,7 @@ import {
   saveMailConfig,
   saveNotificationEmail,
   saveQuotaConfig,
+  saveRetentionConfig,
   saveNotificationPrefs,
   saveStoredLlmConfig,
   searchRepos,
@@ -769,6 +772,46 @@ export async function resetQuotaConfigAction(): Promise<void> {
   await clearQuotaConfig(getPool())
   revalidatePath('/settings')
   redirect('/settings?quota=reset')
+}
+
+export async function saveRetentionConfigAction(formData: FormData): Promise<void> {
+  await requireAdmin()
+  const number = (name: string): number => {
+    const value = Number(formData.get(name))
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+  }
+  await saveRetentionConfig(getPool(), {
+    notificationsDays: number('notificationsDays'),
+    deliveryQueueDays: number('deliveryQueueDays'),
+    aiJobsDays: number('aiJobsDays'),
+    activitySeenDays: number('activitySeenDays'),
+    llmUsageDays: number('llmUsageDays'),
+    ingestRunsDays: number('ingestRunsDays'),
+    verificationsDays: number('verificationsDays'),
+    copilotDays: number('copilotDays'),
+    generatedContentDays: number('generatedContentDays'),
+  })
+  revalidatePath('/settings')
+  redirect('/settings?retention=saved')
+}
+
+export async function resetRetentionConfigAction(): Promise<void> {
+  await requireAdmin()
+  await clearRetentionConfig(getPool())
+  revalidatePath('/settings')
+  redirect('/settings?retention=reset')
+}
+
+export async function runRetentionCleanupAction(): Promise<void> {
+  await requireAdmin()
+  try {
+    await runRetentionIfDue(getPool(), { force: true })
+  } catch (error) {
+    console.error('[retention] 手动清理失败：', error)
+    redirect('/settings?retention=error')
+  }
+  revalidatePath('/settings')
+  redirect('/settings?retention=ran')
 }
 
 export async function saveGithubWebhookSecretAction(formData: FormData): Promise<void> {
