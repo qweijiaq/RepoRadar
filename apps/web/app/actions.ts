@@ -11,6 +11,7 @@ import {
   clearStoredLlmConfig,
   createCollection,
   deleteCollection,
+  deleteUserAccount,
   findCollection,
   findEnrichedRepos,
   findLlmProvider,
@@ -68,7 +69,7 @@ import {
   resolveGithubWebhookSecret,
   saveGithubWebhookSecret,
 } from '@/lib/webhook-config'
-import { requireAdmin } from '@/lib/admin'
+import { adminLogins, requireAdmin } from '@/lib/admin'
 import { guardAiQuota } from '@/lib/quota-guard'
 import { sessionAccessToken, sessionUser } from '@/lib/session'
 import { fetchGitHubRepo, loadProjectContext } from '@/lib/project-context'
@@ -719,6 +720,27 @@ export async function saveBaseUrlAction(formData: FormData): Promise<void> {
   }
   revalidatePath('/settings')
   redirect('/settings?site=saved')
+}
+
+export async function deleteAccountAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+
+  const confirmation = String(formData.get('confirm') ?? '').trim()
+  if (confirmation.toLowerCase() !== currentUser.login.toLowerCase()) {
+    redirect('/settings?account=confirm')
+  }
+
+  const admins = adminLogins()
+  if (admins.length === 1 && admins[0] === currentUser.login.toLowerCase()) {
+    redirect('/settings?account=last-admin')
+  }
+
+  const deleted = await deleteUserAccount(getPool(), Number(currentUser.id))
+  if (!deleted) redirect('/settings?account=error')
+  revalidatePath('/settings')
+  await signOut({ redirectTo: '/' })
 }
 
 export async function saveQuotaConfigAction(formData: FormData): Promise<void> {

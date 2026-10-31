@@ -1,5 +1,6 @@
 import type { DbPool } from './db.js'
 import { deliveryAllowed } from './quotas.js'
+import { appendUnsubscribeFooter } from './unsubscribe.js'
 import { findUserById, loadNotificationPrefs, resolveNotificationEmail } from './users.js'
 
 export type DeliveryChannel = 'email' | 'push'
@@ -118,16 +119,20 @@ export async function enqueueWeeklyDigest(
     subject: string
     text: string
     html: string
+    baseUrl?: string
     date?: Date
   },
 ): Promise<boolean> {
   if (!(await deliveryAllowed(pool, input.userId))) return false
+  const content = input.baseUrl
+    ? appendUnsubscribeFooter(input.html, input.text, input.userId, input.baseUrl)
+    : { html: input.html, text: input.text }
   return enqueueDelivery(pool, {
     userId: input.userId,
     channel: 'email',
     subject: input.subject,
-    body: input.text,
-    bodyHtml: input.html,
+    body: content.text,
+    bodyHtml: content.html,
     url: '/feed',
     dedupeKey: `weekly:${isoWeekKey(input.date ?? new Date())}`,
   })

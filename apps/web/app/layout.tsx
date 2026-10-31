@@ -86,7 +86,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
         <footer className="site-footer">
           <span>RepoRadar · 懂你口味的开源项目雷达</span>
-          <span>证据优先 · 基于真实 release 与 star 数据</span>
+          <span>
+            <a href="/privacy">隐私</a> · <a href="/terms">条款</a> · 证据优先
+          </span>
         </footer>
       </body>
     </html>

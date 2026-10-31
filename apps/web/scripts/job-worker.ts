@@ -139,7 +139,8 @@ async function scheduledWeeklyDigest(): Promise<void> {
       if (!user.prefs.notificationPrefs?.weeklyDigest) continue
       if (!resolveNotificationEmail(user)) continue
       try {
-        const digest = await buildWeeklyDigest(pool, user, { baseUrl: await resolveBaseUrl(pool), limit: 8 })
+        const siteUrl = await resolveBaseUrl(pool)
+        const digest = await buildWeeklyDigest(pool, user, { baseUrl: siteUrl, limit: 8 })
         if (digest.items.length === 0) continue
         const queued = await enqueueWeeklyDigest(pool, {
           userId: user.id,
@@ -147,6 +148,7 @@ async function scheduledWeeklyDigest(): Promise<void> {
           subject: digest.subject,
           text: digest.text,
           html: digest.html,
+          baseUrl: siteUrl,
         })
         if (queued) console.log(`[worker] weekly digest queued for ${user.login}`)
       } catch (error) {

@@ -34,6 +34,7 @@ import {
   resolveBaseUrl,
   resolveMailConfig,
   resolveNotificationEmail,
+  appendUnsubscribeFooter,
   renderDigestHtml,
   renderDigestMarkdown,
   renderDraftHtml,
@@ -387,11 +388,12 @@ async function runDigest(pool: DbPool, options: DigestCliOptions): Promise<void>
     if (options.send) {
       const to = options.to?.trim() || resolveNotificationEmail(user)
       if (!to) throw new Error(`${user.login} 没有邮箱，请用 --to 指定收件人`)
+      const content = appendUnsubscribeFooter(html, text, user.id, baseUrl)
       await sendDigestEmail(pool, {
         to,
         subject: `RepoRadar 精选 — ${date.toISOString().slice(0, 10)}`,
-        text,
-        html,
+        text: content.text,
+        html: content.html,
       })
       console.log(`已发送摘要到 ${to}`)
     }

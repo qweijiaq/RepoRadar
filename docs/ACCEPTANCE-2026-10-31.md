@@ -14,7 +14,7 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| `pnpm test` | 通过，42 个测试文件 / 217 项测试 |
+| `pnpm test` | 通过，44 个测试文件 / 222 项测试 |
 | `pnpm typecheck` | 通过 |
 | `pnpm --filter @repo-radar/web build` | 通过 |
 | 关键页面 GET | `/feed`、`/issue`、`/maintain`、`/copilot`、`/watch`、`/collections`、`/integrations`、`/repos`、`/inbox`、`/history`、`/settings`、`/tasks`、`/trends` 全部 200 |
@@ -148,3 +148,13 @@ QQ 邮箱支持情况：
 - 已实际验证：AI 总开关拒绝、每日 AI 调用上限、任务每小时上限、投递上限和 Copilot 429 响应。
 - 新增 `ALLOWED_LOGINS` 内测登录白名单。
 - 搜索和测试推送增加单进程频率限制。
+
+## 隐私与数据删除验证
+
+- 设置页新增「隐私与数据」面板，可导出全部个人数据和永久删除账号；
+- `/api/account/export` 已验证：返回账户、star、反馈、订阅、项目、报告、任务、Copilot、补丁等数据；任务 payload 中的加密 token 会被移除，推送订阅和 GitHub token 不导出；
+- 用临时用户验证级联删除：用户、star、反馈、订阅、收藏、通知、任务、推送订阅、GitHub token 和投递队列全部清零；
+- 删除账号要求输入 GitHub 登录名，删除后自动退出登录；
+- 每周精选邮件增加签名退订链接，无需登录即可关闭邮件通知；退订流程已实际点击验证；
+- `/privacy` 和 `/terms` 页面已添加，页脚已加入链接；
+- 测试数据已清理，演示用户通知偏好恢复默认。

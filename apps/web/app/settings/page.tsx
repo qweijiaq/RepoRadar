@@ -40,6 +40,7 @@ import { countPushSubscriptions } from '@/lib/push'
 import { countPendingDeliveries } from '@repo-radar/core'
 import { findUserById } from '@/lib/users'
 import { LlmConfigForm } from './llm-form'
+import { DeleteAccountForm } from './delete-account-form'
 import { MailConfigForm } from './mail-config-form'
 import { QuotaForm } from './quota-form'
 import { NotificationPrefsForm } from './notification-form'
@@ -69,6 +70,7 @@ interface SettingsPageProps {
     site?: string
     admin?: string
     quota?: string
+    account?: string
   }>
 }
 
@@ -171,6 +173,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       {params.admin === 'denied' ? <div className="notice">只有管理员可以修改全局配置。</div> : null}
       {params.quota === 'saved' ? <div className="notice success">限流配置已保存。</div> : null}
       {params.quota === 'reset' ? <div className="notice success">限流配置已恢复默认。</div> : null}
+      {params.account === 'confirm' ? <div className="notice">请输入完整登录名以确认删除账号。</div> : null}
+      {params.account === 'last-admin' ? <div className="notice">当前是唯一管理员，不能删除自己。请先在 ADMIN_LOGINS 增加另一位管理员。</div> : null}
+      {params.account === 'error' ? <div className="notice">账号删除失败，请稍后重试或联系管理员。</div> : null}
       {!admin ? (
         <div className="notice">
           当前账号不是管理员。AI 模型、邮件通道、站点地址、GitHub OAuth 和 Webhook 属于全局配置，只有管理员可以修改；通知偏好、通知邮箱和订阅仍可自行设置。
@@ -518,6 +523,25 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           </div>
         </form>
       ) : null}
+
+      <section className="panel">
+        <h2>隐私与数据</h2>
+        <p className="muted small">
+          你可以随时导出全部个人数据，或永久删除账号。GitHub token、推送订阅密钥等凭据不会出现在导出文件中。
+        </p>
+        <div className="feed-actions">
+          <a className="btn small" href="/api/account/export">
+            导出全部数据
+          </a>
+          <Link className="btn quiet small" href="/privacy">
+            隐私说明
+          </Link>
+          <Link className="btn quiet small" href="/terms">
+            服务条款
+          </Link>
+        </div>
+        <DeleteAccountForm login={sessionInfo.login} />
+      </section>
 
       {admin ? (
       <section className="panel">
