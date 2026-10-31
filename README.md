@@ -53,6 +53,19 @@ pnpm radar pipeline --topics=llm --limit=20
 
 常用参数：`--topics`、`--days`、`--pages`、`--delay-ms`、`--language`、`--limit`、`--format=md|json`、`--dry-run`。运行 `pnpm radar help` 查看完整说明。
 
+## Docker 部署
+
+完整栈（PostgreSQL + 迁移 + Web + worker）：
+
+```bash
+cp .env.example .env
+# 编辑 .env：AUTH_SECRET、ADMIN_LOGINS、SETUP_TOKEN、RADAR_BASE_URL
+docker compose up -d --build
+curl -fsS http://localhost:3000/api/health
+```
+
+首次打开 `/setup` 配置 GitHub OAuth。worker 需要挂载 Docker socket 来运行补丁/依赖升级沙箱，部署安全边界见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+
 ## Web（M1）
 
 Web 应用在 `apps/web`（Next.js + Auth.js）：

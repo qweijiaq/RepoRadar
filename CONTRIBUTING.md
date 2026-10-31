@@ -12,7 +12,7 @@ Thanks for helping improve RepoRadar.
 ## Local setup
 
 ```bash
-docker compose up -d
+docker compose up -d postgres
 pnpm install
 pnpm db:migrate
 pnpm dev:web

@@ -126,3 +126,17 @@ QQ 邮箱支持情况：
 - 新增 Apache-2.0 `LICENSE`、`NOTICE`、`SECURITY.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、Issue/PR 模板、Dependabot 和 GitHub Actions CI。
 - CI 执行安装、审计、类型检查、测试、迁移和构建。
 - 测试数量更新为 41 个文件 / 212 项测试。
+
+## Docker 部署验证
+
+- 新增多阶段 `Dockerfile`：`web`、`worker`、`migrate` 三个运行目标；构建阶段执行 `pnpm build`，运行阶段不依赖 pnpm 在线安装。
+- `docker-compose.yml` 扩展为 PostgreSQL + 一次性迁移 + Web + worker；PostgreSQL 只绑定 `127.0.0.1`，worker 挂载 Docker socket。
+- 新增 `/api/health`，返回数据库连通状态。
+- 在独立 Compose 项目（Web 3001、PostgreSQL 5434）完成全栈启动验证：
+  - `/api/health` 返回 200 和 `{"ok":true,"database":"ok"}`；
+  - Web 容器健康；
+  - worker 容器健康，且容器内可调用宿主 Docker（`docker version` 28.0.1）；
+  - `/setup` 返回 200；
+  - 迁移服务成功退出，Web/worker 在迁移完成后启动。
+- 测试后已执行 `docker compose down -v --rmi local`，删除测试容器、网络、数据库卷和测试镜像。
+- 部署说明见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
