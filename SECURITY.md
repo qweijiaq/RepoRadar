@@ -44,4 +44,4 @@ Operators must:
 
 ## Sandbox warning
 
-Patch generation, dependency upgrades, and repository verification execute untrusted repository code inside Docker. The current sandbox limits memory, CPU, process count, and new privileges, but Docker access is still a high-trust capability. Treat the worker host as security-sensitive and do not co-locate it with secrets or internal services.
+Patch generation, dependency upgrades, and repository verification execute untrusted repository code inside Docker. The sandbox runs as the invoking host UID (or UID 1000 when the worker itself is root), drops all Linux capabilities, uses `no-new-privileges`, a read-only root filesystem with tmpfs caches, and limits memory, CPU and process count. Docker access is still a high-trust capability. Treat the worker host as security-sensitive and do not co-locate it with secrets or internal services.

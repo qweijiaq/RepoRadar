@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { prepareSandboxWorkDir, sandboxDockerArgs } from './sandbox.js'
 
 export type VerifyStatus = 'verified' | 'failed' | 'skipped' | 'error'
 export type VerifyStack = 'node' | 'python' | 'go' | 'rust' | 'unknown'
@@ -42,8 +43,8 @@ export function buildVerificationPlan(files: string[], packageJson: PackageJsonS
   if (stack === 'python') {
     const install =
       names.has('pyproject.toml') || names.has('setup.py')
-        ? 'pip install --no-cache-dir .'
-        : 'pip install --no-cache-dir -r requirements.txt'
+        ? 'pip install --user --no-cache-dir .'
+        : 'pip install --user --no-cache-dir -r requirements.txt'
     return { stack, image: 'python:3.12-alpine', commands: [install] }
   }
 
@@ -203,32 +204,10 @@ export async function runVerification(options: RunVerificationOptions): Promise<
       logText = 'Docker 不可用，跳过执行'
     } else {
       const script = plan.commands.join(' && ')
+      if (!options.fromPath) await prepareSandboxWorkDir(workDir)
       const result = await runProcess(
         'docker',
-        [
-          'run',
-          '--rm',
-          '--network',
-          'bridge',
-          '--memory',
-          '2g',
-          '--cpus',
-          '2',
-          '--pids-limit',
-          '512',
-          '--security-opt',
-          'no-new-privileges',
-          '-e',
-          'CI=true',
-          '-v',
-          `${workDir}:/work`,
-          '-w',
-          '/work',
-          plan.image,
-          'sh',
-          '-lc',
-          script,
-        ],
+        sandboxDockerArgs({ image: plan.image, workDir, script }),
         timeoutMs,
       )
       exitCode = result.exitCode
@@ -382,32 +361,14 @@ export async function validatePatch(options: ValidatePatchOptions): Promise<Patc
       buildStatus = 'skipped'
       logText = 'Docker 不可用，已只验证补丁可应用'
     } else {
+      if (!options.fromPath) await prepareSandboxWorkDir(workDir)
       const result = await runProcess(
         'docker',
-        [
-          'run',
-          '--rm',
-          '--network',
-          'bridge',
-          '--memory',
-          '2g',
-          '--cpus',
-          '2',
-          '--pids-limit',
-          '512',
-          '--security-opt',
-          'no-new-privileges',
-          '-e',
-          'CI=true',
-          '-v',
-          `${workDir}:/work`,
-          '-w',
-          '/work',
-          plan.image,
-          'sh',
-          '-lc',
-          plan.commands.join(' && '),
-        ],
+        sandboxDockerArgs({
+          image: plan.image,
+          workDir,
+          script: plan.commands.join(' && '),
+        }),
         options.timeoutMs ?? 300_000,
       )
       logText = tail(result.output, 8000)

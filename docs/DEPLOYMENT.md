@@ -145,7 +145,7 @@ curl -k -I https://localhost:8443/login
 
 ## 5. worker 与 Docker 沙箱
 
-worker 负责定时同步、邮件/推送投递，以及 patch / 依赖升级 / 仓库验证。后三者需要调用 Docker 构建不可信仓库代码，因此 Compose 把宿主机的 Docker socket 挂载给 worker：
+worker 负责定时同步、邮件/推送投递，以及 patch / 依赖升级 / 仓库验证。沙箱容器以调用方的非 root UID 运行；worker 自身是 root 时切到 1000:1000，丢弃全部 capabilities，使用只读根文件系统、tmpfs 缓存、`no-new-privileges` 和资源限制。后三者需要调用 Docker 构建不可信仓库代码，因此 Compose 把宿主机的 Docker socket 挂载给 worker：
 
 ```yaml
 volumes:

@@ -14,7 +14,7 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| `pnpm test` | 通过，46 个测试文件 / 229 项测试 |
+| `pnpm test` | 通过，47 个测试文件 / 232 项测试 |
 | `pnpm typecheck` | 通过 |
 | `pnpm --filter @repo-radar/web build` | 通过 |
 | 关键页面 GET | `/feed`、`/issue`、`/maintain`、`/copilot`、`/watch`、`/collections`、`/integrations`、`/repos`、`/inbox`、`/history`、`/settings`、`/tasks`、`/trends` 全部 200 |
@@ -219,3 +219,10 @@ QQ 邮箱支持情况：
 - Caddy 内部 CA 的 HTTPS 演练确认 HSTS、CSP 和安全头存在；本地 HTTP 开发只发送 CSP 和基础头，不发送 HSTS。
 - 新增 `deploy/Caddyfile`、`deploy/Caddyfile.local`、`deploy/nginx.conf`；Caddy 本地内部 CA 的 HTTPS 反代已实际启动并通过 `/login` 验证。
 - Compose 的 Web 端口默认绑定 `127.0.0.1`，TLS profile 仅在显式启用时启动 Caddy。
+
+## Docker 沙箱加固
+
+- 统一 `sandboxDockerArgs`，所有仓库验证、补丁验证和依赖升级共用。
+- 容器以调用方 UID/GID 运行（worker 为 root 时切到 1000:1000），`--cap-drop ALL`、`--security-opt no-new-privileges`、`--read-only`、tmpfs `/tmp` 和 `/run`、`--init`、文件描述符和资源限制。
+- npm/pip/go/cargo 缓存重定向到 tmpfs；Python 安装改为 `pip install --user`。
+- 用 Node 夹具验证：仓库构建、依赖升级、补丁应用与构建均在加固后的沙箱中通过。

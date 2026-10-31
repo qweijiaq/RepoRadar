@@ -32,9 +32,9 @@ describe('buildVerificationPlan', () => {
   })
 
   it('plans python, go and rust projects', () => {
-    expect(buildVerificationPlan(['pyproject.toml'], null).commands).toEqual(['pip install --no-cache-dir .'])
+    expect(buildVerificationPlan(['pyproject.toml'], null).commands).toEqual(['pip install --user --no-cache-dir .'])
     expect(buildVerificationPlan(['requirements.txt'], null).commands).toEqual([
-      'pip install --no-cache-dir -r requirements.txt',
+      'pip install --user --no-cache-dir -r requirements.txt',
     ])
     expect(buildVerificationPlan(['go.mod'], null).image).toBe('golang:1.23-alpine')
     expect(buildVerificationPlan(['Cargo.toml'], null).image).toBe('rust:1.83-alpine')

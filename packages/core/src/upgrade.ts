@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { prepareSandboxWorkDir, sandboxDockerArgs } from './sandbox.js'
 import { cloneRepository, dockerAvailable, runProcess, type PackageJsonShape, type VerifyStatus } from './verify.js'
 
 export interface DependencyUpgradeOptions {
@@ -161,32 +162,10 @@ export async function runDependencyUpgrade(options: DependencyUpgradeOptions): P
           error: 'Docker 不可用，无法在沙箱里执行升级',
         }
       }
+      if (!options.fromPath) await prepareSandboxWorkDir(workDir)
       const result = await runProcess(
         'docker',
-        [
-          'run',
-          '--rm',
-          '--network',
-          'bridge',
-          '--memory',
-          '2g',
-          '--cpus',
-          '2',
-          '--pids-limit',
-          '512',
-          '--security-opt',
-          'no-new-privileges',
-          '-e',
-          'CI=true',
-          '-v',
-          `${workDir}:/work`,
-          '-w',
-          '/work',
-          image,
-          'sh',
-          '-lc',
-          script,
-        ],
+        sandboxDockerArgs({ image, workDir, script }),
         options.timeoutMs ?? 420_000,
       )
       logText = tail(result.output, 8000)
