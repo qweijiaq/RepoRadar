@@ -14,7 +14,7 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| `pnpm test` | 通过，46 个测试文件 / 228 项测试 |
+| `pnpm test` | 通过，46 个测试文件 / 229 项测试 |
 | `pnpm typecheck` | 通过 |
 | `pnpm --filter @repo-radar/web build` | 通过 |
 | 关键页面 GET | `/feed`、`/issue`、`/maintain`、`/copilot`、`/watch`、`/collections`、`/integrations`、`/repos`、`/inbox`、`/history`、`/settings`、`/tasks`、`/trends` 全部 200 |
@@ -182,3 +182,11 @@ QQ 邮箱支持情况：
 - TypeScript 从 5.9.3 升级到 7.0.2；移除已废弃的 `baseUrl`，改为相对 paths，Next 16 将 JSX 切换为 `react-jsx`。
 - 本地 228 项测试、类型检查、生产构建、`pnpm audit` 和 Docker 镜像构建均通过；Docker 全栈健康检查通过。
 - Dependabot 配置为忽略 Next / TypeScript / React / next-auth / @types/node 的后续 major，minor/patch 合并成组。
+
+## GitHub OAuth 权限收敛验证
+
+- 默认登录 scope 从 `read:user user:email repo delete_repo` 收敛为 `read:user user:email`；
+- 仓库管理、维护周报、Issue 方案和补丁生成需要到 `/repos` 点「授权仓库管理」，通过 OAuth `authorizationParams` 增量申请 `repo` + `delete_repo`；
+- JWT 记录实际 scope，`resolveRepoAccess` 会拒绝基础 scope 访问仓库级操作；GitHub 动态同步仍允许基础 scope；
+- 用合成 session 验证：基础 scope 在 `/repos` 显示重新授权提示，`/inbox` 仍可访问；完整 scope 通过 scope 检查并进入仓库读取流程；
+- `hasRepoScope` 单元测试覆盖基础 scope、public_repo、repo 和空值。

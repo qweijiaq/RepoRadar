@@ -11,7 +11,7 @@ export async function POST(): Promise<NextResponse> {
   const currentUser = sessionUser(session)
   if (!currentUser) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const access = await resolveRepoAccess(session, currentUser.login)
+  const access = await resolveRepoAccess(session, currentUser.login, { requireRepoScope: false })
   if (!access.access) return NextResponse.json({ queued: false, reason: 'no-token' })
 
   const queued = await maybeQueueActivitySync(getPool(), Number(currentUser.id), access.access.token, {

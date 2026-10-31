@@ -14,6 +14,7 @@ import { resolveRepoAccess, sessionUser } from '@/lib/session'
 import { CopyIntegrationButton } from '@/app/integrations/copy-button'
 import { markFeedItemDoneAction } from '@/app/feed/actions'
 import { enqueueIssuePlanAction, enqueueMaintainerAction, enqueueUpgradeAction } from '@/app/jobs/enqueue'
+import { signInGithubRepoAction } from '@/app/actions'
 import { GenerateMaintainerButton } from './generate-button'
 
 export const dynamic = 'force-dynamic'
@@ -101,7 +102,15 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
       {params.error === 'issue-format' ? <div className="notice">修复方案格式异常，已自动重试；仍然失败请换一个模型。</div> : null}
       {!access.access && activeProjects.length > 0 ? (
         <div className="notice">
-          当前没有可用的 GitHub token，无法读取 Issue/PR 和依赖清单。请重新授权 GitHub 后再生成。
+          {access.reason === 'need-repo-scope'
+            ? '当前登录只有基础权限。读取 Issue/PR、私有仓库和生成维护周报需要 repo 与 delete_repo 授权。'
+            : '当前没有可用的 GitHub token，无法读取 Issue/PR 和依赖清单。请重新授权 GitHub 后再生成。'}
+          <form action={signInGithubRepoAction} className="inline-action">
+            <input type="hidden" name="redirectTo" value="/maintain" />
+            <button className="btn small" type="submit">
+              授权仓库管理
+            </button>
+          </form>
         </div>
       ) : null}
 

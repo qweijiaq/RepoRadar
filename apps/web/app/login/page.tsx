@@ -24,7 +24,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <div className="auth-card">
         <p className="eyebrow">登录</p>
         <h1>进入你的雷达</h1>
-        <p className="muted">用 GitHub 登录，RepoRadar 会读取你最近的公开 star 来建立口味画像。</p>
+        <p className="muted">
+          用 GitHub 登录，RepoRadar 会读取你最近的公开 star 来建立口味画像。默认只申请公开资料权限；
+          仓库管理和补丁生成需要稍后在仓库页额外授权。
+        </p>
 
         {params.configured === '1' ? (
           <div className="notice success">GitHub 登录已配置完成，请使用 GitHub 登录。</div>

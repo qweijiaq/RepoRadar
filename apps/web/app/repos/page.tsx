@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { GitHubManageError, listOwnedRepos, type ManagedRepo } from '@repo-radar/core'
-import { signInGithubAction } from '@/app/actions'
+import { signInGithubRepoAction } from '@/app/actions'
 import { auth } from '@/auth'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 import { RepoManager } from './repo-manager'
@@ -49,14 +49,25 @@ export default async function ReposPage() {
           当前 GITHUB_TOKEN 与登录账户 {currentUser.login} 不一致，仓库管理已停用。请用该 token
           所属账户登录，或改用 OAuth 授权。
         </div>
+      ) : resolved.reason === 'need-repo-scope' ? (
+        <div className="notice">
+          当前登录只有基础权限，读取私有仓库和执行仓库管理需要额外的 <code>repo</code> 与{' '}
+          <code>delete_repo</code> 授权。
+          <form action={signInGithubRepoAction} className="inline-action">
+            <input type="hidden" name="redirectTo" value="/repos" />
+            <button className="btn small" type="submit">
+              授权仓库管理
+            </button>
+          </form>
+        </div>
       ) : !access ? (
         <div className="empty">
           <p>需要 GitHub 登录授权才能读取和管理你的仓库。</p>
           <p className="small">授权范围包含 repo 与 delete_repo；如果还没配置 OAuth 应用，先去设置页完成配置。</p>
-          <form action={signInGithubAction}>
+          <form action={signInGithubRepoAction}>
             <input type="hidden" name="redirectTo" value="/repos" />
             <button className="btn solid" type="submit">
-              使用 GitHub 登录
+              授权 GitHub 仓库管理
             </button>
           </form>
           <p className="small">
@@ -67,10 +78,10 @@ export default async function ReposPage() {
         <div className="notice">
           当前 GitHub 授权范围不足（需要 <code>repo</code> 与 <code>delete_repo</code>
           ）。重新授权后即可读取私有仓库并执行删除。{errorMessage ? `（${errorMessage}）` : ''}
-          <form action={signInGithubAction} className="inline-action">
+          <form action={signInGithubRepoAction} className="inline-action">
             <input type="hidden" name="redirectTo" value="/repos" />
             <button className="btn small" type="submit">
-              重新授权 GitHub
+              重新授权仓库管理
             </button>
           </form>
         </div>

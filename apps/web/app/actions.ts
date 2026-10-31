@@ -1,6 +1,7 @@
 'use server'
 
 import {
+  GITHUB_REPO_SCOPES,
   addCollectionItem,
   addNotification,
   addSubscription,
@@ -85,6 +86,12 @@ export async function signInGithubAction(formData?: FormData): Promise<void> {
   const requested = String(formData?.get('redirectTo') ?? '')
   const redirectTo = requested.startsWith('/') ? requested : '/feed'
   await signIn('github', { redirectTo })
+}
+
+export async function signInGithubRepoAction(formData?: FormData): Promise<void> {
+  const requested = String(formData?.get('redirectTo') ?? '')
+  const redirectTo = requested.startsWith('/') ? requested : '/repos'
+  await signIn('github', { redirectTo }, { scope: GITHUB_REPO_SCOPES })
 }
 
 export async function signInDevAction(): Promise<void> {

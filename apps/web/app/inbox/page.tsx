@@ -72,7 +72,7 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
     const key = categoryOf(item.kind)
     categoryCounts.set(key, (categoryCounts.get(key) ?? 0) + 1)
   }
-  const access = await resolveRepoAccess(session, currentUser.login)
+  const access = await resolveRepoAccess(session, currentUser.login, { requireRepoScope: false })
   const autoQueued = access.access
     ? await maybeQueueActivitySync(getPool(), Number(currentUser.id), access.access.token)
     : false

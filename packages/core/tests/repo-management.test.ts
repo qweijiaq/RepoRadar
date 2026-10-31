@@ -3,6 +3,7 @@ import {
   createRepository,
   deleteRepository,
   getAuthenticatedLogin,
+  hasRepoScope,
   GitHubManageError,
   listOwnedRepos,
   runBatch,
@@ -166,5 +167,15 @@ describe('validation and batches', () => {
       return item.toUpperCase()
     })
     expect(results.map((result) => result.value ?? result.error)).toEqual(['A', 'boom', 'C'])
+  })
+})
+
+
+describe('hasRepoScope', () => {
+  it('distinguishes base login from repo management scopes', () => {
+    expect(hasRepoScope('read:user user:email')).toBe(false)
+    expect(hasRepoScope('read:user user:email public_repo')).toBe(false)
+    expect(hasRepoScope('read:user user:email repo delete_repo')).toBe(true)
+    expect(hasRepoScope(null)).toBe(false)
   })
 })

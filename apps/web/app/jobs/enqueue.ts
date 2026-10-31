@@ -15,6 +15,10 @@ import { encryptJobToken } from '@/lib/job-secret'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 import { enqueueJob } from '@/lib/ai-jobs/runner'
 
+function repoScopeRedirect(reason: string, fallback: string): string {
+  return reason === 'need-repo-scope' ? '/repos?error=repo-scope' : fallback
+}
+
 async function context(): Promise<{
   userId: number
   login: string
@@ -73,7 +77,11 @@ export async function enqueueMaintainerAction(): Promise<void> {
 
   const access = await resolveRepoAccess(session, currentUser.login)
   if (!access.access) {
-    redirect(access.reason === 'env-mismatch' ? '/maintain?error=env-mismatch' : '/maintain?error=need-token')
+    redirect(
+      access.reason === 'env-mismatch'
+        ? '/maintain?error=env-mismatch'
+        : repoScopeRedirect(access.reason, '/maintain?error=need-token'),
+    )
   }
   await enqueueAndGo(pool, userId, 'maintainer', '生成维护周报', {
     token: encryptJobToken(access.access.token),
@@ -95,7 +103,7 @@ export async function enqueueDiscoverabilityAction(formData: FormData): Promise<
   const repo = String(formData.get('repo') ?? '').trim()
   if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo)) redirect('/repos?error=invalid')
   const access = await resolveRepoAccess(session, currentUser.login)
-  if (!access.access) redirect(`/repos/${repo}/optimize?error=need-token`)
+  if (!access.access) redirect(repoScopeRedirect(access.reason, `/repos/${repo}/optimize?error=need-token`))
 
   await enqueueAndGo(pool, userId, 'discoverability', `曝光优化 · ${repo}`, {
     repo,
@@ -113,7 +121,7 @@ export async function enqueueComparisonAction(formData: FormData): Promise<void>
   const project = String(formData.get('project') ?? '').trim()
   if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(project)) redirect('/integrations?error=compare')
   const access = await resolveRepoAccess(session, currentUser.login)
-  if (!access.access) redirect('/integrations?error=compare-token')
+  if (!access.access) redirect(repoScopeRedirect(access.reason, '/integrations?error=compare-token'))
 
   await enqueueAndGo(pool, userId, 'comparison', `选型对比 · ${project}`, {
     project,
@@ -134,7 +142,7 @@ export async function enqueueIssuePlanAction(formData: FormData): Promise<void> 
     redirect('/maintain?error=issue-invalid')
   }
   const access = await resolveRepoAccess(session, currentUser.login)
-  if (!access.access) redirect('/maintain?error=need-token')
+  if (!access.access) redirect(repoScopeRedirect(access.reason, '/maintain?error=need-token'))
 
   await enqueueAndGo(pool, userId, 'issue-plan', `修复方案 · ${repo} #${issueNumber}`, {
     repo,
@@ -159,7 +167,7 @@ export async function enqueueUpgradeAction(formData: FormData): Promise<void> {
   if (!/^[A-Za-z0-9._+~-]{1,40}$/.test(targetVersion)) redirect('/maintain?error=upgrade-invalid')
 
   const access = await resolveRepoAccess(session, currentUser.login)
-  if (!access.access) redirect('/maintain?error=need-token')
+  if (!access.access) redirect(repoScopeRedirect(access.reason, '/maintain?error=need-token'))
 
   await enqueueAndGo(pool, userId, 'upgrade', `升级 ${packageName} · ${repo}`, {
     repo,
@@ -183,7 +191,7 @@ export async function enqueuePatchAction(formData: FormData): Promise<void> {
     redirect('/maintain?error=issue-invalid')
   }
   const access = await resolveRepoAccess(session, currentUser.login)
-  if (!access.access) redirect('/maintain?error=need-token')
+  if (!access.access) redirect(repoScopeRedirect(access.reason, '/maintain?error=need-token'))
 
   await enqueueAndGo(pool, userId, 'patch', `修复补丁 · ${repo} #${issueNumber}`, {
     repo,
@@ -216,7 +224,7 @@ export async function enqueueActivitySyncAction(): Promise<void> {
   if (!currentUser) redirect('/login')
   const { pool, userId } = await context()
 
-  const access = await resolveRepoAccess(session, currentUser.login)
+  const access = await resolveRepoAccess(session, currentUser.login, { requireRepoScope: false })
   if (!access.access) redirect('/inbox?error=need-token')
 
   await enqueueAndGo(pool, userId, 'activity', '同步 GitHub 动态', {

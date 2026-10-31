@@ -61,6 +61,15 @@ pnpm radar pipeline --topics=llm --limit=20
 - 告警阈值和收件邮箱可在 `/ops` 页面配置，留空时发给 `ADMIN_LOGINS` 对应用户的通知邮箱或 `ALERT_EMAILS`；
 - `/api/health` 返回数据库健康状态，可用于容器和负载均衡探针。
 
+## GitHub 权限
+
+默认登录只申请 `read:user user:email`，用于读取公开资料和 star 画像。仓库管理、维护周报、Issue 修复方案和补丁生成需要额外的 `repo` + `delete_repo` 权限：
+
+- 打开 `/repos`，点击「授权仓库管理」重新走一次 GitHub OAuth；
+- 授权后 token 会更新，`/repos`、`/maintain`、`/issue-plan` 和补丁任务才能读取私有仓库并执行写操作；
+- GitHub 动态同步仍可使用基础登录权限；
+- 只需要公开数据的用户不需要授予仓库写权限。
+
 ## Docker 部署
 
 完整栈（PostgreSQL + 迁移 + Web + worker）：

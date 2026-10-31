@@ -1,7 +1,15 @@
 /**
  * 自己仓库的管理接口。删除仓库需要 OAuth 的 delete_repo scope。
  */
+export const GITHUB_BASE_SCOPES = 'read:user user:email'
 export const GITHUB_REPO_SCOPES = 'read:user user:email repo delete_repo'
+
+export function hasRepoScope(scope: string | null | undefined): boolean {
+  return (scope ?? '')
+    .split(/[,\s]+/)
+    .map((item) => item.trim())
+    .includes('repo')
+}
 
 export interface ManagedRepo {
   id: number

@@ -202,3 +202,26 @@ export async function fetchRepoFile(
     truncated: text.length > maxBytes,
   }
 }
+
+
+/**
+ * 读取 OAuth token 实际授予的 scope（GitHub 在响应头 x-oauth-scopes 返回）。
+ * 细粒度 token 可能没有该响应头，此时返回 null，调用方应按未知处理。
+ */
+export async function fetchTokenScopes(token: string): Promise<string[] | null> {
+  try {
+    const response = await fetch(`${githubApiBase()}/user`, {
+      headers: githubHeaders(token),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!response.ok) return null
+    const raw = response.headers.get('x-oauth-scopes')
+    if (raw === null) return null
+    return raw
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  } catch {
+    return null
+  }
+}

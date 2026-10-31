@@ -3,7 +3,7 @@ import NextAuth from 'next-auth'
 import type { Provider } from 'next-auth/providers'
 import Credentials from 'next-auth/providers/credentials'
 import GitHub from 'next-auth/providers/github'
-import { GITHUB_REPO_SCOPES, saveUserGithubToken } from '@repo-radar/core'
+import { GITHUB_BASE_SCOPES, saveUserGithubToken } from '@repo-radar/core'
 import { resolveGithubCredentials } from './lib/oauth-config'
 import { getPool } from './lib/db'
 import { syncUserTaste } from './lib/sync'
@@ -20,7 +20,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
       GitHub({
         clientId: github.clientId,
         clientSecret: github.clientSecret,
-        authorization: { params: { scope: GITHUB_REPO_SCOPES } },
+        authorization: { params: { scope: GITHUB_BASE_SCOPES } },
       }),
     )
   }
@@ -71,6 +71,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
       async jwt({ token, account, profile }) {
         if (account?.provider === 'github') {
           if (account.access_token) token.accessToken = account.access_token
+          if (typeof account.scope === 'string') token.githubScope = account.scope
           const githubProfile = (profile ?? {}) as {
             id?: number | string
             login?: string
@@ -134,6 +135,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
         }
         ;(session as Session & { accessToken?: string }).accessToken =
           typeof token.accessToken === 'string' ? token.accessToken : undefined
+        ;(session as Session & { githubScope?: string }).githubScope =
+          typeof token.githubScope === 'string' ? token.githubScope : undefined
         return session
       },
     },
