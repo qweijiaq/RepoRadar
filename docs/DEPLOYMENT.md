@@ -78,15 +78,62 @@ POSTGRES_PORT=5434 docker compose up -d
 
 默认 OAuth 登录只申请 `read:user user:email`。需要仓库管理、维护周报或补丁生成时，到 `/repos` 点「授权仓库管理」，再授权 `repo` + `delete_repo`；动态同步不需要额外权限。
 
-## 4. 域名与反向代理
+## 4. 域名、TLS 与反向代理
 
-把域名指向服务器，用 Caddy / Nginx / Traefik 终止 TLS，并反代到 Web 的 3000 端口。Caddy 示例：
+把域名指向服务器，用 Caddy / Nginx / Traefik 终止 TLS，并反代到 Web。Compose 默认只把 Web 绑定到 `127.0.0.1`，外部访问应经过代理。
+
+### Caddy
+
+仓库提供 `deploy/Caddyfile`：
 
 ```caddyfile
-radar.example.com {
-    reverse_proxy 127.0.0.1:3000
+{$RADAR_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy web:3000
+    header { -Server }
 }
 ```
+
+在 `.env` 设置域名后启动 TLS profile：
+
+```dotenv
+RADAR_DOMAIN=radar.example.com
+```
+
+```bash
+docker compose --profile tls up -d web caddy
+```
+
+Caddy 会自动申请和续期 HTTPS 证书。如果 Caddy 不在同一台机器，把 `reverse_proxy` 改成 `127.0.0.1:3000` 或实际内网地址。
+
+### 本地 TLS 演练
+
+不配置真实域名也可以用 Caddy 的内部 CA 验证 HTTPS 和代理头：
+
+```bash
+CADDYFILE=./deploy/Caddyfile.local docker compose --profile tls up -d caddy
+curl -k -I https://localhost:8443/login
+```
+
+`deploy/Caddyfile.local` 使用 `tls internal`，浏览器首次访问会提示证书不受信任；它只用于演练。
+
+### Nginx
+
+`deploy/nginx.conf` 提供 Let's Encrypt 证书路径、TLS 版本、`X-Forwarded-*` 和 WebSocket 升级示例。将域名和证书路径替换后，把 `proxy_pass` 指向 Web 的 `127.0.0.1:3000`。
+
+### 安全头
+
+应用通过 `apps/web/proxy.ts` 为页面和 API 设置：
+
+- nonce-based CSP（脚本、样式、图片、连接、frame、form-action 限制）
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy`
+- `Cross-Origin-Opener-Policy`
+- 生产环境 `Strict-Transport-Security`（一年，includeSubDomains）
+
+生产反向代理不要覆盖或删除这些响应头。HSTS 和 `upgrade-insecure-requests` 只在直接 HTTPS 或代理传入 `X-Forwarded-Proto: https` 时发送；Caddy 会自动设置，Nginx 示例也已设置。本地 HTTP 开发不会发送 HSTS。
 
 然后：
 

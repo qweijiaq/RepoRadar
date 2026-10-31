@@ -195,7 +195,7 @@ QQ 邮箱支持情况：
 
 - 引入 Playwright，覆盖登录、核心页面、设置/运维面板、仓库授权提示、移动端横向溢出、健康检查和未登录 API 401。
 - E2E 使用本地 Chrome 或 CI Chromium，独立 `.next-e2e` 构建目录，可在开发服务器运行时并行执行。
-- 本地 `pnpm test:e2e`：11 项通过；CI 已加入 Chromium 安装和 E2E 步骤。
+- 本地 `pnpm test:e2e`：12 项通过（含安全响应头）；CI 已加入 Chromium 安装和 E2E 步骤。
 
 ## 剩余 Dependabot PR
 
@@ -211,3 +211,11 @@ QQ 邮箱支持情况：
 - Docker 的 `migrate` 服务在空数据库上成功应用基线。
 - 新增 `pnpm db:backup` 和 `pnpm db:restore <file>`；备份为 custom-format dump 并生成 SHA-256 校验文件，恢复前要求 `CONFIRM=YES`。
 - 已实际备份本地数据库，并恢复到临时数据库验证用户、仓库和迁移记录存在，随后删除临时库和测试备份。
+
+## 安全响应头与 TLS 演练
+
+- `apps/web/proxy.ts` 增加 nonce CSP、`X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`、`Permissions-Policy`、COOP；HTTPS 请求（含代理传入 `X-Forwarded-Proto: https`）增加 HSTS 和 `upgrade-insecure-requests`。
+- 登录页、内联主题脚本和普通页面在 CSP 下正常工作；Issue 的 sandbox `srcdoc` 预览也已验证不受 `frame-src` 影响。
+- Caddy 内部 CA 的 HTTPS 演练确认 HSTS、CSP 和安全头存在；本地 HTTP 开发只发送 CSP 和基础头，不发送 HSTS。
+- 新增 `deploy/Caddyfile`、`deploy/Caddyfile.local`、`deploy/nginx.conf`；Caddy 本地内部 CA 的 HTTPS 反代已实际启动并通过 `/login` 验证。
+- Compose 的 Web 端口默认绑定 `127.0.0.1`，TLS profile 仅在显式启用时启动 Caddy。

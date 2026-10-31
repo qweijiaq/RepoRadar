@@ -461,6 +461,8 @@ pnpm radar mcp        # stdio 传输
 - 全局配置（AI 模型、邮件通道、站点地址、GitHub OAuth、Webhook Secret）只允许管理员修改；
 - `/setup` 在非 localhost 访问时需要 `SETUP_TOKEN`，避免公网实例被抢先接管；
 - 生产环境缺少 `AUTH_SECRET` 会拒绝启动；
+- 页面和 API 通过 `apps/web/proxy.ts` 设置 nonce CSP、HSTS（HTTPS）、nosniff、frame 拒绝、Referrer/Permissions Policy；
+- Compose 默认只把 Web 绑定到 `127.0.0.1`，公网通过 Caddy/Nginx 终止 TLS；
 - patch / 依赖升级 / 仓库验证会在 Docker 中执行不可信代码，worker 主机应按高信任边界隔离，不要和数据库或内部服务共用；
 - 漏洞报告方式见 [SECURITY.md](SECURITY.md)。
 

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import Link from 'next/link'
 import { countUnreadNotifications } from '@repo-radar/core'
 import { auth } from '@/auth'
@@ -24,11 +25,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const session = await auth()
   const currentUser = sessionUser(session)
   const unread = currentUser ? await countUnreadNotifications(getPool(), Number(currentUser.id)) : 0
+  const nonce = (await headers()).get('x-nonce') ?? undefined
 
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body>
         <header className="site-header">
