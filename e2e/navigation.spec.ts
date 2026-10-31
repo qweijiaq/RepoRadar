@@ -1,0 +1,52 @@
+import { expect, test } from '@playwright/test'
+import { loginAsDemo } from './helpers'
+
+test.beforeEach(async ({ page }) => {
+  await loginAsDemo(page)
+})
+
+test('core pages render for a signed-in user', async ({ page }) => {
+  await page.goto('/tasks')
+  await expect(page.getByRole('heading', { name: 'AI 任务中心' })).toBeVisible()
+
+  await page.goto('/inbox')
+  await expect(page.getByRole('heading', { name: '收件箱' })).toBeVisible()
+
+  await page.goto('/history')
+  await expect(page.getByRole('heading', { name: '所有 AI 生成内容' })).toBeVisible()
+
+  await page.goto('/privacy')
+  await expect(page.getByRole('heading', { name: '隐私说明' })).toBeVisible()
+
+  await page.goto('/terms')
+  await expect(page.getByRole('heading', { name: '服务条款' })).toBeVisible()
+})
+
+test('settings shows per-user and admin controls', async ({ page }) => {
+  await page.goto('/settings')
+  await expect(page.getByRole('heading', { name: '偏好与配置' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '通知' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '隐私与数据' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '限流与配额' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '数据保留与自动清理' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '邮件通道' })).toBeVisible()
+})
+
+test('ops dashboard renders admin metrics and alerts', async ({ page }) => {
+  await page.goto('/ops')
+  await expect(page.getByRole('heading', { name: '运行状态与告警' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '告警配置' })).toBeVisible()
+  await expect(page.getByText('reporadar_users_total').first()).toBeVisible()
+})
+
+test('repo page explains the elevated permission flow', async ({ page }) => {
+  await page.goto('/repos')
+  await expect(page.getByText('GitHub 仓库管理')).toBeVisible()
+})
+
+test('settings has no horizontal overflow on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/settings')
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+  expect(overflow).toBeLessThanOrEqual(1)
+})

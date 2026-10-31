@@ -8,6 +8,8 @@ try {
 }
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR?.trim() || '.next',
+  allowedDevOrigins: ['127.0.0.1'],
   transpilePackages: ['@repo-radar/core'],
   serverExternalPackages: ['pg'],
   webpack: (config) => {

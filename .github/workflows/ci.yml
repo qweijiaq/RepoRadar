@@ -43,3 +43,14 @@ jobs:
       - run: pnpm test
       - run: pnpm db:migrate
       - run: pnpm build
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: End-to-end tests
+        run: pnpm test:e2e
+        env:
+          AUTH_DEV_MODE: "1"
+          ADMIN_LOGINS: demo
+          AUTH_SECRET: ci-e2e-secret-not-production
+          NEXT_DIST_DIR: .next-e2e
+          METRICS_TOKEN: ""
+          RADAR_INLINE_JOBS: "0"

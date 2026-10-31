@@ -478,6 +478,7 @@ docs/PRD.md       产品与技术设计文档
 ```bash
 pnpm typecheck   # 全仓类型检查
 pnpm test        # 单元测试（vitest）
+pnpm test:e2e    # Playwright E2E；本地使用已安装的 Chrome，CI 使用 Chromium
 ```
 
 ## 路线图

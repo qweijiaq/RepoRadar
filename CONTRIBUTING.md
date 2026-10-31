@@ -32,7 +32,10 @@ pnpm worker
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm test:e2e
 ```
+
+E2E tests use Playwright with the local Google Chrome channel; CI installs Chromium. The Playwright server runs in development mode on an isolated `.next-e2e` dist directory, so it can run alongside `pnpm dev:web`.
 
 Next.js 16 runs with the webpack mode (`next dev --webpack` / `next build --webpack`) because `packages/core` uses NodeNext `.js` import specifiers and `next.config.ts` supplies a webpack extension alias. Keep those flags unless the core package is migrated to a Turbopack-compatible resolution strategy.
 

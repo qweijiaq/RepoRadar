@@ -16,3 +16,9 @@ dist/
 coverage/
 .claude/
 .radar/
+
+playwright-report/
+
+test-results/
+
+.next-e2e/

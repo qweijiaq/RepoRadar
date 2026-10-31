@@ -190,3 +190,9 @@ QQ 邮箱支持情况：
 - JWT 记录实际 scope，`resolveRepoAccess` 会拒绝基础 scope 访问仓库级操作；GitHub 动态同步仍允许基础 scope；
 - 用合成 session 验证：基础 scope 在 `/repos` 显示重新授权提示，`/inbox` 仍可访问；完整 scope 通过 scope 检查并进入仓库读取流程；
 - `hasRepoScope` 单元测试覆盖基础 scope、public_repo、repo 和空值。
+
+## E2E 测试
+
+- 引入 Playwright，覆盖登录、核心页面、设置/运维面板、仓库授权提示、移动端横向溢出、健康检查和未登录 API 401。
+- E2E 使用本地 Chrome 或 CI Chromium，独立 `.next-e2e` 构建目录，可在开发服务器运行时并行执行。
+- 本地 `pnpm test:e2e`：11 项通过；CI 已加入 Chromium 安装和 E2E 步骤。
