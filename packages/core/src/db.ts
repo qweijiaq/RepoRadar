@@ -1,4 +1,6 @@
-import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { readdir, readFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 import type { Pool as PgPool } from 'pg'
@@ -13,10 +15,63 @@ export function createPool(databaseUrl: string): DbPool {
   return new Pool({ connectionString: databaseUrl, max: 5 })
 }
 
+const MIGRATION_LOCK_ID = 728412
+
+/**
+ * 按版本执行 migrations 目录下的 SQL。已应用的迁移会记录 checksum，
+ * 如果文件被修改，下一次启动会直接报错而不是静默跳过。
+ */
 export async function migrate(pool: DbPool): Promise<void> {
-  const schemaPath = fileURLToPath(new URL('./db/schema.sql', import.meta.url))
-  const sql = await readFile(schemaPath, 'utf8')
-  await pool.query(sql)
+  const dir = join(dirname(fileURLToPath(import.meta.url)), 'db', 'migrations')
+  const files = (await readdir(dir))
+    .filter((file) => file.endsWith('.sql'))
+    .sort((left, right) => left.localeCompare(right))
+  const client = await pool.connect()
+  try {
+    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_ID])
+    await client.query(
+      `CREATE TABLE IF NOT EXISTS schema_migrations (
+         version TEXT PRIMARY KEY,
+         checksum TEXT NOT NULL,
+         applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+       )`,
+    )
+    const applied = await client.query<{ version: string; checksum: string }>(
+      `SELECT version, checksum FROM schema_migrations`,
+    )
+    const known = new Map(applied.rows.map((row) => [row.version, row.checksum]))
+
+    for (const file of files) {
+      const version = file.replace(/\.sql$/, '')
+      const sql = await readFile(`${dir}/${file}`, 'utf8')
+      const checksum = createHash('sha256').update(sql).digest('hex')
+      const previous = known.get(version)
+      if (previous) {
+        if (previous !== checksum) {
+          throw new Error(
+            `迁移 ${version} 的文件内容已变化（已应用 checksum ${previous.slice(0, 12)}，当前 ${checksum.slice(0, 12)}）。请新增迁移文件，不要修改历史迁移。`,
+          )
+        }
+        continue
+      }
+      await client.query('BEGIN')
+      try {
+        await client.query(sql)
+        await client.query(
+          `INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2)`,
+          [version, checksum],
+        )
+        await client.query('COMMIT')
+        console.log(`[migrate] 已应用 ${version}`)
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined)
+        throw new Error(`迁移 ${version} 失败：${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  } finally {
+    await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_ID]).catch(() => undefined)
+    client.release()
+  }
 }
 
 interface RepoRow {

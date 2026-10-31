@@ -10,6 +10,8 @@
   "scripts": {
     "radar": "tsx apps/worker/src/cli.ts",
     "db:migrate": "tsx apps/worker/src/cli.ts migrate",
+    "db:backup": "bash scripts/db-backup.sh",
+    "db:restore": "bash scripts/db-restore.sh",
     "dev:web": "pnpm --filter @repo-radar/web dev",
     "build": "pnpm --filter @repo-radar/web build",
     "start": "pnpm --filter @repo-radar/web start",

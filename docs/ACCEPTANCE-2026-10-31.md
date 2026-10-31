@@ -203,3 +203,11 @@ QQ 邮箱支持情况：
 - 将 GitHub Actions 更新到 actions/checkout@v7、pnpm/action-setup@v6、actions/setup-node@v7；对应 tag 已确认存在。
 - Dependabot 配置继续对 Vitest 和以上 Actions 的后续 major 做手动审批。
 - 升级后类型检查、构建通过；PR #5 / #8 待推送后由 Dependabot 按新策略关闭或人工关闭。
+
+## 版本化迁移与备份恢复
+
+- schema 已拆到 `packages/core/src/db/migrations/`，`pnpm db:migrate` 按版本执行并记录 checksum 到 `schema_migrations`。
+- 已验证：已有数据库基线只应用一次；重复执行跳过；修改已应用迁移文件会拒绝执行；空数据库可以从 `0001_initial` 完整建表。
+- Docker 的 `migrate` 服务在空数据库上成功应用基线。
+- 新增 `pnpm db:backup` 和 `pnpm db:restore <file>`；备份为 custom-format dump 并生成 SHA-256 校验文件，恢复前要求 `CONFIRM=YES`。
+- 已实际备份本地数据库，并恢复到临时数据库验证用户、仓库和迁移记录存在，随后删除临时库和测试备份。

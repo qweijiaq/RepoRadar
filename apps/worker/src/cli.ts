@@ -668,9 +668,10 @@ async function main(): Promise<void> {
   const digestFormat: 'md' | 'html' = values.format === 'html' ? 'html' : 'md'
 
   const pool = createPool(config.databaseUrl)
-  const effectiveConfig: AppConfig = config.llm
-    ? config
-    : { ...config, llm: await loadStoredLlmConfig(pool) }
+  const effectiveConfig: AppConfig =
+    config.llm || command === 'migrate'
+      ? config
+      : { ...config, llm: await loadStoredLlmConfig(pool) }
   try {
     switch (command) {
       case 'migrate':

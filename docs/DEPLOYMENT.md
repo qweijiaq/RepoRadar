@@ -122,23 +122,25 @@ docker compose build
 docker compose up -d
 ```
 
-`migrate` 服务会重新运行一次 schema.sql；所有 DDL 都是幂等的。升级前先备份数据库。
+`migrate` 服务只执行 `packages/core/src/db/migrations/` 中尚未应用的版本，并把版本和 checksum 记录到 `schema_migrations`。历史迁移文件被修改时会拒绝启动；升级前先备份数据库。
 
 ## 7. 备份与恢复
 
 备份：
 
 ```bash
-docker compose exec -T postgres pg_dump -U radar radar > backup.sql
+pnpm db:backup
 ```
 
-恢复：
+会写入 `backups/repo-radar-<时间>.dump` 和对应的 `.sha256`。本机没有 `pg_dump` 时会自动使用 Compose 的 postgres 容器。
+
+恢复前先确认当前数据库已有可恢复备份，然后执行：
 
 ```bash
-cat backup.sql | docker compose exec -T postgres psql -U radar -d radar
+CONFIRM=YES pnpm db:restore backups/repo-radar-<时间>.dump
 ```
 
-数据库数据保存在命名卷 `radar-pgdata` 中。
+恢复会清理并覆盖目标数据库中的对象。数据库数据保存在命名卷 `radar-pgdata` 中。
 
 ## 8. 停止
 

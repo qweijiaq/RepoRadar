@@ -20,6 +20,8 @@ pnpm dev:web
 
 Set `AUTH_SECRET` in `apps/web/.env.local` or the process environment. For local demo login, set `AUTH_DEV_MODE=1`.
 
+Database changes go in a new numbered file under `packages/core/src/db/migrations/`; never edit a migration that has already been applied. `pnpm db:migrate` records versions and checksums in `schema_migrations`.
+
 Run the background worker in a second terminal:
 
 ```bash
