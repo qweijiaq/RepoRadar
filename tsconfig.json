@@ -1,9 +1,8 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "@repo-radar/core": ["packages/core/src/index.ts"]
+      "@repo-radar/core": ["./packages/core/src/index.ts"]
     }
   },
   "include": [

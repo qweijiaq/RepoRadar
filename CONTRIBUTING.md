@@ -34,6 +34,8 @@ pnpm test
 pnpm build
 ```
 
+Next.js 16 runs with the webpack mode (`next dev --webpack` / `next build --webpack`) because `packages/core` uses NodeNext `.js` import specifiers and `next.config.ts` supplies a webpack extension alias. Keep those flags unless the core package is migrated to a Turbopack-compatible resolution strategy.
+
 Please run all three before opening a pull request. Tests and builds must pass without relying on local secrets.
 
 ## Code guidelines

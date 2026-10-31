@@ -175,3 +175,10 @@ QQ 邮箱支持情况：
 - worker 关键事件使用 JSON 结构化日志；
 - `/api/health` 保持数据库健康检查，可用于容器探针；
 - 测试告警配置、临时任务/投递和邮件配置已清理。
+
+## 依赖大版本升级
+
+- Next.js 从 15.5.28 升级到 16.4.3；由于 core 使用 NodeNext `.js` 后缀并依赖 webpack extensionAlias，dev/build 显式使用 `--webpack`。
+- TypeScript 从 5.9.3 升级到 7.0.2；移除已废弃的 `baseUrl`，改为相对 paths，Next 16 将 JSX 切换为 `react-jsx`。
+- 本地 228 项测试、类型检查、生产构建、`pnpm audit` 和 Docker 镜像构建均通过；Docker 全栈健康检查通过。
+- Dependabot 配置为忽略 Next / TypeScript / React / next-auth / @types/node 的后续 major，minor/patch 合并成组。
