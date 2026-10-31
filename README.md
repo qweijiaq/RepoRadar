@@ -53,6 +53,14 @@ pnpm radar pipeline --topics=llm --limit=20
 
 常用参数：`--topics`、`--days`、`--pages`、`--delay-ms`、`--language`、`--limit`、`--format=md|json`、`--dry-run`。运行 `pnpm radar help` 查看完整说明。
 
+## 可观测性与告警
+
+- 管理员打开 `/ops` 查看任务、投递、token 用量、数据库大小和最近失败记录；
+- 设置 `METRICS_TOKEN` 后，`GET /api/metrics` 输出 Prometheus 文本指标，需要 `Authorization: Bearer <token>`；
+- worker 每 5 分钟检查失败任务、失败投递、队列积压和心跳超时任务，按冷却时间发送告警邮件；
+- 告警阈值和收件邮箱可在 `/ops` 页面配置，留空时发给 `ADMIN_LOGINS` 对应用户的通知邮箱或 `ALERT_EMAILS`；
+- `/api/health` 返回数据库健康状态，可用于容器和负载均衡探针。
+
 ## Docker 部署
 
 完整栈（PostgreSQL + 迁移 + Web + worker）：
@@ -420,6 +428,8 @@ pnpm radar mcp        # stdio 传输
 | `AUTH_SECRET` | 是 | Auth.js 会话和数据库加密密钥；生产环境缺失会拒绝启动，生成：`openssl rand -base64 32` |
 | `ADMIN_LOGINS` | 公网建议 | 管理员 GitHub 登录名，逗号分隔；未设置时最早注册的用户为管理员 |
 | `ALLOWED_LOGINS` | 公测建议 | 注册/登录白名单，逗号分隔；设置后只有名单内用户能登录，管理员自动包含 |
+| `METRICS_TOKEN` | 否 | `/api/metrics` 的 Bearer 令牌；未设置时接口返回 404 |
+| `ALERT_EMAILS` | 否 | 运维告警收件邮箱，逗号分隔；也可在 `/ops` 页面配置 |
 | `SETUP_TOKEN` | 公网首次配置建议 | `/setup` 初始化令牌；非 localhost 访问且未设置时配置页锁定 |
 | `RADAR_BASE_URL` | 否 | 站点公开地址；未设置时使用设置页保存的值 |
 | `GITHUB_WEBHOOK_SECRET` | 否 | 可选的 Webhook Secret；也可以直接在设置页保存，环境变量优先 |

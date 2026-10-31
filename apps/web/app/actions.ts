@@ -7,6 +7,7 @@ import {
   buildDiscoveryQueries,
   buildFeedbackContext,
   clearMailConfig,
+  clearOpsConfig,
   clearQuotaConfig,
   clearRetentionConfig,
   clearStoredLlmConfig,
@@ -43,6 +44,7 @@ import {
   saveIntegrationReport,
   saveMailConfig,
   saveNotificationEmail,
+  saveOpsConfig,
   saveQuotaConfig,
   saveRetentionConfig,
   saveNotificationPrefs,
@@ -812,6 +814,31 @@ export async function runRetentionCleanupAction(): Promise<void> {
   }
   revalidatePath('/settings')
   redirect('/settings?retention=ran')
+}
+
+export async function saveOpsConfigAction(formData: FormData): Promise<void> {
+  await requireAdmin()
+  const number = (name: string, fallback: number): number => {
+    const value = Number(formData.get(name))
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : fallback
+  }
+  await saveOpsConfig(getPool(), {
+    alertsEnabled: formData.get('alertsEnabled') === '1',
+    alertEmails: String(formData.get('alertEmails') ?? ''),
+    failedJobsThreshold: number('failedJobsThreshold', 3),
+    failedDeliveriesThreshold: number('failedDeliveriesThreshold', 3),
+    queueAgeMinutes: number('queueAgeMinutes', 60),
+    cooldownMinutes: number('cooldownMinutes', 60),
+  })
+  revalidatePath('/ops')
+  redirect('/ops?saved=1')
+}
+
+export async function resetOpsConfigAction(): Promise<void> {
+  await requireAdmin()
+  await clearOpsConfig(getPool())
+  revalidatePath('/ops')
+  redirect('/ops?reset=1')
 }
 
 export async function saveGithubWebhookSecretAction(formData: FormData): Promise<void> {

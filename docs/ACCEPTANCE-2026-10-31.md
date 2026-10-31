@@ -14,7 +14,7 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| `pnpm test` | 通过，45 个测试文件 / 225 项测试 |
+| `pnpm test` | 通过，46 个测试文件 / 228 项测试 |
 | `pnpm typecheck` | 通过 |
 | `pnpm --filter @repo-radar/web build` | 通过 |
 | 关键页面 GET | `/feed`、`/issue`、`/maintain`、`/copilot`、`/watch`、`/collections`、`/integrations`、`/repos`、`/inbox`、`/history`、`/settings`、`/tasks`、`/trends` 全部 200 |
@@ -165,3 +165,13 @@ QQ 邮箱支持情况：
 - worker 每 30 分钟检查一次，实际清理最多每 24 小时执行一次，并用 PostgreSQL advisory lock 防止多 worker 重复执行。
 - 已用临时数据验证：已读通知、已发送投递、已完成任务、动态事件、LLM 用量、采集记录和验证记录会按阈值删除；未读通知保留；AI 生成内容和 Copilot 对话默认永久保留，配置非零阈值后才会删除。
 - 设置页保存保留策略已实际验证，测试配置已清理。
+
+## 可观测性与告警验证
+
+- 新增管理员 `/ops` 面板：任务、投递、token 用量、数据库大小、心跳超时、最近失败记录和告警历史；
+- `/api/metrics` 支持 METRICS_TOKEN Bearer 鉴权，输出 Prometheus 文本指标；未配置 token 返回 404，错误 token 返回 401；
+- worker 每 5 分钟检查失败任务、失败投递、队列积压和心跳超时，按冷却时间发送告警邮件；
+- 用本地 SMTP 实测：构造失败任务、失败投递和积压队列后，worker 成功发送 3 类告警邮件并记录 `ops.alert.*` 状态；
+- worker 关键事件使用 JSON 结构化日志；
+- `/api/health` 保持数据库健康检查，可用于容器探针；
+- 测试告警配置、临时任务/投递和邮件配置已清理。

@@ -272,6 +272,13 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         <p className="muted small">
           本地运行：<code>pnpm worker</code>。生产环境建议让 web 设置 <code>RADAR_INLINE_JOBS=0</code>，只由 worker 执行任务。
         </p>
+        {admin ? (
+          <div className="feed-actions">
+            <Link className="btn quiet small" href="/ops">
+              打开运维面板
+            </Link>
+          </div>
+        ) : null}
       </section>
 
       <section className="panel">

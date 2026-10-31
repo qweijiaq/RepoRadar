@@ -1,9 +1,12 @@
 import { hostname } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import {
+  alertRecipients,
   buildWeeklyDigest,
+  claimAlert,
   createPool,
   enqueueWeeklyDigest,
+  evaluateAlerts,
   fetchLatestRelease,
   findUserByLogin,
   getAuthenticatedLogin,
@@ -15,6 +18,8 @@ import {
   listUserGithubTokens,
   listUsersWithProfiles,
   loadConfig,
+  loadOpsConfig,
+  logEvent,
   markDeliveryFailed,
   markDeliverySent,
   notifyReleaseSubscribers,
@@ -54,10 +59,12 @@ let lastActivitySync = 0
 let lastReleaseSync = 0
 let lastDigestCheck = 0
 let lastRetentionCheck = 0
+let lastAlertCheck = 0
 const ACTIVITY_INTERVAL = 15 * 60 * 1000
 const RELEASE_INTERVAL = 15 * 60 * 1000
 const DIGEST_INTERVAL = 30 * 60 * 1000
 const RETENTION_CHECK_INTERVAL = 30 * 60 * 1000
+const ALERT_CHECK_INTERVAL = 5 * 60 * 1000
 const DELIVERY_INTERVAL = 5 * 1000
 let lastDeliveryDrain = 0
 
@@ -174,6 +181,53 @@ async function scheduledRetention(): Promise<void> {
   }
 }
 
+async function scheduledAlerts(): Promise<void> {
+  if (Date.now() - lastAlertCheck < ALERT_CHECK_INTERVAL) return
+  lastAlertCheck = Date.now()
+  try {
+    const config = await loadOpsConfig(pool)
+    if (!config.alertsEnabled) return
+    const alerts = await evaluateAlerts(pool)
+    if (alerts.length === 0) return
+    const recipients = await alertRecipients(pool)
+    if (recipients.length === 0) {
+      logEvent('warn', 'alert.no_recipients', { count: alerts.length })
+      return
+    }
+    const mail = await resolveMailConfig(pool)
+    if (!mail) {
+      logEvent('warn', 'alert.no_mail_channel', { count: alerts.length })
+      return
+    }
+    for (const alert of alerts) {
+      if (!(await claimAlert(pool, alert.key, config.cooldownMinutes))) continue
+      for (const to of recipients) {
+        try {
+          await sendMail(mail, {
+            to,
+            subject: `[RepoRadar] ${alert.title}`,
+            text: `${alert.body}
+
+发生时间：${new Date().toLocaleString('zh-CN')}
+运维面板：/ops
+`,
+          })
+          logEvent('warn', 'alert.sent', { key: alert.key, recipient: to })
+        } catch (error) {
+          logEvent('error', 'alert.send_failed', {
+            key: alert.key,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+    }
+  } catch (error) {
+    logEvent('error', 'alert.check_failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
 async function drainDeliveries(): Promise<void> {
   if (draining || Date.now() - lastDeliveryDrain < DELIVERY_INTERVAL) return
   draining = true
@@ -232,6 +286,7 @@ async function loop(): Promise<void> {
       await scheduledReleases()
       await scheduledWeeklyDigest()
       await scheduledRetention()
+      await scheduledAlerts()
     } catch (error) {
       console.error('[worker] loop error:', error)
     }

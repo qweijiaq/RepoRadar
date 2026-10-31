@@ -165,3 +165,20 @@ ALLOWED_LOGINS=alice,bob
 ## 10. 数据保留
 
 管理员在设置页「数据保留与自动清理」配置保留天数；worker 每天最多执行一次，也可以手动清理。`0` 表示永久保留。默认清理已读通知、已发送/失败投递、已完成任务、动态事件、LLM 用量、采集记录和验证记录；AI 生成内容和 Copilot 对话默认永久保留。多 worker 使用 PostgreSQL advisory lock 避免重复清理。
+
+## 11. 监控与告警
+
+设置 `METRICS_TOKEN` 后，Prometheus 可以抓取：
+
+```yaml
+scrape_configs:
+  - job_name: repo-radar
+    metrics_path: /api/metrics
+    authorization:
+      type: Bearer
+      credentials: 你的 METRICS_TOKEN
+    static_configs:
+      - targets: ["127.0.0.1:3000"]
+```
+
+`/ops` 管理面板会显示任务、投递、token 用量、数据库大小、最近失败和告警记录。worker 每 5 分钟检查失败任务、失败投递、队列积压和心跳超时；告警邮件通过设置页的邮件通道发送，阈值和收件人可在 `/ops` 配置，也可以用 `ALERT_EMAILS` 指定。
