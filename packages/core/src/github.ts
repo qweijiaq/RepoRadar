@@ -95,6 +95,16 @@ function githubHeaders(token?: string, accept = 'application/vnd.github+json'): 
   return headers
 }
 
+export class GitHubApiError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'GitHubApiError'
+    this.status = status
+  }
+}
+
 async function describeGitHubError(response: Response): Promise<string> {
   const remaining = response.headers.get('x-ratelimit-remaining')
   const reset = response.headers.get('x-ratelimit-reset')
@@ -118,7 +128,7 @@ export async function searchRepos(query: string, options: SearchOptions): Promis
     headers: githubHeaders(options.token),
     signal: AbortSignal.timeout(8000),
   })
-  if (!response.ok) throw new Error(await describeGitHubError(response))
+  if (!response.ok) throw new GitHubApiError(response.status, await describeGitHubError(response))
   const data = (await response.json()) as { items?: GitHubRepoPayload[] }
   return (data.items ?? []).map(mapGitHubRepo)
 }
@@ -128,7 +138,7 @@ export async function fetchReadme(fullName: string, token: string): Promise<stri
     headers: githubHeaders(token, 'application/vnd.github.raw'),
   })
   if (response.status === 404) return null
-  if (!response.ok) throw new Error(await describeGitHubError(response))
+  if (!response.ok) throw new GitHubApiError(response.status, await describeGitHubError(response))
   return (await response.text()).slice(0, 20_000)
 }
 
@@ -146,7 +156,7 @@ export async function fetchLatestRelease(fullName: string, token?: string): Prom
     headers: githubHeaders(token),
   })
   if (response.status === 404) return null
-  if (!response.ok) throw new Error(await describeGitHubError(response))
+  if (!response.ok) throw new GitHubApiError(response.status, await describeGitHubError(response))
 
   const data = (await response.json()) as {
     tag_name?: string
@@ -194,7 +204,7 @@ export async function fetchRepoFile(
     signal: AbortSignal.timeout(10_000),
   })
   if (response.status === 404) return null
-  if (!response.ok) throw new Error(await describeGitHubError(response))
+  if (!response.ok) throw new GitHubApiError(response.status, await describeGitHubError(response))
   const text = await response.text()
   return {
     path,

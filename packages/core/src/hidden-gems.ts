@@ -1,4 +1,5 @@
-import { searchRepos } from './github.js'
+import { createHash } from 'node:crypto'
+import { GitHubApiError, searchRepos } from './github.js'
 import type { EnrichedRepoRecord, RepoInput } from './types.js'
 
 const DAY_MS = 86_400_000
@@ -86,6 +87,13 @@ interface SearchCacheEntry {
 }
 
 const searchCache = new Map<string, SearchCacheEntry>()
+const invalidTokens = new Map<string, number>()
+const warnedTokens = new Map<string, number>()
+const INVALID_TOKEN_TTL = 5 * 60 * 1000
+
+function tokenKey(token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
 
 export function isMegaOwner(fullName: string): boolean {
   return MEGA_OWNERS.has(fullName.split('/')[0]?.toLowerCase() ?? '')
@@ -269,6 +277,8 @@ export async function discoverHiddenGems(
 ): Promise<HiddenGem[]> {
   if (!token) return []
   const now = context.now ?? new Date()
+  const key = tokenKey(token)
+  if ((invalidTokens.get(key) ?? 0) > now.getTime()) return []
   const queries = buildQueries(context, now)
   if (queries.length === 0) return []
 
@@ -284,7 +294,15 @@ export async function discoverHiddenGems(
       try {
         return await searchRepos(query, { token, perPage: 10 })
       } catch (error) {
-        console.error('[gems] GitHub 搜索失败：', error)
+        if (error instanceof GitHubApiError && error.status === 401) {
+          invalidTokens.set(key, now.getTime() + INVALID_TOKEN_TTL)
+          if ((warnedTokens.get(key) ?? 0) <= now.getTime()) {
+            warnedTokens.set(key, now.getTime() + INVALID_TOKEN_TTL)
+            console.warn('[gems] GitHub token 已失效，暂停现场搜索；请重新登录 GitHub。')
+          }
+        } else {
+          console.warn('[gems] GitHub 搜索失败：', error instanceof Error ? error.message : String(error))
+        }
         return []
       }
     }),
