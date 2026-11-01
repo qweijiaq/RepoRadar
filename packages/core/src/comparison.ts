@@ -33,6 +33,15 @@ export const comparisonCandidateSchema = z.object({
   reason: z.string().min(4).max(300),
 })
 
+export const capabilitySupportSchema = z.enum(['yes', 'partial', 'no', 'unknown'])
+
+export const comparisonCapabilitySchema = z.object({
+  name: z.string().min(2).max(60),
+  support: z.record(z.string(), capabilitySupportSchema).default({}),
+  note: z.string().max(200).default(''),
+  evidence: z.string().max(300).default(''),
+})
+
 export const comparisonReportSchema = z.object({
   project: z.string().min(3).max(120),
   summary: z.string().min(4).max(300),
@@ -42,8 +51,10 @@ export const comparisonReportSchema = z.object({
   }),
   candidates: z.array(comparisonCandidateSchema).min(2).max(5),
   nextSteps: z.array(z.string().min(2).max(200)).max(5).default([]),
+  capabilities: z.array(comparisonCapabilitySchema).max(12).default([]),
 })
 
+export type ComparisonCapability = z.infer<typeof comparisonCapabilitySchema>
 export type ComparisonCandidate = z.infer<typeof comparisonCandidateSchema>
 export type ComparisonReport = z.infer<typeof comparisonReportSchema>
 
@@ -66,6 +77,9 @@ const SYSTEM_PROMPT = `你是技术选型顾问。用户会给出一个正在维
 - 推荐必须是候选之一；如果都不合适，也要选相对最合适的并说明保留意见。
 - 不要只看 stars；考虑维护活跃度、复杂度、许可证未知的风险。
 - nextSteps 给出 3-5 条验证步骤（先做 spike、读哪些文档、验证哪些接口）。
+- capabilities 给一张能力差异表：5-10 行，每行一个能力维度（例如 API 覆盖、类型支持、生态、性能、维护活跃度）。
+  support 的 key 必须是项目或候选的 repo 全名（原样），值是 yes / partial / no / unknown。
+  每行尽量给 note 和 evidence（README 里的依据），没有依据时 evidence 留空、值用 unknown。
 
 只输出一个合法 JSON 对象，不要 Markdown 围栏或解释：
 {
@@ -82,7 +96,15 @@ const SYSTEM_PROMPT = `你是技术选型顾问。用户会给出一个正在维
       "reason": "..."
     }
   ],
-  "nextSteps": ["..."]
+  "nextSteps": ["..."],
+  "capabilities": [
+    {
+      "name": "功能覆盖",
+      "support": { "me/app": "partial", "lib/a": "yes", "lib/b": "partial" },
+      "note": "A 覆盖了全部需要的接口",
+      "evidence": "A 的 README「Features」一节"
+    }
+  ]
 }`
 
 function compactProject(project: ComparisonProjectInput) {
@@ -157,11 +179,27 @@ export function groundComparisonReport(
     ? report.recommendation.repo
     : [...filtered].sort((left, right) => right.fitScore - left.fitScore)[0]!.repo
 
+  const allowed = new Map<string, string>([
+    [project.repo.toLowerCase(), project.repo],
+    ...candidates.map((candidate) => [candidate.repo.toLowerCase(), candidate.repo] as const),
+  ])
+  const capabilities = report.capabilities
+    .map((row) => {
+      const support: ComparisonCapability['support'] = {}
+      for (const [repo, value] of Object.entries(row.support)) {
+        const canonical = allowed.get(repo.toLowerCase())
+        if (canonical) support[canonical] = value
+      }
+      return { ...row, support }
+    })
+    .filter((row) => Object.keys(row.support).length >= 2)
+
   return {
     ...report,
     project: project.repo,
     recommendation: { ...report.recommendation, repo: recommendation },
     candidates: filtered,
+    capabilities,
   }
 }
 
@@ -258,6 +296,17 @@ export function buildComparisonBrief(payload: StoredComparisonReport): string {
     )
     if (candidate.weaknesses.length > 0) {
       lines.push('- 弱点：', ...candidate.weaknesses.map((weakness) => `  - ${weakness}`))
+    }
+    lines.push('')
+  }
+
+  if (report.capabilities.length > 0) {
+    const repos = [report.project, ...report.candidates.map((candidate) => candidate.repo)]
+    lines.push('## 能力差异', '', `| 能力 | ${repos.join(' | ')} |`, `| --- | ${repos.map(() => '---').join(' | ')} |`)
+    for (const row of report.capabilities) {
+      const cells = repos.map((repo) => row.support[repo] ?? 'unknown')
+      lines.push(`| ${row.name} | ${cells.join(' | ')} |`)
+      if (row.note) lines.push(`| ${row.name} 说明 | ${row.note} |`)
     }
     lines.push('')
   }

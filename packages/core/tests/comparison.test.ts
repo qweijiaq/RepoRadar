@@ -46,6 +46,7 @@ const report = {
     },
   ],
   nextSteps: ['先做 spike'],
+  capabilities: [],
 }
 
 describe('parseComparisonReport', () => {
@@ -56,6 +57,32 @@ describe('parseComparisonReport', () => {
 
   it('rejects a report without candidates', () => {
     expect(() => parseComparisonReport('{"summary":"x"}')).toThrow()
+  })
+})
+
+describe('capabilities', () => {
+  it('keeps only known repos and drops rows without enough support', () => {
+    const parsed = parseComparisonReport(
+      JSON.stringify({
+        ...report,
+        capabilities: [
+          {
+            name: '类型支持',
+            support: { 'me/app': 'partial', 'lib/a': 'yes', 'lib/b': 'no', 'evil/x': 'yes' },
+            note: 'A 自带类型',
+            evidence: 'README',
+          },
+          { name: '空行', support: { 'evil/x': 'yes' } },
+        ],
+      }),
+    )
+    const grounded = groundComparisonReport(parsed, project, candidates)
+    expect(grounded.capabilities).toHaveLength(1)
+    expect(grounded.capabilities[0]?.support).toEqual({
+      'me/app': 'partial',
+      'lib/a': 'yes',
+      'lib/b': 'no',
+    })
   })
 })
 

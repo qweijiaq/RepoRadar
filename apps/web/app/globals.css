@@ -4624,3 +4624,32 @@ details[open] > .advanced-summary::before {
   color: var(--text);
   font-size: 12px;
 }
+
+
+.capability-table-wrap {
+  overflow-x: auto;
+}
+
+.capability-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.capability-table th,
+.capability-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.capability-table thead th {
+  color: var(--text-70);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.capability-table tbody th {
+  font-weight: 500;
+}

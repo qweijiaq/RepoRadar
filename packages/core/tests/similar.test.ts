@@ -23,6 +23,7 @@ const raw = JSON.stringify({
     },
   ],
   nextSteps: ['先读对方插件接口文档', '实现一个最小插件验证'],
+  capabilities: [],
 })
 
 describe('similar report', () => {

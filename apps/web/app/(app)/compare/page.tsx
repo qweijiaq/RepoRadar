@@ -16,6 +16,13 @@ import { sessionUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
 
+const SUPPORT_LABEL: Record<string, string> = {
+  yes: '支持',
+  partial: '部分',
+  no: '不支持',
+  unknown: '未知',
+}
+
 const EFFORT_LABEL: Record<string, string> = {
   low: '低成本',
   medium: '中等成本',
@@ -214,6 +221,44 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
           </article>
         ))}
       </div>
+
+      {latest.report.capabilities.length > 0 ? (
+        <section className="panel">
+          <h2>能力差异</h2>
+          <div className="capability-table-wrap">
+            <table className="capability-table">
+              <thead>
+                <tr>
+                  <th>能力</th>
+                  <th>{project}</th>
+                  {latest.report.candidates.map((candidate) => (
+                    <th key={candidate.repo}>{candidate.repo}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {latest.report.capabilities.map((row) => (
+                  <tr key={row.name}>
+                    <th scope="row">
+                      {row.name}
+                      {row.note ? <span className="muted small"> {row.note}</span> : null}
+                    </th>
+                    <td>{SUPPORT_LABEL[row.support[project] ?? 'unknown']}</td>
+                    {latest.report.candidates.map((candidate) => (
+                      <td key={candidate.repo}>
+                        {SUPPORT_LABEL[row.support[candidate.repo] ?? 'unknown']}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted small">
+            能力项由模型从 README 和元数据推断；没有依据的维度标为「未知」，替换前请自行验证。
+          </p>
+        </section>
+      ) : null}
 
       {latest.report.nextSteps.length > 0 ? (
         <section className="panel">

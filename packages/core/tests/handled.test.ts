@@ -146,6 +146,7 @@ describe('comparison and discoverability libraries', () => {
                 },
               ],
               nextSteps: [],
+              capabilities: [],
             },
             generatedAt: '2026-11-01T00:00:00.000Z',
           },
