@@ -1,9 +1,15 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { GitHubManageError, listOwnedRepos, type ManagedRepo } from '@repo-radar/core'
+import {
+  fetchTokenScopes,
+  GitHubManageError,
+  hasDeleteRepoScope,
+  listOwnedRepos,
+  type ManagedRepo,
+} from '@repo-radar/core'
 import { signInGithubRepoAction } from '@/app/actions'
 import { auth } from '@/auth'
-import { resolveRepoAccess, sessionUser } from '@/lib/session'
+import { resolveRepoAccess, sessionGithubScope, sessionUser } from '@/lib/session'
 import { RepoManager } from './repo-manager'
 
 export const dynamic = 'force-dynamic'
@@ -18,8 +24,14 @@ export default async function ReposPage() {
   let repos: ManagedRepo[] = []
   let errorMessage: string | null = null
   let needsReauth = false
+  let canDelete = false
 
   if (access) {
+    const actualScopes = await fetchTokenScopes(access.token).catch(() => null)
+    canDelete =
+      actualScopes !== null
+        ? hasDeleteRepoScope(actualScopes.join(' '))
+        : hasDeleteRepoScope(sessionGithubScope(session))
     try {
       repos = await listOwnedRepos(access.token)
     } catch (error) {
@@ -51,8 +63,8 @@ export default async function ReposPage() {
         </div>
       ) : resolved.reason === 'need-repo-scope' ? (
         <div className="notice">
-          当前登录只有基础权限，读取私有仓库和执行仓库管理需要额外的 <code>repo</code> 与{' '}
-          <code>delete_repo</code> 授权。
+          当前登录只有基础权限。读取私有仓库和管理仓库需要 <code>repo</code> 授权；删除仓库时才会额外申请{' '}
+          <code>delete_repo</code>，日常授权不再包含删除权限。
           <form action={signInGithubRepoAction} className="inline-action">
             <input type="hidden" name="redirectTo" value="/repos" />
             <button className="btn small" type="submit">
@@ -63,7 +75,7 @@ export default async function ReposPage() {
       ) : !access ? (
         <div className="empty">
           <p>需要 GitHub 登录授权才能读取和管理你的仓库。</p>
-          <p className="small">授权范围包含 repo 与 delete_repo；如果还没配置 OAuth 应用，先去设置页完成配置。</p>
+          <p className="small">管理仓库需要 repo 授权；删除仓库时会再单独申请 delete_repo。如果还没配置 OAuth 应用，先去设置页完成配置。</p>
           <form action={signInGithubRepoAction}>
             <input type="hidden" name="redirectTo" value="/repos" />
             <button className="btn solid" type="submit">
@@ -76,8 +88,8 @@ export default async function ReposPage() {
         </div>
       ) : needsReauth ? (
         <div className="notice">
-          当前 GitHub 授权范围不足（需要 <code>repo</code> 与 <code>delete_repo</code>
-          ）。重新授权后即可读取私有仓库并执行删除。{errorMessage ? `（${errorMessage}）` : ''}
+          当前 GitHub 授权范围不足（需要 <code>repo</code>
+          ）。重新授权后即可读取私有仓库并管理仓库；删除仓库会再单独申请 delete_repo。{errorMessage ? `（${errorMessage}）` : ''}
           <form action={signInGithubRepoAction} className="inline-action">
             <input type="hidden" name="redirectTo" value="/repos" />
             <button className="btn small" type="submit">
@@ -92,7 +104,7 @@ export default async function ReposPage() {
           {access.source === 'env' ? (
             <p className="integration-auto">当前使用环境变量 GITHUB_TOKEN 操作，页面登录账户仅用于身份识别。</p>
           ) : null}
-          <RepoManager initialRepos={repos} />
+          <RepoManager initialRepos={repos} canDelete={canDelete} />
         </>
       )}
     </div>

@@ -18,7 +18,11 @@ import {
   setIntegrationOutcomeAction,
   toggleProjectActiveAction,
 } from '@/app/actions'
-import { enqueueComparisonAction, enqueueIntegrationAction } from '@/app/jobs/enqueue'
+import {
+  enqueueComparisonAction,
+  enqueueIntegrationAction,
+  enqueueIntegrationProjectAction,
+} from '@/app/jobs/enqueue'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
@@ -132,7 +136,10 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
           </p>
         </div>
         <div className="feed-actions">
-          <Link className="btn small" href="/library?tab=integration">
+          <Link className="btn small" href="/library?tab=integration&view=project">
+            按维护项目查看
+          </Link>
+          <Link className="btn quiet small" href="/library?tab=integration">
             建议库
           </Link>
           <Link className="btn quiet small" href="/library?tab=history&kind=integration">
@@ -221,6 +228,12 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                       {project.active ? '维护中' : '未启用'}
                     </button>
                   </form>
+                  <Link
+                    className="btn quiet small"
+                    href={`/workbench/maintain/similar?repo=${encodeURIComponent(project.repoFullName)}`}
+                  >
+                    相似对比
+                  </Link>
                   {project.source === 'manual' ? (
                     <form action={removeUserProjectAction}>
                       <input type="hidden" name="repo" value={project.repoFullName} />
@@ -298,6 +311,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
             </details>
           ) : null}
           {latest.report.projects.map((project) => {
+            const projectReturnTo = `${returnTo}#project-${project.repo.replace(/[^a-zA-Z0-9_-]/g, '-')}`
             const copyProject = copyableProjects.find((item) => item.repo === project.repo)
             const projectBrief = copyProject
               ? buildProjectIntegrationBrief(copyProject, {
@@ -306,7 +320,11 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                 })
               : ''
             return (
-              <article className="integration-card" key={project.repo}>
+              <article
+                className="integration-card"
+                id={`project-${project.repo.replace(/[^a-zA-Z0-9_-]/g, '-')}`}
+                key={project.repo}
+              >
                 <header className="integration-head">
                   <Link className="repo-name" href={`/r/${project.repo}`}>
                     {project.repo}
@@ -316,11 +334,19 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                     {project.suggestions.length >= 2 ? (
                       <form action={enqueueComparisonAction}>
                         <input type="hidden" name="project" value={project.repo} />
+                        <input type="hidden" name="returnTo" value={projectReturnTo} />
                         <button className="btn quiet small" type="submit">
                           对比候选
                         </button>
                       </form>
                     ) : null}
+                    <form action={enqueueIntegrationProjectAction}>
+                      <input type="hidden" name="project" value={project.repo} />
+                      <input type="hidden" name="returnTo" value={returnTo} />
+                      <button className="btn quiet small" type="submit">
+                        重新生成这个库
+                      </button>
+                    </form>
                     {copyProject ? (
                       <CopyIntegrationButton
                         text={projectBrief}
@@ -375,7 +401,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                               <input type="hidden" name="project" value={project.repo} />
                               <input type="hidden" name="repo" value={suggestion.repo} />
                               <input type="hidden" name="status" value="adopted" />
-                              <input type="hidden" name="returnTo" value={returnTo} />
+                              <input type="hidden" name="returnTo" value={projectReturnTo} />
                               <button className="btn quiet small" type="submit">
                                 标记已接入
                               </button>
@@ -384,7 +410,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                               <input type="hidden" name="project" value={project.repo} />
                               <input type="hidden" name="repo" value={suggestion.repo} />
                               <input type="hidden" name="status" value="rejected" />
-                              <input type="hidden" name="returnTo" value={returnTo} />
+                              <input type="hidden" name="returnTo" value={projectReturnTo} />
                               <button className="btn quiet small" type="submit">
                                 不感兴趣
                               </button>
@@ -393,7 +419,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                               <form action={clearIntegrationOutcomeAction}>
                                 <input type="hidden" name="project" value={project.repo} />
                                 <input type="hidden" name="repo" value={suggestion.repo} />
-                                <input type="hidden" name="returnTo" value={returnTo} />
+                                <input type="hidden" name="returnTo" value={projectReturnTo} />
                                 <button className="btn quiet small" type="submit">
                                   重置状态
                                 </button>

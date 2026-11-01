@@ -4,6 +4,7 @@ import type { StoredDiscoverabilityReport } from './discoverability.js'
 import type { StoredIntegrationReport } from './integrations.js'
 import type { StoredIssuePlan } from './issue-plan.js'
 import type { StoredMaintainerReport } from './maintainer.js'
+import type { StoredSimilarReport } from './similar.js'
 
 export type HistoryKind =
   | 'integration'
@@ -14,6 +15,7 @@ export type HistoryKind =
   | 'issue-plan'
   | 'patch'
   | 'watch'
+  | 'similar'
 
 export interface HistoryEntry {
   kind: HistoryKind
@@ -35,6 +37,7 @@ export const HISTORY_LABEL: Record<HistoryKind, string> = {
   'issue-plan': '修复方案',
   watch: '关注代理',
   patch: '修复补丁',
+  similar: '相似项目对比',
 }
 
 function iso(value: Date | string): string {
@@ -57,7 +60,7 @@ export async function listHistory(
   kind?: HistoryKind,
 ): Promise<HistoryEntry[]> {
   const perKind = Math.max(5, Math.min(1000, limit + Math.max(0, offset)))
-  const [integrations, maintainers, drafts, discoverability, comparisons, issuePlans, watchRuns, patches] =
+  const [integrations, maintainers, drafts, discoverability, comparisons, issuePlans, watchRuns, patches, similar] =
     await Promise.all([
     pool.query<{ id: string; created_at: Date | string; payload: StoredIntegrationReport }>(
       `SELECT id, created_at, payload FROM integration_reports
@@ -134,6 +137,11 @@ export async function listHistory(
     }>(
       `SELECT id, title, summary, status, created_at
        FROM patch_drafts WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+      [userId, perKind],
+    ),
+    pool.query<{ id: string; project_full_name: string; created_at: Date | string; payload: StoredSimilarReport }>(
+      `SELECT id, project_full_name, created_at, payload FROM similar_reports
+       WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
       [userId, perKind],
     ),
   ])
@@ -241,6 +249,19 @@ export async function listHistory(
     })
   }
 
+  for (const row of similar.rows) {
+    entries.push({
+      kind: 'similar',
+      id: Number(row.id),
+      title: `相似项目对比 · ${row.project_full_name}`,
+      subtitle: `${row.payload.report?.candidates?.length ?? 0} 个相似项目`,
+      createdAt: iso(row.created_at),
+      model: row.payload.model ?? null,
+      providerId: row.payload.providerId ?? null,
+      href: `/workbench/maintain/similar?repo=${encodeURIComponent(row.project_full_name)}&report=${row.id}`,
+    })
+  }
+
   for (const row of watchRuns.rows) {
     entries.push({
       kind: 'watch',
@@ -268,6 +289,7 @@ export interface HistoryContentExport {
   maintainer: Array<{ id: number; createdAt: string; payload: unknown }>
   discoverability: Array<{ id: number; repo: string; createdAt: string; payload: unknown }>
   comparison: Array<{ id: number; project: string; createdAt: string; payload: unknown }>
+  similar: Array<{ id: number; project: string; createdAt: string; payload: unknown }>
   issuePlans: Array<{ id: number; repo: string; issueNumber: number; createdAt: string; payload: unknown }>
   issueDrafts: Array<{
     id: number
@@ -306,7 +328,7 @@ export async function exportHistoryContent(
   limit = 200,
 ): Promise<Omit<HistoryContentExport, 'exportedAt' | 'login'>> {
   const size = Math.max(1, Math.min(500, limit))
-  const [integration, maintainer, discoverability, comparison, issuePlans, issueDrafts, watchRuns, patches] =
+  const [integration, maintainer, discoverability, comparison, similar, issuePlans, issueDrafts, watchRuns, patches] =
     await Promise.all([
       pool.query<{ id: string; created_at: Date | string; payload: unknown }>(
         `SELECT id, created_at, payload FROM integration_reports
@@ -325,6 +347,11 @@ export async function exportHistoryContent(
       ),
       pool.query<{ id: string; project_full_name: string; created_at: Date | string; payload: unknown }>(
         `SELECT id, project_full_name, created_at, payload FROM comparison_reports
+         WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [userId, size],
+      ),
+      pool.query<{ id: string; project_full_name: string; created_at: Date | string; payload: unknown }>(
+        `SELECT id, project_full_name, created_at, payload FROM similar_reports
          WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
         [userId, size],
       ),
@@ -392,6 +419,12 @@ export async function exportHistoryContent(
       payload: row.payload,
     })),
     comparison: comparison.rows.map((row) => ({
+      id: Number(row.id),
+      project: row.project_full_name,
+      createdAt: iso(row.created_at),
+      payload: row.payload,
+    })),
+    similar: similar.rows.map((row) => ({
       id: Number(row.id),
       project: row.project_full_name,
       createdAt: iso(row.created_at),

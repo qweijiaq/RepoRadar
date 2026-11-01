@@ -3,6 +3,7 @@ import {
   createRepository,
   deleteRepository,
   getAuthenticatedLogin,
+  hasDeleteRepoScope,
   hasRepoScope,
   GitHubManageError,
   listOwnedRepos,
@@ -177,5 +178,11 @@ describe('hasRepoScope', () => {
     expect(hasRepoScope('read:user user:email public_repo')).toBe(false)
     expect(hasRepoScope('read:user user:email repo delete_repo')).toBe(true)
     expect(hasRepoScope(null)).toBe(false)
+  })
+
+  it('separates delete_repo from ordinary repo management', () => {
+    expect(hasDeleteRepoScope('read:user user:email repo')).toBe(false)
+    expect(hasDeleteRepoScope('read:user user:email repo delete_repo')).toBe(true)
+    expect(hasDeleteRepoScope(null)).toBe(false)
   })
 })

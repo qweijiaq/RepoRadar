@@ -164,7 +164,7 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
       ) : (
         <ul className="notification-list">
           {notifications.map((item) => (
-            <li key={item.id} className={item.readAt ? '' : 'unread'}>
+            <li key={item.id} id={`notification-${item.id}`} className={item.readAt ? '' : 'unread'}>
               <div className="notification-head">
                 <span className="chip subtle">{KIND_LABELS[item.kind] ?? item.kind}</span>
                 <span className="notification-time">{new Date(item.createdAt).toLocaleString('zh-CN')}</span>
@@ -192,13 +192,13 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
       {page > 1 || hasMore ? (
         <div className="history-pagination">
           {page > 1 ? (
-            <Link className="btn small" href={inboxHref(category, unreadOnly, page - 1)}>
+            <Link className="btn small" href={inboxHref(category, unreadOnly, page - 1)} scroll={false}>
               上一页
             </Link>
           ) : null}
           <span className="muted small">第 {page} 页</span>
           {hasMore ? (
-            <Link className="btn small" href={inboxHref(category, unreadOnly, page + 1)}>
+            <Link className="btn small" href={inboxHref(category, unreadOnly, page + 1)} scroll={false}>
               下一页
             </Link>
           ) : null}

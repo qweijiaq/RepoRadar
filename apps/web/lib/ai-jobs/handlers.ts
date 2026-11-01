@@ -27,8 +27,11 @@ import {
   generateIssuePlan,
   generateMaintainerReport,
   generatePatch,
+  generateSimilarReport,
   generateWatchMatches,
   GitHubApiError,
+  findSimilarRepos,
+  repoSimilarity,
   isDependencyUsed,
   listFeedbackSignals,
   listIntegrationOutcomes,
@@ -45,6 +48,7 @@ import {
   saveIssuePlan,
   saveMaintainerReport,
   savePatchDraft,
+  saveSimilarReport,
   runDependencyUpgrade,
   saveWatchMatches,
   saveWatchRun,
@@ -92,13 +96,27 @@ async function integrationJob(pool: DbPool, userId: number, job: JobRecord, prog
   const focus = job.payload.focus ?? null
 
   const projects = await listUserProjects(pool, userId)
-  let selected = projects.filter((project) => project.active)
+  const requestedProjects = job.payload.projects ?? []
+  let selected =
+    requestedProjects.length > 0
+      ? projects.filter((project) =>
+          requestedProjects.some(
+            (requested) => requested.toLowerCase() === project.repoFullName.toLowerCase(),
+          ),
+        )
+      : projects.filter((project) => project.active)
   let auto = false
-  if (selected.length === 0) {
+  if (selected.length === 0 && requestedProjects.length === 0) {
     selected = projects.filter((project) => project.source === 'owned').slice(0, 5)
     auto = selected.length > 0
   }
-  if (selected.length === 0) throw new Error('还没有可分析的项目')
+  if (selected.length === 0) {
+    throw new Error(
+      requestedProjects.length > 0
+        ? '指定的项目不在你的项目列表里'
+        : '还没有可分析的项目',
+    )
+  }
   selected = [...selected]
     .sort(
       (left, right) =>
@@ -748,6 +766,135 @@ async function activityJob(pool: DbPool, userId: number, job: JobRecord, progres
   }
 }
 
+async function similarJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const llm = await loadLlm(pool)
+  const project = job.payload.project?.trim()
+  if (!project) throw new Error('缺少项目参数')
+  const projects = await listUserProjects(pool, userId)
+  const targetProject = projects.find(
+    (item) => item.repoFullName.toLowerCase() === project.toLowerCase(),
+  )
+  if (!targetProject) throw new Error('只能对比自己维护的项目')
+
+  let token = decryptJobToken(job.payload.token)
+  if (!token) {
+    const stored = await listUserGithubTokens(pool)
+    token = stored.find((entry) => entry.userId === userId)?.token ?? stored[0]?.token ?? null
+  }
+
+  await progress('读取目标项目和相似候选…')
+  const context = await loadProjectContext(targetProject.repoFullName, token)
+  const targetTopics = context.topics.length > 0 ? context.topics : targetProject.topics
+  const targetMeta = {
+    fullName: targetProject.repoFullName,
+    topics: targetTopics,
+    language: context.language ?? targetProject.language,
+  }
+  const repos = await findEnrichedRepos(pool, 500)
+  const candidateMap = new Map<
+    string,
+    { repo: string; similarity: number; stars: number; description: string; language: string | null; topics: string[] }
+  >()
+  for (const candidate of findSimilarRepos(targetMeta, repos, 10)) {
+    if (candidate.similarity <= 0.05) continue
+    candidateMap.set(candidate.repo.fullName.toLowerCase(), {
+      repo: candidate.repo.fullName,
+      similarity: candidate.similarity,
+      stars: candidate.repo.stars,
+      description: candidate.repo.summary ?? candidate.repo.description ?? '',
+      language: candidate.repo.language,
+      topics: candidate.repo.topics,
+    })
+  }
+
+  if (token && targetTopics.length > 0) {
+    await progress('在 GitHub 搜索相似项目…')
+    const since = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10)
+    for (const topic of targetTopics.slice(0, 3)) {
+      const language = context.language ? ` language:${context.language}` : ''
+      try {
+        const found = await searchRepos(
+          `topic:${topic}${language} stars:>=50 pushed:>=${since} archived:false fork:false`,
+          { token, perPage: 10 },
+        )
+        for (const repo of found) {
+          if (repo.fullName.toLowerCase() === project.toLowerCase()) continue
+          const similarity = repoSimilarity(targetMeta, repo)
+          if (similarity <= 0.05) continue
+          await upsertRepo(pool, repo)
+          const key = repo.fullName.toLowerCase()
+          if (!candidateMap.has(key)) {
+            candidateMap.set(key, {
+              repo: repo.fullName,
+              similarity,
+              stars: repo.stars,
+              description: repo.description ?? '',
+              language: repo.language,
+              topics: repo.topics,
+            })
+          }
+        }
+      } catch (error) {
+        if (!(error instanceof GitHubApiError && error.status === 401)) {
+          console.error('[job:similar] GitHub 搜索失败：', error)
+        }
+      }
+      await sleep(300)
+    }
+  }
+
+  const selected = [...candidateMap.values()]
+    .sort((left, right) => right.similarity - left.similarity || right.stars - left.stars)
+    .slice(0, 5)
+  if (selected.length === 0) {
+    throw new Error('没有找到足够相似的候选项目；请先补充候选池或检查项目的 topics')
+  }
+
+  await progress('读取相似项目上下文…')
+  const candidates = []
+  for (const item of selected) {
+    const candidateContext = await loadProjectContext(item.repo, token)
+    candidates.push({
+      repo: item.repo,
+      description: candidateContext.description || item.description,
+      language: candidateContext.language ?? item.language,
+      topics: candidateContext.topics.length > 0 ? candidateContext.topics : item.topics,
+      readme: candidateContext.readme,
+      manifestName: candidateContext.manifestName,
+      manifest: candidateContext.manifest,
+      similarity: item.similarity,
+      stars: item.stars,
+    })
+  }
+
+  const targetInput = {
+    repo: targetProject.repoFullName,
+    description: context.description || targetProject.description || '',
+    language: context.language ?? targetProject.language,
+    topics: targetTopics,
+    readme: context.readme,
+    manifestName: context.manifestName,
+    manifest: context.manifest,
+  }
+  await progress('模型对比相似项目…')
+  const report = await generateSimilarReport(targetInput, candidates, llm)
+  const reportId = await saveSimilarReport(pool, userId, targetProject.repoFullName, {
+    report,
+    generatedAt: new Date().toISOString(),
+    model: llm.model,
+    providerId: llm.providerId ?? null,
+    candidateRepos: candidates.map((candidate) => candidate.repo),
+  })
+  const href = `/workbench/maintain/similar?repo=${encodeURIComponent(targetProject.repoFullName)}&report=${reportId}`
+  await addNotification(pool, userId, {
+    kind: 'similar',
+    title: '相似项目对比已生成',
+    body: `${targetProject.repoFullName}：${report.candidates.map((candidate) => candidate.repo).join('、')}`,
+    url: href,
+  })
+  return { href, label: '查看相似项目对比' }
+}
+
 export async function runJobHandler(pool: DbPool, job: JobRecord, userId: number): Promise<JobResult> {
   const progress: Progress = (message) => updateJobProgress(pool, job.id, message)
   switch (job.kind) {
@@ -775,6 +922,8 @@ export async function runJobHandler(pool: DbPool, job: JobRecord, userId: number
       return discoveryJob(pool, userId, job, progress)
     case 'enrich':
       return enrichJob(pool, userId, job, progress)
+    case 'similar':
+      return similarJob(pool, userId, job, progress)
     default:
       throw new Error(`未知任务类型：${job.kind}`)
   }

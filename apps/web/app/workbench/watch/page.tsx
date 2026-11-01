@@ -95,7 +95,7 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
         </div>
       ) : (
         withMatches.map(({ intent, matches }) => (
-          <article className="integration-card watch-card" key={intent.id}>
+          <article className="integration-card watch-card" id={`intent-${intent.id}`} key={intent.id}>
             <header className="integration-head">
               <div>
                 <p className="watch-intent">{intent.text}</p>
@@ -138,7 +138,7 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
                       <form action={markFeedItemDoneAction} className="inline-form">
                         <input type="hidden" name="itemKey" value={`watch:${intent.id}:${match.repo}`} />
                         <input type="hidden" name="kind" value="watch" />
-                        <input type="hidden" name="returnTo" value="/workbench/watch" />
+                        <input type="hidden" name="returnTo" value={`/workbench/watch#intent-${intent.id}`} />
                         <button className="btn quiet small" type="submit">
                           已接入
                         </button>

@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import type { ManagedRepo } from '@repo-radar/core'
 import { UiSelect } from '@/components/ui/Select'
+import { signInGithubDeleteReposAction } from '@/app/actions'
 import { createReposAction, deleteReposAction, updateReposAction } from './actions'
 import { initialRepoActionState, type RepoActionResult } from './types'
 
@@ -342,9 +343,38 @@ function BatchEditDialog({ repos, onClose }: { repos: string[]; onClose: () => v
   )
 }
 
-function DeleteDialog({ repos, onClose }: { repos: string[]; onClose: () => void }) {
+function DeleteDialog({
+  repos,
+  canDelete,
+  onClose,
+}: {
+  repos: string[]
+  canDelete: boolean
+  onClose: () => void
+}) {
   const [state, action, pending] = useActionState(deleteReposAction, initialRepoActionState)
   const [confirmed, setConfirmed] = useState(false)
+
+  if (!canDelete) {
+    return (
+      <Modal title={`删除 ${repos.length} 个仓库`} onClose={onClose}>
+        <p className="muted">
+          删除仓库需要额外的 <code>delete_repo</code> 授权。创建、编辑和归档仓库仍然可以正常使用。
+        </p>
+        <form action={signInGithubDeleteReposAction} className="repo-form">
+          <input type="hidden" name="redirectTo" value="/repos" />
+          <div className="ui-dialog-actions">
+            <button type="button" className="btn quiet" onClick={onClose}>
+              取消
+            </button>
+            <button className="btn danger" type="submit">
+              授权 delete_repo 后返回
+            </button>
+          </div>
+        </form>
+      </Modal>
+    )
+  }
 
   return (
     <Modal title={`删除 ${repos.length} 个仓库`} onClose={onClose}>
@@ -383,7 +413,13 @@ function formatDate(value: string | null): string {
   return date.toLocaleDateString('zh-CN')
 }
 
-export function RepoManager({ initialRepos }: { initialRepos: ManagedRepo[] }) {
+export function RepoManager({
+  initialRepos,
+  canDelete,
+}: {
+  initialRepos: ManagedRepo[]
+  canDelete: boolean
+}) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [query, setQuery] = useState('')
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -533,7 +569,9 @@ export function RepoManager({ initialRepos }: { initialRepos: ManagedRepo[] }) {
 
       {dialog?.kind === 'create' ? <CreateDialog onClose={() => setDialog(null)} /> : null}
       {dialog?.kind === 'batch' ? <BatchEditDialog repos={selectedRepos} onClose={() => setDialog(null)} /> : null}
-      {dialog?.kind === 'delete' ? <DeleteDialog repos={selectedRepos} onClose={() => setDialog(null)} /> : null}
+      {dialog?.kind === 'delete' ? (
+        <DeleteDialog repos={selectedRepos} canDelete={canDelete} onClose={() => setDialog(null)} />
+      ) : null}
       {dialog?.kind === 'edit' ? (
         <EditDialog repo={dialog.repo} onClose={() => setDialog(null)} />
       ) : null}

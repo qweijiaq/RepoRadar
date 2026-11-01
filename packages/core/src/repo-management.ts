@@ -2,13 +2,24 @@
  * 自己仓库的管理接口。删除仓库需要 OAuth 的 delete_repo scope。
  */
 export const GITHUB_BASE_SCOPES = 'read:user user:email'
-export const GITHUB_REPO_SCOPES = 'read:user user:email repo delete_repo'
+/** 读取私有仓库、Issue/PR 和管理仓库需要的常用权限。 */
+export const GITHUB_REPO_SCOPES = 'read:user user:email repo'
+/** 删除仓库是不可恢复操作，单独申请 delete_repo，避免日常授权过宽。 */
+export const GITHUB_DELETE_REPO_SCOPES = 'read:user user:email repo delete_repo'
 
 export function hasRepoScope(scope: string | null | undefined): boolean {
+  return scopeList(scope).includes('repo')
+}
+
+export function hasDeleteRepoScope(scope: string | null | undefined): boolean {
+  return scopeList(scope).includes('delete_repo')
+}
+
+function scopeList(scope: string | null | undefined): string[] {
   return (scope ?? '')
     .split(/[,\s]+/)
     .map((item) => item.trim())
-    .includes('repo')
+    .filter(Boolean)
 }
 
 export interface ManagedRepo {

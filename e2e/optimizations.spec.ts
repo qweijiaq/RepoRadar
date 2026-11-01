@@ -80,3 +80,32 @@ test('navigation is consolidated and legacy routes redirect', async ({ page }) =
   await expect(page).toHaveURL(/\/feed\?tab=collections/)
   await expect(page.getByRole('link', { name: '收藏' }).first()).toHaveClass(/active/)
 })
+
+
+test('similar comparison and project-centric integration views render', async ({ page }) => {
+  await loginAsDemo(page)
+  await page.goto('/workbench/maintain')
+  await expect(page.getByRole('link', { name: '相似项目对比' }).first()).toBeVisible()
+  await page.goto('/workbench/maintain/similar')
+  await expect(page.getByRole('heading', { name: '选择一个维护中的项目' })).toBeVisible()
+
+  await page.goto('/workbench/maintain/similar?repo=qweijiaq/x-code')
+  await expect(page.getByRole('heading', { name: 'qweijiaq/x-code' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '开始对比' })).toBeVisible()
+
+  await page.goto('/library?tab=integration&view=project')
+  await expect(page.getByRole('link', { name: '按库查看' })).toBeVisible()
+  await expect(page.getByText('还没有可用的历史接入建议。')).toBeVisible()
+})
+
+test('load more keeps the scroll position', async ({ page }) => {
+  await loginAsDemo(page)
+  await page.goto('/feed?tab=library')
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+  const before = await page.evaluate(() => window.scrollY)
+  await page.getByRole('link', { name: '加载更多' }).click()
+  await page.waitForTimeout(800)
+  const after = await page.evaluate(() => window.scrollY)
+  expect(before).toBeGreaterThan(100)
+  expect(after).toBeGreaterThan(100)
+})

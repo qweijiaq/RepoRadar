@@ -138,7 +138,7 @@ export default async function CollectionDetailPage({ params, searchParams }: Col
             <span>集合项目</span>
             <span className="muted small">{rows.length} 个</span>
           </summary>
-        <ul className="collection-items">
+        <ul className="collection-items" id="items">
           {rows.map(({ item, repo }) => {
             return (
               <li key={item.repoFullName} className="collection-item">
@@ -165,7 +165,7 @@ export default async function CollectionDetailPage({ params, searchParams }: Col
                   <form action={removeCollectionItemAction}>
                     <input type="hidden" name="collectionId" value={collection.id} />
                     <input type="hidden" name="repo" value={item.repoFullName} />
-                    <input type="hidden" name="returnTo" value={`/collections/${collection.id}`} />
+                    <input type="hidden" name="returnTo" value={`/collections/${collection.id}#items`} />
                     <button className="btn quiet small" type="submit">
                       移除
                     </button>

@@ -4,7 +4,9 @@ import {
   LLM_PROVIDERS,
   GitHubManageError,
   envLlmSummary,
+  fetchTokenScopes,
   getAuthenticatedLogin,
+  hasDeleteRepoScope,
   hasRepoScope,
   findLlmProvider,
   loadDiscoveryStatus,
@@ -102,7 +104,10 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const admin = await isAdminUser(sessionInfo)
   const token = sessionAccessToken(session)
   const githubScope = sessionGithubScope(session)
-  const repoScope = githubScope === null ? null : hasRepoScope(githubScope)
+  const actualGithubScopes = token ? await fetchTokenScopes(token).catch(() => null) : null
+  const effectiveScope = actualGithubScopes ? actualGithubScopes.join(' ') : githubScope
+  const repoScope = effectiveScope === null ? null : hasRepoScope(effectiveScope)
+  const deleteScope = effectiveScope === null ? null : hasDeleteRepoScope(effectiveScope)
   let githubTokenState: 'none' | 'ok' | 'invalid' | 'mismatch' | 'unknown' = token ? 'unknown' : 'none'
   if (token) {
     try {
@@ -212,7 +217,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           <li>
             仓库权限：
             {repoScope === true
-              ? '已授权 repo / delete_repo'
+              ? deleteScope === true
+                ? '已授权 repo + delete_repo'
+                : '已授权 repo（删除仓库需单独申请 delete_repo）'
               : repoScope === false
                 ? '仅基础权限（公开数据只读）'
                 : '未知'}
@@ -236,8 +243,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         {repoScope === false ? (
           <div className="webhook-form-actions">
             <p className="muted small">
-              需要读取私有仓库、同步维护项目或管理仓库时，再申请 <code>repo</code> 与{' '}
-              <code>delete_repo</code>；日常雷达只需要基础权限。
+              需要读取私有仓库、同步维护项目或管理仓库时，再申请 <code>repo</code>；删除仓库时才会单独申请 <code>delete_repo</code>。日常雷达只需要基础权限。
             </p>
             <form action={signInGithubRepoAction}>
               <input type="hidden" name="redirectTo" value="/settings" />

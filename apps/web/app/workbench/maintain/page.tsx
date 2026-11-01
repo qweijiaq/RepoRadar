@@ -77,6 +77,9 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
           </p>
         </div>
         <div className="feed-actions">
+          <Link className="btn quiet small" href="/workbench/maintain/similar">
+            相似项目对比
+          </Link>
           <Link className="btn small" href="/library?tab=history&kind=maintainer">
             历史生成
           </Link>
@@ -106,7 +109,7 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
       {!access.access && activeProjects.length > 0 ? (
         <div className="notice">
           {access.reason === 'need-repo-scope'
-            ? '当前登录只有基础权限。读取 Issue/PR、私有仓库和生成维护周报需要 repo 与 delete_repo 授权。'
+            ? '当前登录只有基础权限。读取 Issue/PR、私有仓库和生成维护周报需要 repo 授权；只有删除仓库才需要额外的 delete_repo。'
             : '当前没有可用的 GitHub token，无法读取 Issue/PR 和依赖清单。请重新授权 GitHub 后再生成。'}
           <form action={signInGithubRepoAction} className="inline-action">
             <input type="hidden" name="redirectTo" value="/workbench/maintain" />
@@ -136,6 +139,7 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
           </p>
 
           {latest.report.projects.map((project) => {
+            const projectReturnTo = `${returnTo}#project-${project.repo.replace(/[^a-zA-Z0-9_-]/g, '-')}`
             const filteredProject =
               filteredReport?.projects.find((item) => item.repo === project.repo) ?? null
             const projectBrief = filteredProject
@@ -145,7 +149,11 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
               ? filteredProject.items.length + filteredProject.dependencies.length
               : 0
             return (
-              <article className="integration-card maintain-card" key={project.repo}>
+              <article
+                className="integration-card maintain-card"
+                id={`project-${project.repo.replace(/[^a-zA-Z0-9_-]/g, '-')}`}
+                key={project.repo}
+              >
                 <header className="integration-head">
                   <Link className="repo-name" href={`/r/${project.repo}`}>
                     {project.repo}
@@ -162,6 +170,12 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
                     >
                       健康分 {project.healthScore}
                     </span>
+                    <Link
+                      className="btn quiet small"
+                      href={`/workbench/maintain/similar?repo=${encodeURIComponent(project.repo)}`}
+                    >
+                      相似项目对比
+                    </Link>
                     {projectBrief && pendingWork > 0 ? (
                       <CopyIntegrationButton
                         text={projectBrief}
@@ -261,7 +275,7 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
                                     value={`dependency:${project.repo}:${dependency.name}:${dependency.latest ?? 'unknown'}`}
                                   />
                                   <input type="hidden" name="kind" value="dependency" />
-                                  <input type="hidden" name="returnTo" value={returnTo} />
+                                  <input type="hidden" name="returnTo" value={projectReturnTo} />
                                   <button className="btn quiet small" type="submit">
                                     标记完成
                                   </button>
@@ -344,7 +358,7 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
                                         value={`maintainer:${project.repo}:${item.kind}:${item.number}`}
                                       />
                                       <input type="hidden" name="kind" value="maintainer" />
-                                      <input type="hidden" name="returnTo" value={returnTo} />
+                                      <input type="hidden" name="returnTo" value={projectReturnTo} />
                                       <button className="btn quiet small" type="submit">
                                         标记完成
                                       </button>

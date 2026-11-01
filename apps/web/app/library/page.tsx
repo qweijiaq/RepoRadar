@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import {
   HISTORY_LABEL,
+  buildProjectIntegrationBrief,
+  findLatestIntegrationReport,
   loadComparisonLibrary,
   loadDiscoverabilityLibrary,
   loadIntegrationLibrary,
@@ -14,6 +16,11 @@ import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
 import { HistoryPanel } from './history-panel'
+import {
+  IntegrationProjectView,
+  type IntegrationProjectGroup,
+  type ProjectSuggestionView,
+} from './integration-project-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +40,7 @@ interface LibraryPageProps {
     sort?: string
     kind?: string
     page?: string
+    view?: string
   }>
 }
 
@@ -161,6 +169,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
       : null
   const query = (params.q ?? '').trim().slice(0, 80)
   const sort = params.sort === 'count' ? 'count' : 'recent'
+  const view = params.view === 'project' ? 'project' : 'repo'
   const pool = getPool()
   const userId = Number(currentUser.id)
   if (tab === 'history') {
@@ -184,6 +193,96 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
     loadComparisonLibrary(pool, userId),
     loadDiscoverabilityLibrary(pool, userId),
   ])
+
+  const libraryCounts = {
+    integration: integration.totals.items,
+    watch: watch.totals.items,
+    maintainer: maintainer.totals.items,
+    comparison: comparison.totals.items,
+    discoverability: discoverability.totals.items,
+  }
+
+  if (tab === 'integration' && view === 'project') {
+    const latestIntegration = await findLatestIntegrationReport(pool, userId)
+    const byProject = new Map<string, Map<string, ProjectSuggestionView>>()
+    for (const item of integration.items) {
+      for (const occurrence of item.occurrences) {
+        const repoMap = byProject.get(occurrence.project) ?? new Map<string, ProjectSuggestionView>()
+        const existing = repoMap.get(item.repo)
+        const candidate: ProjectSuggestionView = {
+          repo: item.repo,
+          status: occurrence.status,
+          kind: occurrence.kind,
+          action: occurrence.action,
+          reason: occurrence.reason,
+          steps: occurrence.steps,
+          alreadyUsed: occurrence.alreadyUsed,
+          lastSeenAt: occurrence.generatedAt,
+        }
+        if (!existing || Date.parse(candidate.lastSeenAt) >= Date.parse(existing.lastSeenAt)) {
+          repoMap.set(item.repo, candidate)
+        }
+        byProject.set(occurrence.project, repoMap)
+      }
+    }
+    const groups: IntegrationProjectGroup[] = [...byProject.entries()]
+      .map(([project, repoMap]) => {
+        const suggestions = [...repoMap.values()].sort((left, right) => {
+          if (left.status !== right.status) return left.status === 'pending' ? -1 : 1
+          return Date.parse(right.lastSeenAt) - Date.parse(left.lastSeenAt)
+        })
+        const pending = suggestions.filter((item) => item.status === 'pending')
+        const adopted = suggestions.filter((item) => item.status === 'adopted').length
+        const rejected = suggestions.filter((item) => item.status === 'rejected').length
+        const reportProject = latestIntegration?.report.projects.find(
+          (item) => item.repo.toLowerCase() === project.toLowerCase(),
+        )
+        const brief =
+          pending.length > 0
+            ? buildProjectIntegrationBrief(
+                {
+                  repo: project,
+                  summary: reportProject?.summary ?? '来自历史接入建议的汇总',
+                  gaps: reportProject?.gaps ?? [],
+                  suggestions: pending.map((item) => ({
+                    repo: item.repo,
+                    kind: item.kind,
+                    reason: item.reason,
+                    action: item.action,
+                    steps: item.steps,
+                    alreadyUsed: item.alreadyUsed,
+                  })),
+                },
+                { generatedAt: latestIntegration?.generatedAt },
+              )
+            : ''
+        return {
+          project,
+          summary: reportProject?.summary ?? '来自历史接入建议的汇总',
+          gaps: reportProject?.gaps ?? [],
+          pending: pending.length,
+          adopted,
+          rejected,
+          lastSeenAt: suggestions.reduce(
+            (latest, item) => (Date.parse(item.lastSeenAt) > Date.parse(latest) ? item.lastSeenAt : latest),
+            suggestions[0]?.lastSeenAt ?? '',
+          ),
+          brief,
+          suggestions,
+        } satisfies IntegrationProjectGroup
+      })
+      .sort(
+        (left, right) =>
+          right.pending - left.pending || Date.parse(right.lastSeenAt) - Date.parse(left.lastSeenAt),
+      )
+    return (
+      <div className="page">
+        <LibraryHeader />
+        <LibraryTabs active="integration" counts={libraryCounts} />
+        <IntegrationProjectView groups={groups} />
+      </div>
+    )
+  }
 
   const rows: LibraryRow[] = (() => {
     if (tab === 'watch') {
@@ -371,16 +470,16 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
     <div className="page">
       <LibraryHeader />
 
-      <LibraryTabs
-        active={tab}
-        counts={{
-          integration: integration.totals.items,
-          watch: watch.totals.items,
-          maintainer: maintainer.totals.items,
-          comparison: comparison.totals.items,
-          discoverability: discoverability.totals.items,
-        }}
-      />
+      <LibraryTabs active={tab} counts={libraryCounts} />
+
+      {tab === 'integration' ? (
+        <div className="library-view-toggle">
+          <span className="chip toggle active">按库查看</span>
+          <Link className="chip toggle" href="/library?tab=integration&view=project">
+            按维护项目
+          </Link>
+        </div>
+      ) : null}
 
       <div className="library-stat-grid">
         <div className="library-stat">

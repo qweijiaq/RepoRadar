@@ -4474,3 +4474,76 @@ details[open] > .advanced-summary::before {
 .nav-utilities form {
   display: flex;
 }
+
+/* ── Similar reports and project-centric integration library ─────────── */
+
+.library-view-toggle {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+
+.similar-report-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.similar-report-card {
+  margin-top: 0;
+}
+
+.similar-report-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.project-library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.project-library-card {
+  margin-top: 0;
+}
+
+.project-library-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.project-library-head p {
+  margin: 4px 0 0;
+}
+
+.project-library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.project-library-actions form {
+  display: flex;
+}
+
+@media (max-width: 760px) {
+  .similar-report-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-library-head {
+    flex-direction: column;
+  }
+
+  .project-library-actions {
+    justify-content: flex-start;
+  }
+}

@@ -14,6 +14,7 @@ export type JobKind =
   | 'upgrade'
   | 'discover'
   | 'enrich'
+  | 'similar'
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
@@ -22,6 +23,7 @@ export interface JobPayload {
   token?: EncryptedBox | null
   origin?: string
   project?: string
+  projects?: string[]
   candidates?: string[]
   repo?: string
   issueNumber?: number

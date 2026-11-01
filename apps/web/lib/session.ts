@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { Session } from 'next-auth'
 import {
   fetchTokenScopes,
@@ -64,10 +65,27 @@ export interface RepoAccessOptions {
   requireRepoScope?: boolean
 }
 
-async function hasRepoAccessScope(token: string, knownScope: string | null): Promise<boolean> {
-  if (knownScope) return hasRepoScope(knownScope)
+const scopeCache = new Map<string, { scopes: string[] | null; expires: number }>()
+const SCOPE_TTL = 60_000
+
+function tokenScopeKey(token: string): string {
+  return createHash('sha256').update(token).digest('hex').slice(0, 24)
+}
+
+async function actualTokenScopes(token: string): Promise<string[] | null> {
+  const key = tokenScopeKey(token)
+  const cached = scopeCache.get(key)
+  if (cached && cached.expires > Date.now()) return cached.scopes
   const scopes = await fetchTokenScopes(token)
-  if (scopes === null) return true
+  scopeCache.set(key, { scopes, expires: Date.now() + SCOPE_TTL })
+  return scopes
+}
+
+async function hasRepoAccessScope(token: string, knownScope: string | null): Promise<boolean> {
+  // JWT 里的 scope 可能落后于真实 token；不要仅凭 knownScope 直接判否。
+  if (knownScope && hasRepoScope(knownScope)) return true
+  const scopes = await actualTokenScopes(token)
+  if (scopes === null) return knownScope === null
   return hasRepoScope(scopes.join(' '))
 }
 
@@ -101,6 +119,14 @@ export async function resolveRepoAccess(
   }
   if (resolved.source === 'session') {
     if (requireRepoScope && !(await hasRepoAccessScope(resolved.token, sessionGithubScope(session)))) {
+      const stored = await storedTokenFor(login)
+      if (
+        stored &&
+        stored !== resolved.token &&
+        (await hasRepoAccessScope(stored, null))
+      ) {
+        return { access: { token: stored, source: 'session' }, reason: 'none' }
+      }
       return { access: null, reason: 'need-repo-scope' }
     }
     return { access: resolved, reason: 'none' }

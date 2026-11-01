@@ -22,6 +22,7 @@ const KIND_LABEL: Record<JobKind, string> = {
   upgrade: '依赖升级',
   discover: '候选池刷新',
   enrich: '候选池富化',
+  similar: '相似项目对比',
 }
 
 const STATUS_LABEL: Record<JobStatus, string> = {
@@ -177,13 +178,13 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
       {page > 1 || hasMore ? (
         <div className="history-pagination">
           {page > 1 ? (
-            <Link className="btn small" href={tasksHref(status, page - 1)}>
+            <Link className="btn small" href={tasksHref(status, page - 1)} scroll={false}>
               上一页
             </Link>
           ) : null}
           <span className="muted small">第 {page} 页</span>
           {hasMore ? (
-            <Link className="btn small" href={tasksHref(status, page + 1)}>
+            <Link className="btn small" href={tasksHref(status, page + 1)} scroll={false}>
               下一页
             </Link>
           ) : null}

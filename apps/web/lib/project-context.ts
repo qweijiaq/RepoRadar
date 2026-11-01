@@ -54,6 +54,15 @@ export async function loadProjectContext(fullName: string, token: string | null)
 
   if (!token) return context
 
+  if (context.topics.length === 0) {
+    const remote = await fetchGitHubRepo(fullName, token).catch(() => null)
+    if (remote) {
+      context.description ||= remote.description ?? ''
+      context.language ||= remote.language
+      context.topics = remote.topics
+    }
+  }
+
   const readme = await fetchRaw(`/repos/${fullName}/readme`, token)
   let manifestName: string | null = null
   let manifest: string | null = null

@@ -119,6 +119,28 @@ export async function enqueueDiscoverabilityAction(formData: FormData): Promise<
   })
 }
 
+export async function enqueueIntegrationProjectAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  const { pool, userId } = await context()
+  const project = String(formData.get('project') ?? '').trim()
+  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(project)) {
+    redirect('/workbench/integrations?error=invalid')
+  }
+  const requested = String(formData.get('returnTo') ?? '')
+  const returnTo = requested.startsWith('/workbench/integrations') || requested.startsWith('/library')
+    ? requested
+    : '/workbench/integrations'
+  const access = await resolveRepoAccess(session, currentUser.login)
+  if (!access.access) redirect(repoScopeRedirect(access.reason, '/workbench/integrations?error=need-token'))
+  await enqueueAndGo(pool, userId, 'integration', `接入建议 · ${project}`, {
+    projects: [project],
+    token: encryptJobToken(access.access.token),
+    origin: returnTo,
+  })
+}
+
 export async function enqueueComparisonAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
@@ -150,6 +172,25 @@ export async function enqueueComparisonAction(formData: FormData): Promise<void>
     project,
     ...(candidates.length > 0 ? { candidates } : {}),
     token: encryptJobToken(access.access.token),
+    origin: returnTo,
+  })
+}
+
+export async function enqueueSimilarComparisonAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  const { pool, userId } = await context()
+  const project = String(formData.get('project') ?? '').trim()
+  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(project)) {
+    redirect('/workbench/maintain?error=compare')
+  }
+  const requested = String(formData.get('returnTo') ?? '')
+  const returnTo = requested.startsWith('/workbench/maintain') ? requested : '/workbench/maintain'
+  const access = await resolveRepoAccess(session, currentUser.login, { requireRepoScope: false })
+  await enqueueAndGo(pool, userId, 'similar', `相似项目对比 · ${project}`, {
+    project,
+    ...(access.access ? { token: encryptJobToken(access.access.token) } : {}),
     origin: returnTo,
   })
 }

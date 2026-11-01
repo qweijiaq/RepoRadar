@@ -193,6 +193,8 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   ) => buildFilterHref(filters, overrides, { query, limit: extraLimit ?? libraryLimit })
   const isLibrary = tab === 'library'
   const returnTo = isLibrary ? '/feed?tab=library' : `/feed?seed=${seed}`
+  const opportunityReturnTo = `${returnTo}#radar-opportunities`
+  const gemReturnTo = `${returnTo}#radar-gems`
   const pool = getPool()
   const githubToken = resolveGithubToken(session)?.token ?? null
   const [user, repos, feedback, signals, starred, subscriptions, latestDraft, projects, intents] =
@@ -684,19 +686,19 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
             <span className="filter-label">筛选</span>
             <Link
               className={filters.verified ? 'chip toggle active' : 'chip toggle'}
-              href={filterHref({ verified: filters.verified ? null : '1' })}
+              href={filterHref({ verified: filters.verified ? null : '1' })} scroll={false}
             >
               已验证
             </Link>
             <Link
               className={filters.release ? 'chip toggle active' : 'chip toggle'}
-              href={filterHref({ release: filters.release ? null : '1' })}
+              href={filterHref({ release: filters.release ? null : '1' })} scroll={false}
             >
               有新版本
             </Link>
             <Link
               className={filters.rising ? 'chip toggle active' : 'chip toggle'}
-              href={filterHref({ rising: filters.rising ? null : '1' })}
+              href={filterHref({ rising: filters.rising ? null : '1' })} scroll={false}
             >
               上升中
             </Link>
@@ -704,7 +706,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
               <Link
                 key={language}
                 className={filters.language === language ? 'chip toggle active' : 'chip toggle'}
-                href={filterHref({ language: filters.language === language ? null : language })}
+                href={filterHref({ language: filters.language === language ? null : language })} scroll={false}
               >
                 {language}
               </Link>
@@ -758,7 +760,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
           )}
           {filteredRepos.length > diversified.length ? (
             <div className="feed-more">
-              <Link className="btn small" href={filterHref({}, libraryLimit + 30)}>
+              <Link className="btn small" href={filterHref({}, libraryLimit + 30)} scroll={false}>
                 加载更多
               </Link>
               <span className="muted small">
@@ -770,7 +772,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
       ) : (
         <>
           {radarMode !== 'new' ? (
-            <section className="radar-section">
+            <section className="radar-section" id="radar-opportunities">
               <div className="radar-section-head">
                 <div>
                   <h2>
@@ -831,12 +833,12 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                         <FeedDismissButton
                           itemKey={opportunity.key}
                           kind={opportunity.kind}
-                          returnTo={returnTo}
+                          returnTo={opportunityReturnTo}
                         />
                         <form action={markFeedItemDoneAction} className="inline-form">
                           <input type="hidden" name="itemKey" value={opportunity.key} />
                           <input type="hidden" name="kind" value={opportunity.kind} />
-                          <input type="hidden" name="returnTo" value={returnTo} />
+                          <input type="hidden" name="returnTo" value={opportunityReturnTo} />
                           <button className="btn quiet small" type="submit">
                             标记完成
                           </button>
@@ -864,7 +866,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
             </section>
           ) : null}
 
-          <section className="radar-section">
+          <section className="radar-section" id="radar-gems">
             <div className="radar-section-head">
               <div>
                 <h2>
@@ -890,11 +892,11 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
               <div className="radar-section-actions">
                 <span className="radar-count">{gemPoolSize} 个候选</span>
                 {gemPoolSize > gems.length ? (
-                  <Link className="btn quiet small" href={`/feed?seed=${nextSeed}`}>
+                  <Link className="btn quiet small" href={`/feed?seed=${nextSeed}`} scroll={false}>
                     换一批
                   </Link>
                 ) : null}
-                <Link className="btn quiet small" href="/feed?tab=library">
+                <Link className="btn quiet small" href="/feed?tab=library" scroll={false}>
                   查看全部候选
                 </Link>
               </div>
@@ -939,7 +941,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                         <FeedDismissButton
                           itemKey={`gem:${gem.repo.fullName}`}
                           kind="gem"
-                          returnTo={returnTo}
+                          returnTo={gemReturnTo}
                           triggerClassName="link-button gem-dismiss-link"
                           label="不感兴趣"
                         />
@@ -962,7 +964,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                         <form action={markFeedItemDoneAction} className="inline-form">
                           <input type="hidden" name="itemKey" value={`gem:${gem.repo.fullName}`} />
                           <input type="hidden" name="kind" value="gem" />
-                          <input type="hidden" name="returnTo" value={returnTo} />
+                          <input type="hidden" name="returnTo" value={gemReturnTo} />
                           <button className="btn quiet small" type="submit">
                             已接入
                           </button>

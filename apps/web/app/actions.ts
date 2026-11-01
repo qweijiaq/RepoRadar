@@ -1,6 +1,7 @@
 'use server'
 
 import {
+  GITHUB_DELETE_REPO_SCOPES,
   GITHUB_REPO_SCOPES,
   addCollectionItem,
   addNotification,
@@ -97,6 +98,12 @@ export async function signInGithubRepoAction(formData?: FormData): Promise<void>
   const requested = String(formData?.get('redirectTo') ?? '')
   const redirectTo = requested.startsWith('/') ? requested : '/repos'
   await signIn('github', { redirectTo }, { scope: GITHUB_REPO_SCOPES })
+}
+
+export async function signInGithubDeleteReposAction(formData?: FormData): Promise<void> {
+  const requested = String(formData?.get('redirectTo') ?? '')
+  const redirectTo = requested.startsWith('/') ? requested : '/repos'
+  await signIn('github', { redirectTo }, { scope: GITHUB_DELETE_REPO_SCOPES })
 }
 
 export async function signInDevAction(): Promise<void> {

@@ -31,7 +31,7 @@ export function findSimilarRepos<T extends SimilarityRepo>(
   limit: number,
 ): Array<{ repo: T; similarity: number }> {
   return candidates
-    .filter((repo) => repo.fullName !== target.fullName)
+    .filter((repo) => repo.fullName.toLowerCase() !== target.fullName.toLowerCase())
     .map((repo) => ({ repo, similarity: repoSimilarity(target, repo) }))
     .filter((entry) => entry.similarity > 0)
     .sort((a, b) => b.similarity - a.similarity)

@@ -112,6 +112,7 @@ const AI_JOB_KINDS = new Set<JobKind>([
   'upgrade',
   'discover',
   'enrich',
+  'similar',
 ])
 
 export function jobUsesAi(kind: JobKind): boolean {

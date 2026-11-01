@@ -92,13 +92,13 @@ export async function HistoryPanel({
       {page > 1 || hasMore ? (
         <div className="history-pagination">
           {page > 1 ? (
-            <Link className="btn small" href={historyHref(kind, page - 1)}>
+            <Link className="btn small" href={historyHref(kind, page - 1)} scroll={false}>
               上一页
             </Link>
           ) : null}
           <span className="muted small">第 {page} 页</span>
           {hasMore ? (
-            <Link className="btn small" href={historyHref(kind, page + 1)}>
+            <Link className="btn small" href={historyHref(kind, page + 1)} scroll={false}>
               下一页
             </Link>
           ) : null}
