@@ -6,6 +6,7 @@ import { logEvent } from './logger.js'
 
 export interface CodeChunk {
   path: string
+  symbol: string | null
   content: string
   score?: number
 }
@@ -74,6 +75,73 @@ export function entryPointsFromManifest(manifest: string | null): string[] {
   return [...paths].slice(0, 12)
 }
 
+
+interface SymbolPart {
+  symbol: string | null
+  content: string
+}
+
+const SYMBOL_PATTERNS = [
+  /(?:^|\n)[ \t]*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z0-9_$]+)/g,
+  /(?:^|\n)[ \t]*(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>/g,
+  /(?:^|\n)[ \t]*(?:export\s+)?(?:default\s+)?class\s+([A-Za-z0-9_$]+)/g,
+  /(?:^|\n)[ \t]*(?:export\s+)?interface\s+([A-Za-z0-9_$]+)/g,
+  /(?:^|\n)[ \t]*(?:export\s+)?type\s+([A-Za-z0-9_$]+)\s*=/g,
+  /(?:^|\n)[ \t]*(?:export\s+)?def\s+([A-Za-z0-9_]+)\s*\(/g,
+  /(?:^|\n)[ \t]*func\s+(?:\([^)]*\)\s*)?([A-Za-z0-9_]+)\s*\(/g,
+  /(?:^|\n)[ \t]*(?:pub\s+)?fn\s+([A-Za-z0-9_]+)/g,
+]
+
+interface SymbolMatch {
+  index: number
+  name: string
+}
+
+function findSymbols(content: string): SymbolMatch[] {
+  const matches: SymbolMatch[] = []
+  for (const pattern of SYMBOL_PATTERNS) {
+    pattern.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(content))) {
+      const name = match[1]
+      if (!name) continue
+      const index = match.index + (match[0].startsWith('\n') ? 1 : 0)
+      matches.push({ index, name })
+    }
+  }
+  return matches
+    .sort((left, right) => left.index - right.index)
+    .filter((match, index, list) => index === 0 || match.index > list[index - 1]!.index)
+}
+
+/**
+ * 轻量的函数/类级切块：按导出的符号把文件切开，不依赖 tree-sitter。
+ * 找不到符号时退回固定长度切块，保证仍可索引。
+ */
+export function splitCodeBySymbol(content: string, maxChars = 2000): SymbolPart[] {
+  const text = content.trim()
+  if (!text) return []
+  const symbols = findSymbols(text)
+  if (symbols.length === 0) {
+    return splitCodeChunks(text, maxChars, 200).map((chunk) => ({ symbol: null, content: chunk }))
+  }
+
+  const parts: SymbolPart[] = []
+  const preamble = text.slice(0, symbols[0]!.index).trim()
+  if (preamble.length > 0) parts.push({ symbol: null, content: preamble.slice(0, maxChars) })
+
+  for (let index = 0; index < symbols.length; index++) {
+    const start = symbols[index]!.index
+    const end = symbols[index + 1]?.index ?? text.length
+    const body = text.slice(start, end).trim()
+    if (!body) continue
+    for (const chunk of splitCodeChunks(body, maxChars, 200)) {
+      parts.push({ symbol: symbols[index]!.name, content: chunk })
+    }
+  }
+  return parts
+}
+
 const SOURCE_EXTENSION = /\.(ts|tsx|js|jsx|mjs|py|go|rs)$/i
 const MANIFEST = /(^|\/)(package\.json|pyproject\.toml|go\.mod|Cargo\.toml)$/i
 const SKIPPED = /(^|\/)(node_modules|vendor|dist|build|test|tests|__tests__|examples?)\//i
@@ -124,29 +192,50 @@ export async function indexRepoCode(
     paths.map((path) => fetchRepoFile(repoFullName, path, options.token ?? undefined).catch(() => null)),
   )
 
-  const rows: Array<{ path: string; index: number; content: string; embedding: number[] | null }> = []
+  const rows: Array<{
+    path: string
+    index: number
+    symbol: string | null
+    content: string
+    embedding: number[] | null
+  }> = []
   for (const file of files) {
     if (!file) continue
-    const chunks = splitCodeChunks(file.content).slice(0, 6)
-    for (const [index, chunk] of chunks.entries()) {
+    const parts = splitCodeBySymbol(file.content).slice(0, 8)
+    for (const [index, part] of parts.entries()) {
       let embedding: number[] | null = null
       if (options.llm?.embeddingModel) {
-        embedding = await embedText(options.llm, chunk.slice(0, 4000)).catch(() => null)
+        const label = part.symbol ? `${file.path}#${part.symbol}\n` : ''
+        embedding = await embedText(options.llm, `${label}${part.content}`.slice(0, 4000)).catch(() => null)
       }
-      rows.push({ path: file.path, index, content: chunk, embedding })
+      rows.push({
+        path: file.path,
+        index,
+        symbol: part.symbol,
+        content: part.content,
+        embedding,
+      })
     }
   }
 
   await pool.query(`DELETE FROM code_chunks WHERE repo_full_name = $1`, [repoFullName])
   for (const row of rows) {
     await pool.query(
-      `INSERT INTO code_chunks (repo_full_name, path, chunk_index, content, embedding)
-       VALUES ($1, $2, $3, $4, $5::vector)
+      `INSERT INTO code_chunks (repo_full_name, path, chunk_index, symbol, content, embedding)
+       VALUES ($1, $2, $3, $4, $5, $6::vector)
        ON CONFLICT (repo_full_name, path, chunk_index) DO UPDATE SET
+         symbol = EXCLUDED.symbol,
          content = EXCLUDED.content,
          embedding = EXCLUDED.embedding,
          updated_at = now()`,
-      [repoFullName, row.path, row.index, row.content, row.embedding ? JSON.stringify(row.embedding) : null],
+      [
+        repoFullName,
+        row.path,
+        row.index,
+        row.symbol,
+        row.content,
+        row.embedding ? JSON.stringify(row.embedding) : null,
+      ],
     )
   }
 
@@ -190,8 +279,13 @@ export async function searchCodeChunks(
     const embedding = await embedText(options.llm, query.slice(0, 4000)).catch(() => null)
     if (embedding) {
       try {
-        const { rows } = await pool.query<{ path: string; content: string; score: number }>(
-          `SELECT path, content, 1 - (embedding <=> $2::vector) AS score
+        const { rows } = await pool.query<{
+          path: string
+          symbol: string | null
+          content: string
+          score: number
+        }>(
+          `SELECT path, symbol, content, 1 - (embedding <=> $2::vector) AS score
            FROM code_chunks
            WHERE repo_full_name = $1 AND embedding IS NOT NULL
            ORDER BY embedding <=> $2::vector
@@ -213,11 +307,11 @@ export async function searchCodeChunks(
   const params: unknown[] = [repoFullName]
   const clauses = words.map((word) => {
     params.push(`%${word}%`)
-    return `content ILIKE $${params.length}`
+    return `(content ILIKE $${params.length} OR symbol ILIKE $${params.length})`
   })
   params.push(limit)
-  const { rows } = await pool.query<{ path: string; content: string }>(
-    `SELECT path, content FROM code_chunks
+  const { rows } = await pool.query<{ path: string; symbol: string | null; content: string }>(
+    `SELECT path, symbol, content FROM code_chunks
      WHERE repo_full_name = $1 AND (${clauses.join(' OR ')})
      ORDER BY updated_at DESC
      LIMIT $${params.length}`,

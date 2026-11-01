@@ -49,6 +49,7 @@ describe.skipIf(!hasTestDatabase)('database integration', () => {
       '0009_integration_impacts',
       '0010_code_chunks',
       '0011_impact_kind',
+      '0012_code_chunk_symbol',
     ])
   })
 

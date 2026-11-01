@@ -64,7 +64,9 @@ describe.skipIf(!hasTestDatabase)('code chunks', () => {
     expect(await countCodeChunks(pool, 'acme/app')).toBe(again.chunks)
 
     const chunks = await searchCodeChunks(pool, 'acme/app', 'main function')
-    expect(chunks.some((chunk) => chunk.path === 'src/index.ts')).toBe(true)
+    const mainChunk = chunks.find((chunk) => chunk.path === 'src/index.ts')
+    expect(mainChunk).toBeTruthy()
+    expect(mainChunk?.symbol).toBe('main')
   })
 
   it('没有关键词时返回空结果', async () => {

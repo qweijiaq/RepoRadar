@@ -468,7 +468,7 @@ export interface IntegrationTrialInput {
   projectContext: IntegrationProjectInput
   steps: string[]
   targetFile?: { path: string; content: string } | null
-  codeEvidence?: Array<{ path: string; content: string }>
+  codeEvidence?: Array<{ path: string; content: string; symbol?: string | null }>
 }
 
 export interface GeneratedIntegrationTrial {
@@ -514,6 +514,7 @@ function buildTrialPrompt(input: IntegrationTrialInput): string {
         : null,
       code_evidence: (input.codeEvidence ?? []).map((item) => ({
         path: item.path,
+        symbol: item.symbol ?? null,
         excerpt: item.content.slice(0, 1200),
       })),
     },

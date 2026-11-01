@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { entryPointsFromManifest, splitCodeChunks } from '../src/code-index.js'
+import { entryPointsFromManifest, splitCodeBySymbol, splitCodeChunks } from '../src/code-index.js'
 
 describe('splitCodeChunks', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -39,5 +39,42 @@ describe('entryPointsFromManifest', () => {
     expect(entryPointsFromManifest(null)).toEqual([])
     expect(entryPointsFromManifest('not json')).toEqual([])
     expect(entryPointsFromManifest('{"main":"https://cdn.example.com/x.js"}')).toEqual([])
+  })
+})
+
+describe('splitCodeBySymbol', () => {
+  it('splits TypeScript by exported symbols and keeps the preamble', () => {
+    const source = [
+      "import { z } from 'zod'",
+      '',
+      'export function alpha(input: string) {',
+      '  return input.trim()',
+      '}',
+      '',
+      'export class Beta {',
+      '  run() { return 1 }',
+      '}',
+      '',
+      'export const gamma = () => 42',
+    ].join('\n')
+
+    const parts = splitCodeBySymbol(source)
+    const symbols = parts.map((part) => part.symbol)
+    expect(symbols).toEqual(expect.arrayContaining(['alpha', 'Beta', 'gamma']))
+    expect(parts.some((part) => part.symbol === null && part.content.includes('import'))).toBe(true)
+    expect(parts.find((part) => part.symbol === 'alpha')?.content).toContain('input.trim()')
+  })
+
+  it('detects python, go and rust functions', () => {
+    expect(splitCodeBySymbol('def main():\n    return 1\n').map((part) => part.symbol)).toContain('main')
+    expect(splitCodeBySymbol('func Run(x int) int {\n  return x\n}\n').map((part) => part.symbol)).toContain('Run')
+    expect(splitCodeBySymbol('pub fn run() {\n}\n').map((part) => part.symbol)).toContain('run')
+  })
+
+  it('falls back to fixed chunks when no symbol is found', () => {
+    const text = Array.from({ length: 200 }, (_, index) => `line ${index} ${'y'.repeat(30)}`).join('\n')
+    const parts = splitCodeBySymbol(text, 500)
+    expect(parts.length).toBeGreaterThan(1)
+    expect(parts.every((part) => part.symbol === null)).toBe(true)
   })
 })
