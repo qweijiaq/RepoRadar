@@ -62,3 +62,39 @@ export async function queryOsv(
     return []
   }
 }
+
+/**
+ * 不指定版本，查询某个包的全部安全公告。
+ * 用于「已接入的库」这种只知道包名、不知道用户实际版本的场景。
+ */
+export async function queryOsvPackage(
+  name: string,
+  ecosystem: 'npm' | 'pypi' | 'go' | 'cargo',
+): Promise<OsvVulnerability[]> {
+  const key = `pkg:${ecosystem}:${name}`
+  const cached = cache.get(key)
+  if (cached && cached.expires > Date.now()) return cached.value
+
+  try {
+    const response = await fetch('https://api.osv.dev/v1/query', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ package: { name, ecosystem: ecosystemName(ecosystem) } }),
+      signal: AbortSignal.timeout(6000),
+    })
+    if (!response.ok) return []
+    const data = (await response.json()) as OsvResponse
+    const value: OsvVulnerability[] = (data.vulns ?? []).slice(0, 10).map((vuln) => ({
+      id: vuln.id ?? 'OSV',
+      summary: vuln.summary?.slice(0, 200) ?? null,
+      severity:
+        vuln.database_specific?.severity ??
+        vuln.severity?.find((entry) => entry.type === 'CVSS_V3')?.score ??
+        null,
+    }))
+    cache.set(key, { value, expires: Date.now() + CACHE_TTL })
+    return value
+  } catch {
+    return []
+  }
+}

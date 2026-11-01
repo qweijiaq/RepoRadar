@@ -195,7 +195,10 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
             {impacts.map((impact) => (
               <li key={impact.id}>
                 <Link href={`/r/${impact.suggestionRepo}`}>{impact.suggestionRepo}</Link>{' '}
-                <span className="chip subtle">{impact.version}</span>{' '}
+                <span className={impact.kind === 'advisory' ? 'chip rising' : 'chip subtle'}>
+                  {impact.kind === 'advisory' ? '安全公告' : impact.version}
+                </span>{' '}
+                {impact.kind === 'advisory' ? <span className="muted small">{impact.version}</span> : null}
                 <span className="muted small">· {impact.projectFullName}</span>
                 {impact.url ? (
                   <a href={impact.url} target="_blank" rel="noreferrer">

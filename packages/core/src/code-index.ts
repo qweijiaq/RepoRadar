@@ -40,6 +40,40 @@ export function splitCodeChunks(content: string, maxChars = 1500, overlap = 200)
   return chunks.filter((chunk) => chunk.length > 0)
 }
 
+/** 从 package.json 的 main/module/exports/bin 里提取入口文件路径。 */
+export function entryPointsFromManifest(manifest: string | null): string[] {
+  if (!manifest) return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(manifest)
+  } catch {
+    return []
+  }
+  if (!parsed || typeof parsed !== 'object') return []
+
+  const paths = new Set<string>()
+  const add = (value: unknown): void => {
+    if (typeof value === 'string') {
+      const cleaned = value.replace(/^\.\//, '').trim()
+      if (cleaned && !cleaned.includes('*') && !/^https?:/i.test(cleaned)) paths.add(cleaned)
+      return
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) add(item)
+      return
+    }
+    if (value && typeof value === 'object') {
+      for (const item of Object.values(value)) add(item)
+    }
+  }
+
+  const pkg = parsed as Record<string, unknown>
+  for (const key of ['main', 'module', 'browser', 'types', 'typings', 'exports', 'bin']) {
+    add(pkg[key])
+  }
+  return [...paths].slice(0, 12)
+}
+
 const SOURCE_EXTENSION = /\.(ts|tsx|js|jsx|mjs|py|go|rs)$/i
 const MANIFEST = /(^|\/)(package\.json|pyproject\.toml|go\.mod|Cargo\.toml)$/i
 const SKIPPED = /(^|\/)(node_modules|vendor|dist|build|test|tests|__tests__|examples?)\//i
@@ -52,10 +86,18 @@ function filePriority(path: string): number {
   return 9
 }
 
-function pickPaths(paths: string[], maxFiles: number): string[] {
+function pickPaths(paths: string[], maxFiles: number, preferred: string[] = []): string[] {
+  const preferredLower = preferred.map((path) => path.toLowerCase())
+  const isPreferred = (path: string): boolean => {
+    const lower = path.toLowerCase()
+    return preferredLower.some(
+      (entry) => lower === entry || lower.startsWith(`${entry}.`) || entry.startsWith(`${lower}.`),
+    )
+  }
+
   return paths
     .filter((path) => !SKIPPED.test(path))
-    .map((path) => ({ path, priority: filePriority(path) }))
+    .map((path) => ({ path, priority: isPreferred(path) ? -1 : filePriority(path) }))
     .filter((item) => item.priority < 9)
     .sort((left, right) => left.priority - right.priority || left.path.length - right.path.length)
     .slice(0, Math.max(1, maxFiles))
@@ -71,7 +113,13 @@ export async function indexRepoCode(
   repoFullName: string,
   options: { token?: string | null; llm?: LlmConfig | null; maxFiles?: number } = {},
 ): Promise<IndexRepoResult> {
-  const paths = pickPaths(await listRepoTree(repoFullName, options.token ?? undefined), options.maxFiles ?? 6)
+  const tree = await listRepoTree(repoFullName, options.token ?? undefined)
+  const manifestPath = tree.find((path) => /(^|\/)package\.json$/i.test(path)) ?? null
+  const manifest = manifestPath
+    ? await fetchRepoFile(repoFullName, manifestPath, options.token ?? undefined).catch(() => null)
+    : null
+  const preferred = entryPointsFromManifest(manifest?.content ?? null)
+  const paths = pickPaths(tree, options.maxFiles ?? 8, preferred)
   const files = await Promise.all(
     paths.map((path) => fetchRepoFile(repoFullName, path, options.token ?? undefined).catch(() => null)),
   )
@@ -79,7 +127,7 @@ export async function indexRepoCode(
   const rows: Array<{ path: string; index: number; content: string; embedding: number[] | null }> = []
   for (const file of files) {
     if (!file) continue
-    const chunks = splitCodeChunks(file.content).slice(0, 4)
+    const chunks = splitCodeChunks(file.content).slice(0, 6)
     for (const [index, chunk] of chunks.entries()) {
       let embedding: number[] | null = null
       if (options.llm?.embeddingModel) {

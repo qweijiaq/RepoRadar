@@ -6,7 +6,7 @@ import {
   findSimilarRepos,
   getPool,
   isFriendlyIssue,
-  listOpenIssues,
+  listOpenIssuesCached,
   listUserProjects,
   rankContributionTargets,
 } from '@repo-radar/core'
@@ -47,7 +47,7 @@ export default async function ContributePage() {
   const issueLists = token
     ? await Promise.all(
         top.map((item) =>
-          listOpenIssues(item.repo.fullName, { token, limit: 20 }).catch(() => []),
+          listOpenIssuesCached(item.repo.fullName, { token, limit: 20 }).catch(() => []),
         ),
       )
     : []

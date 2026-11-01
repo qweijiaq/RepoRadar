@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { splitCodeChunks } from '../src/code-index.js'
+import { entryPointsFromManifest, splitCodeChunks } from '../src/code-index.js'
 
 describe('splitCodeChunks', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -15,5 +15,29 @@ describe('splitCodeChunks', () => {
     expect(chunks.length).toBeGreaterThan(1)
     expect(chunks.every((chunk) => chunk.length <= 800)).toBe(true)
     expect(chunks.join('')).toContain('line 119')
+  })
+})
+
+describe('entryPointsFromManifest', () => {
+  it('collects main/module/exports/bin paths', () => {
+    const manifest = JSON.stringify({
+      main: 'dist/index.js',
+      module: './esm/index.js',
+      exports: {
+        '.': { import: './src/index.ts', types: './src/index.d.ts' },
+        './server': './src/server.ts',
+      },
+      bin: { radar: './bin/cli.js' },
+    })
+    const entries = entryPointsFromManifest(manifest)
+    expect(entries).toEqual(
+      expect.arrayContaining(['dist/index.js', 'esm/index.js', 'src/index.ts', 'src/server.ts', 'bin/cli.js']),
+    )
+  })
+
+  it('returns an empty list for invalid manifests', () => {
+    expect(entryPointsFromManifest(null)).toEqual([])
+    expect(entryPointsFromManifest('not json')).toEqual([])
+    expect(entryPointsFromManifest('{"main":"https://cdn.example.com/x.js"}')).toEqual([])
   })
 })

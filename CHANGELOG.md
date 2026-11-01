@@ -59,6 +59,8 @@
   排名（最多 300 条），页面按快照顺序取切片；快照缺失/过期时回退实时排名，并在响应结束后补建。
   「加载更多」不再重新排名整个候选池。
 
+- 接入回访接入 OSV 安全公告（含 `0011_impact_kind`）；代码索引会优先按 `package.json` 的
+  `main/module/exports/bin` 选入口文件；贡献雷达的 Issue 列表加 10 分钟缓存并在失败时退回旧数据。
 - **AI 功能二批**：接入预演支持目标文件（适配层）、接入后回访（`integration_impacts`）、
   能力差异矩阵、候选仓库代码索引（`code_chunks` + pgvector 检索）、换库沙盘（`/workbench/swap`）、
   贡献雷达（`/workbench/contribute`）和 MCP 决策工具（`pick_library` / `integration_preflight` /

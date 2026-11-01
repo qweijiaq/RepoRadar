@@ -11,11 +11,11 @@
 | --- | --- | --- | --- |
 | 1 | 接入预演 | `/workbench/integrations` →「试接入」 | 可用（含目标文件接线） |
 | 2 | 适配层生成 | 试接入表单里的「接入文件」 | 可用（生成适配/接线补丁） |
-| 3 | 接入后回访 | worker 每 6h；`/workbench/integrations` 面板 | 可用（基于 release） |
+| 3 | 接入后回访 | worker 每 6h；`/workbench/integrations` 面板 | 可用（release + OSV） |
 | 4 | 能力差异矩阵 | `/compare` 的能力表 + 对比任务书 | 可用 |
-| 5 | 代码级证据 | 试接入时自动索引候选仓库入口代码 | 可用（检索退化有兜底） |
+| 5 | 代码级证据 | 试接入时自动索引候选仓库入口代码 | 可用（按 exports 选入口，检索有兜底） |
 | 6 | 换库沙盘 | `/workbench/swap` | 可用（LLM 生成迁移补丁 + 沙箱验证） |
-| 7 | 贡献雷达 | `/workbench/contribute` | 可用（相似项目 + good first issue） |
+| 7 | 贡献雷达 | `/workbench/contribute` | 可用（相似项目 + good first issue，10 分钟缓存） |
 | 8 | MCP 决策中间件 | `pick_library` / `integration_preflight` / `similar_diff` | 可用 |
 
 下面是每个功能的详细规格，保留作为后续增强的依据。

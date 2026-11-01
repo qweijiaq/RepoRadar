@@ -78,6 +78,33 @@ describe.skipIf(!hasTestDatabase)('integration impacts', () => {
     expect(rows[0]?.count).toBe('1')
   })
 
+  it('记录 OSV 安全公告', async () => {
+    if (!pool) throw new Error('pool 未初始化')
+    await pool.query(`DELETE FROM integration_outcomes WHERE user_id = $1`, [userId])
+    await pool.query(
+      `INSERT INTO integration_outcomes (user_id, project_full_name, suggestion_repo, status)
+       VALUES ($1, 'acme/app', 'acme/vuln-lib', 'adopted')`,
+      [userId],
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input)
+        if (url.includes('api.osv.dev')) {
+          return new Response(
+            JSON.stringify({ vulns: [{ id: 'GHSA-1', summary: 'prototype pollution' }] }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+        }
+        return new Response('', { status: 404 })
+      }),
+    )
+
+    expect(await checkIntegrationImpacts(pool, { limit: 5 })).toBe(1)
+    const impacts = await listIntegrationImpacts(pool, userId, 5)
+    expect(impacts[0]).toMatchObject({ kind: 'advisory', version: 'osv:GHSA-1' })
+  })
+
   it('接入之前发布的版本不会回访', async () => {
     if (!pool) throw new Error('pool 未初始化')
     vi.stubGlobal(
