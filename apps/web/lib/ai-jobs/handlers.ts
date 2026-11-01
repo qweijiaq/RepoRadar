@@ -19,6 +19,7 @@ import {
   findLatestIntegrationReport,
   findLatestIssuePlan,
   findRepoByFullName,
+  findReposForMatching,
   findUserById,
   findWatchIntent,
   generateComparisonReport,
@@ -27,11 +28,13 @@ import {
   generateIssuePlan,
   generateMaintainerReport,
   generatePatch,
+  deriveSimilarProjectKeywords,
   generateSimilarReport,
   generateWatchMatches,
   GitHubApiError,
-  findSimilarRepos,
+  keywordCoverage,
   repoSimilarity,
+  textSimilarity,
   isDependencyUsed,
   listFeedbackSignals,
   listIntegrationOutcomes,
@@ -790,36 +793,79 @@ async function similarJob(pool: DbPool, userId: number, job: JobRecord, progress
     topics: targetTopics,
     language: context.language ?? targetProject.language,
   }
-  const repos = await findEnrichedRepos(pool, 500)
+  const targetInput = {
+    repo: targetProject.repoFullName,
+    description: context.description || targetProject.description || '',
+    language: context.language ?? targetProject.language,
+    topics: targetTopics,
+    readme: context.readme,
+    manifestName: context.manifestName,
+    manifest: context.manifest,
+  }
+  await progress('提取竞品关键词…')
+  const derivedKeywords = await deriveSimilarProjectKeywords(targetInput, llm)
+  const searchKeywords = [...new Set([...targetTopics, ...derivedKeywords])].slice(0, 10)
+  const targetText = [
+    targetInput.repo,
+    targetInput.description,
+    targetInput.readme ?? '',
+    targetTopics.join(' '),
+    derivedKeywords.join(' '),
+  ].join(' ')
+
+  const combinedScore = (metadata: number, language: string | null, text: string): number => {
+    const languageScore = targetMeta.language && language === targetMeta.language ? 1 : 0
+    return Math.min(
+      1,
+      metadata * 0.3 + textSimilarity(targetText, text) * 0.4 + keywordCoverage(searchKeywords, text) * 0.2 + languageScore * 0.1,
+    )
+  }
+
+  const repos = await findReposForMatching(pool, {
+    topics: targetTopics,
+    language: targetMeta.language,
+    keywords: derivedKeywords,
+    limit: 300,
+  })
   const candidateMap = new Map<
     string,
     { repo: string; similarity: number; stars: number; description: string; language: string | null; topics: string[] }
   >()
-  for (const candidate of findSimilarRepos(targetMeta, repos, 10)) {
-    if (candidate.similarity <= 0.05) continue
-    candidateMap.set(candidate.repo.fullName.toLowerCase(), {
-      repo: candidate.repo.fullName,
-      similarity: candidate.similarity,
-      stars: candidate.repo.stars,
-      description: candidate.repo.summary ?? candidate.repo.description ?? '',
-      language: candidate.repo.language,
-      topics: candidate.repo.topics,
+  for (const candidate of repos) {
+    const text = [candidate.fullName, candidate.description ?? '', candidate.topics.join(' ')].join(' ')
+    const similarity = combinedScore(
+      repoSimilarity(targetMeta, candidate),
+      candidate.language,
+      text,
+    )
+    candidateMap.set(candidate.fullName.toLowerCase(), {
+      repo: candidate.fullName,
+      similarity,
+      stars: candidate.stars,
+      description: candidate.description ?? '',
+      language: candidate.language,
+      topics: candidate.topics,
     })
   }
 
-  if (token && targetTopics.length > 0) {
-    await progress('在 GitHub 搜索相似项目…')
+  if (token) {
+    await progress('在 GitHub 搜索竞品…')
     const since = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10)
-    for (const topic of targetTopics.slice(0, 3)) {
-      const language = context.language ? ` language:${context.language}` : ''
+    const language = targetMeta.language ? ` language:${targetMeta.language}` : ''
+    const queries = [
+      ...targetTopics.slice(0, 3).map((topic) => `topic:${topic}`),
+      ...(targetTopics.length === 0 ? derivedKeywords.slice(0, 4) : derivedKeywords.slice(0, 2)),
+    ]
+    for (const term of [...new Set(queries)].slice(0, 6)) {
       try {
-        const found = await searchRepos(
-          `topic:${topic}${language} stars:>=50 pushed:>=${since} archived:false fork:false`,
-          { token, perPage: 10 },
-        )
+        const found = await searchRepos(`${term}${language} stars:>=50 pushed:>=${since} archived:false fork:false`, {
+          token,
+          perPage: 10,
+        })
         for (const repo of found) {
           if (repo.fullName.toLowerCase() === project.toLowerCase()) continue
-          const similarity = repoSimilarity(targetMeta, repo)
+          const text = [repo.fullName, repo.description ?? '', repo.topics.join(' ')].join(' ')
+          const similarity = combinedScore(repoSimilarity(targetMeta, repo), repo.language, text)
           if (similarity <= 0.05) continue
           await upsertRepo(pool, repo)
           const key = repo.fullName.toLowerCase()
@@ -867,15 +913,6 @@ async function similarJob(pool: DbPool, userId: number, job: JobRecord, progress
     })
   }
 
-  const targetInput = {
-    repo: targetProject.repoFullName,
-    description: context.description || targetProject.description || '',
-    language: context.language ?? targetProject.language,
-    topics: targetTopics,
-    readme: context.readme,
-    manifestName: context.manifestName,
-    manifest: context.manifest,
-  }
   await progress('模型对比相似项目…')
   const report = await generateSimilarReport(targetInput, candidates, llm)
   const reportId = await saveSimilarReport(pool, userId, targetProject.repoFullName, {

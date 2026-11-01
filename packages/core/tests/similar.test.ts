@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest'
-import { buildSimilarBrief, groundSimilarReport, parseSimilarReport } from '../src/similar.js'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  buildSimilarBrief,
+  deriveSimilarProjectKeywords,
+  groundSimilarReport,
+  parseSimilarReport,
+} from '../src/similar.js'
+import { keywordCoverage, textSimilarity } from '../src/similarity.js'
 
 const raw = JSON.stringify({
   project: 'me/app',
@@ -48,11 +54,65 @@ describe('similar report', () => {
         },
       ],
     )
-    expect(grounded.candidates[0]?.similarity).toBe(73)
+    expect(grounded.candidates[0]?.similarity).toBe(88)
     const brief = buildSimilarBrief({
       report: grounded,
       generatedAt: '2026-11-01T00:00:00.000Z',
     })
     expect(brief).toContain('借鉴')
+  })
+})
+
+
+describe('similar project matching helpers', () => {
+  it('scores text overlap without embeddings', () => {
+    expect(
+      textSimilarity(
+        'Local-first AI reading notes for EPUB and PDF books with chapter summaries',
+        'An open-source local-first EPUB reader with AI summaries and notes',
+      ),
+    ).toBeGreaterThan(0.2)
+    expect(textSimilarity('agent memory', 'color palette')).toBe(0)
+  })
+
+  it('measures keyword coverage and derives fallback keywords', async () => {
+    expect(keywordCoverage(['epub', 'reading notes'], 'EPUB reader with reading notes')).toBe(1)
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: '{"keywords":["epub reader","ai reading notes","pdf annotation"]}',
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const keywords = await deriveSimilarProjectKeywords(
+        {
+          repo: 'me/reader',
+          description: 'Local-first AI reading notes for EPUB/PDF',
+          language: 'TypeScript',
+          topics: [],
+          readme: null,
+          manifestName: null,
+          manifest: null,
+        },
+        {
+          apiKey: 'test',
+          baseUrl: 'https://example.invalid/v1',
+          model: 'test',
+          embeddingModel: 'test',
+        },
+      )
+      expect(keywords).toContain('epub reader')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

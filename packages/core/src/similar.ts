@@ -22,11 +22,11 @@ export const similarCandidateSchema = z.object({
   repo: z.string().min(3).max(120),
   similarity: z.number().int().min(0).max(100),
   overview: z.string().min(4).max(500),
-  candidateStrengths: z.array(z.string().min(2).max(180)).min(1).max(5),
-  candidateWeaknesses: z.array(z.string().min(2).max(180)).max(5).default([]),
-  targetAdvantages: z.array(z.string().min(2).max(180)).max(5).default([]),
-  borrowable: z.array(z.string().min(2).max(220)).min(1).max(6),
-  risks: z.array(z.string().min(2).max(180)).max(5).default([]),
+  candidateStrengths: z.array(z.string().min(2).max(180)).min(1).max(8),
+  candidateWeaknesses: z.array(z.string().min(2).max(180)).max(8).default([]),
+  targetAdvantages: z.array(z.string().min(2).max(180)).max(8).default([]),
+  borrowable: z.array(z.string().min(2).max(220)).min(1).max(8),
+  risks: z.array(z.string().min(2).max(180)).max(8).default([]),
 })
 
 export const similarReportSchema = z.object({
@@ -56,7 +56,7 @@ const SYSTEM_PROMPT = `你是资深开源项目架构顾问。用户会给出一
 - targetAdvantages 是目标项目应该保留的优势，不要为了借鉴而丢掉。
 - borrowable 必须具体、可执行，说明可以借鉴什么设计、功能或工程实践；不要泛泛而谈。
 - risks 说明直接照搬可能带来的许可证、复杂度、维护成本或产品定位风险。
-- similarity 用给定候选的 similarity 字段，不要自己大幅改动。
+- similarity 综合判断对方与目标项目的领域、能力和用户重合度；可以参考给定值，但要以实际内容为准，不要机械照抄。
 - 只引用候选列表里的仓库全名，不得编造 API 或功能；信息不足时明确说需要进一步核实。
 - 不要输出分析过程、思考过程或 Markdown 围栏，第一个字符必须是 {，最后一个字符必须是 }。
 
@@ -113,6 +113,34 @@ export function buildSimilarPrompt(project: SimilarProjectInput, candidates: Sim
   )}`
 }
 
+function relaxSimilarReport(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null) return value
+  const record = value as Record<string, unknown>
+  if (!Array.isArray(record.candidates)) return value
+  const list = (input: unknown, max = 8): string[] =>
+    Array.isArray(input)
+      ? input.filter((item): item is string => typeof item === 'string').slice(0, max)
+      : []
+  return {
+    ...record,
+    summary: typeof record.summary === 'string' ? record.summary.slice(0, 600) : record.summary,
+    candidates: record.candidates.slice(0, 5).map((candidate) => {
+      if (typeof candidate !== 'object' || candidate === null) return candidate
+      const entry = candidate as Record<string, unknown>
+      return {
+        ...entry,
+        overview: typeof entry.overview === 'string' ? entry.overview.slice(0, 500) : entry.overview,
+        candidateStrengths: list(entry.candidateStrengths),
+        candidateWeaknesses: list(entry.candidateWeaknesses),
+        targetAdvantages: list(entry.targetAdvantages),
+        borrowable: list(entry.borrowable),
+        risks: list(entry.risks),
+      }
+    }),
+    nextSteps: list(record.nextSteps, 6),
+  }
+}
+
 export function parseSimilarReport(raw: string): SimilarReport {
   const cleaned = raw.replace(/```(?:json)?/gi, '').trim()
   let lastError: string | null = null
@@ -122,9 +150,11 @@ export function parseSimilarReport(raw: string): SimilarReport {
       if (typeof parsed !== 'object' || parsed === null) continue
       const projects = (parsed as Record<string, unknown>).candidates
       if (!Array.isArray(projects)) continue
-      const result = similarReportSchema.safeParse(parsed)
-      if (result.success) return result.data
-      lastError = `${result.error.issues[0]?.path.join('.') ?? 'unknown'} ${result.error.issues[0]?.message ?? ''}`
+      const strict = similarReportSchema.safeParse(parsed)
+      if (strict.success) return strict.data
+      const relaxed = similarReportSchema.safeParse(relaxSimilarReport(parsed))
+      if (relaxed.success) return relaxed.data
+      lastError = `${relaxed.error.issues[0]?.path.join('.') ?? 'unknown'} ${relaxed.error.issues[0]?.message ?? ''}`
     } catch {
       // 尝试下一个对象
     }
@@ -145,14 +175,79 @@ export function groundSimilarReport(
     nextSteps: report.nextSteps,
     candidates: report.candidates
       .filter((candidate) => candidateMap.has(candidate.repo.toLowerCase()))
-      .map((candidate) => {
-        const known = candidateMap.get(candidate.repo.toLowerCase())!
-        return {
-          ...candidate,
-          similarity: Math.round(known.similarity * 100),
-        }
-      }),
+      .map((candidate) => ({
+        ...candidate,
+        similarity: Math.max(0, Math.min(100, Math.round(candidate.similarity))),
+      })),
   }
+}
+
+const KEYWORD_PROMPT = `你是开源项目分析师。用户会给出一个项目，请提取适合在 GitHub 上寻找竞品/同类项目的英文关键词。
+规则：
+- 输出 5-8 个关键词或短语，覆盖领域、核心能力、目标用户和技术形态。
+- 不要只给泛词，例如 ai、app、tool、framework、open-source；要组合出有区分度的概念。
+- 中英文混合输入时也输出英文关键词。
+- 只输出 JSON：{"keywords":["..."]}，不要解释或思考过程。`
+
+function parseKeywords(raw: string): string[] {
+  const cleaned = raw.replace(/```(?:json)?/gi, '').trim()
+  for (const candidate of cleaned.match(/\{[\s\S]*\}/g) ?? []) {
+    try {
+      const parsed = JSON.parse(candidate) as { keywords?: unknown }
+      if (!Array.isArray(parsed.keywords)) continue
+      return parsed.keywords
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.replace(/[\"\r\n]/g, ' ').trim().toLowerCase())
+        .filter((item) => item.length >= 3 && item.length <= 60)
+        .slice(0, 8)
+    } catch {
+      // 尝试下一个 JSON 对象
+    }
+  }
+  return []
+}
+
+function fallbackKeywords(project: SimilarProjectInput): string[] {
+  const stop = new Set([
+    'the', 'and', 'for', 'with', 'that', 'this', 'from', 'project', 'open', 'source',
+    'local', 'first', 'using', 'based', 'built', 'your', 'you', 'into', 'app', 'tool',
+    'tools', 'framework', 'library', 'libraries', 'a', 'an', 'of', 'to', 'in', 'on',
+  ])
+  const text = [project.repo.split('/')[1] ?? '', project.description, project.readme ?? '']
+    .join(' ')
+    .toLowerCase()
+  return [...new Set((text.match(/[a-z][a-z0-9+#.-]{2,}/g) ?? []).filter((word) => !stop.has(word)))]
+    .slice(0, 8)
+}
+
+/** 从项目描述和 README 提取竞品搜索关键词；失败时用英文词频兜底。 */
+export async function deriveSimilarProjectKeywords(
+  project: SimilarProjectInput,
+  llm: LlmConfig,
+): Promise<string[]> {
+  try {
+    const raw = await chatCompletion(
+      llm,
+      [
+        { role: 'system', content: KEYWORD_PROMPT },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            repo: project.repo,
+            description: project.description,
+            topics: project.topics,
+            readme: project.readme?.slice(0, 4000) ?? null,
+          }),
+        },
+      ],
+      { temperature: 0.2, maxTokens: 500, jsonMode: true },
+    )
+    const keywords = parseKeywords(raw)
+    if (keywords.length > 0) return keywords
+  } catch {
+    // 关键词提取失败时继续用基础关键词
+  }
+  return [...new Set([...project.topics, ...fallbackKeywords(project)])].slice(0, 8)
 }
 
 export async function generateSimilarReport(

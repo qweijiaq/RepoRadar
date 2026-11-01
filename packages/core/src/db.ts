@@ -222,6 +222,36 @@ export async function findPendingRepos(
   return rows.map(mapRepoRow)
 }
 
+export async function findReposForMatching(
+  pool: DbPool,
+  options: { topics?: string[]; language?: string | null; keywords?: string[]; limit?: number },
+): Promise<RepoRecord[]> {
+  const topics = options.topics && options.topics.length > 0 ? options.topics : null
+  const keywords = options.keywords?.filter(Boolean).slice(0, 6) ?? []
+  const patterns = keywords.length > 0 ? keywords.map((keyword) => `%${keyword}%`) : null
+  const limit = Math.max(1, Math.min(500, options.limit ?? 200))
+  const { rows } = await pool.query<RepoRow>(
+    `SELECT ${REPO_COLUMNS} FROM repos
+     WHERE archived = FALSE AND is_fork = FALSE
+       AND (
+         ($1::text[] IS NOT NULL AND topics && $1::text[])
+         OR ($2::text IS NOT NULL AND language ILIKE $2)
+         OR (
+           $3::text[] IS NOT NULL
+           AND (
+             full_name ILIKE ANY($3::text[])
+             OR coalesce(description, '') ILIKE ANY($3::text[])
+             OR EXISTS (SELECT 1 FROM unnest(topics) AS topic WHERE topic ILIKE ANY($3::text[]))
+           )
+         )
+       )
+     ORDER BY stars DESC
+     LIMIT $4`,
+    [topics, options.language || null, patterns, limit],
+  )
+  return rows.map(mapRepoRow)
+}
+
 export async function findEnrichedRepos(pool: DbPool, limit: number): Promise<EnrichedRepoRecord[]> {
   const { rows } = await pool.query<EnrichedRepoRow>(
     `SELECT ${REPO_COLUMNS}, summary, problem, audience, verdict, reason, quality_score,

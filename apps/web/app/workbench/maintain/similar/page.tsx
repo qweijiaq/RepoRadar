@@ -96,6 +96,9 @@ export default async function SimilarComparisonPage({ searchParams }: SimilarPag
       : Promise.resolve(null),
   ])
   const report = selected ?? latest
+  const maxSimilarity = report
+    ? Math.max(...report.report.candidates.map((candidate) => candidate.similarity))
+    : 0
   const returnTo = `/workbench/maintain/similar?repo=${encodeURIComponent(repo)}`
 
   return (
@@ -126,6 +129,11 @@ export default async function SimilarComparisonPage({ searchParams }: SimilarPag
       </section>
 
       {params.error ? <div className="notice">对比生成失败，请检查 GitHub 授权或稍后重试。</div> : null}
+      {report && maxSimilarity < 45 ? (
+        <div className="notice">
+          没有找到足够接近的直接竞品（最高相似度 {maxSimilarity}）。下面的候选主要作为工程实践和产品形态的参考，不代表它们是同类产品。
+        </div>
+      ) : null}
 
       {report ? (
         <>
