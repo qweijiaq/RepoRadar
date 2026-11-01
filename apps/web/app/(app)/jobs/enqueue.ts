@@ -279,6 +279,11 @@ export async function enqueueIntegrationTrialAction(formData: FormData): Promise
     redirect('/workbench/integrations?error=trial-invalid')
   }
 
+  const rawFile = String(formData.get('file') ?? '').trim()
+  const file = /^[A-Za-z0-9._/-]+$/.test(rawFile) && !rawFile.includes('..') && !rawFile.startsWith('/')
+    ? rawFile.slice(0, 200)
+    : ''
+
   let steps: string[] = []
   try {
     const parsed = JSON.parse(String(formData.get('steps') ?? '[]')) as unknown
@@ -296,6 +301,7 @@ export async function enqueueIntegrationTrialAction(formData: FormData): Promise
     project,
     repo: candidate,
     steps,
+    ...(file ? { file } : {}),
     token: encryptJobToken(access.access.token),
     origin: '/workbench/integrations',
   })

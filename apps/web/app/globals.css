@@ -4613,3 +4613,14 @@ details[open] > .advanced-summary::before {
     justify-content: flex-start;
   }
 }
+
+.trial-file-input {
+  width: 100%;
+  max-width: 260px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 12px;
+}

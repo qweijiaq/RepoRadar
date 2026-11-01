@@ -432,6 +432,13 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                                 name="steps"
                                 value={JSON.stringify(suggestion.steps)}
                               />
+                              <input
+                                className="trial-file-input"
+                                type="text"
+                                name="file"
+                                placeholder="接入文件（可选），如 src/lib/foo.ts"
+                                aria-label="接入文件路径"
+                              />
                               <button
                                 className="btn small"
                                 type="submit"

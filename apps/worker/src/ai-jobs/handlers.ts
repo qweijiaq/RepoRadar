@@ -625,9 +625,21 @@ async function integrationTrialJob(
     stars: enriched?.stars ?? basic?.stars ?? 0,
   }
 
+  const targetPath = job.payload.file?.trim()
+  const targetFile = targetPath ? await fetchRepoFile(project, targetPath, token) : null
+  if (targetPath && !targetFile) {
+    await progress(`没有读到 ${targetPath}，改为只修改依赖清单`)
+  }
+
   await progress('模型生成试接入补丁…')
   const generated = await generateIntegrationTrial(
-    { project, candidate, projectContext, steps: job.payload.steps ?? [], targetFile: null },
+    {
+      project,
+      candidate,
+      projectContext,
+      steps: job.payload.steps ?? [],
+      targetFile: targetFile ? { path: targetFile.path, content: targetFile.content } : null,
+    },
     llm,
   )
 

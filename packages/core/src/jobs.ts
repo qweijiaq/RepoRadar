@@ -34,6 +34,7 @@ export interface JobPayload {
   enrichLimit?: number
   targetVersion?: string
   steps?: string[]
+  file?: string
   currentVersion?: string
   manifestPath?: string
 }

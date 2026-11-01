@@ -77,6 +77,42 @@ describe('generateIntegrationTrial', () => {
     expect(body).toContain('安装 zod')
   })
 
+  it('带有目标文件时，把文件内容放进提示词', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    summary: '加依赖并接线',
+                    files: ['package.json', 'src/app.ts'],
+                    patch: trialPatch,
+                  }),
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await generateIntegrationTrial(
+      {
+        ...input,
+        targetFile: { path: 'src/app.ts', content: 'export const app = createApp()' },
+      },
+      llm,
+    )
+
+    const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
+    const body = String(calls[0]?.[1]?.body)
+    expect(body).toContain('src/app.ts')
+    expect(body).toContain('createApp')
+  })
+
   it('模型连续返回无法解析的内容时抛错', async () => {
     vi.stubGlobal(
       'fetch',
