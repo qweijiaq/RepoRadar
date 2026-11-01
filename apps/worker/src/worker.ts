@@ -15,6 +15,7 @@ import {
   listPendingDeliveries,
   listQueuedJobs,
   listReleaseWatchRepos,
+  listUsersNeedingFeedSnapshot,
   listUserGithubTokens,
   listUsersWithProfiles,
   loadConfig,
@@ -26,6 +27,7 @@ import {
   markDeliverySent,
   notifyReleaseSubscribers,
   recoverStaleJobs,
+  refreshFeedSnapshot,
   resolveBaseUrl,
   resolveMailConfig,
   resolveNotificationEmail,
@@ -253,6 +255,25 @@ async function scheduledRetention(): Promise<void> {
   }
 }
 
+const FEED_SNAPSHOT_INTERVAL = 30 * 60 * 1000
+let lastFeedSnapshotAt = 0
+
+/** 定期为用户预计算 feed 主列表快照，页面就不用每次排名 500 条。 */
+async function scheduledFeedSnapshots(): Promise<void> {
+  if (Date.now() - lastFeedSnapshotAt < FEED_SNAPSHOT_INTERVAL) return
+  lastFeedSnapshotAt = Date.now()
+  try {
+    const userIds = await listUsersNeedingFeedSnapshot(pool, 20)
+    for (const id of userIds) {
+      if (stopping) break
+      const snapshot = await refreshFeedSnapshot(pool, id)
+      if (snapshot) console.log(`[worker] feed snapshot #${id}: ${snapshot.ids.length} items`)
+    }
+  } catch (error) {
+    console.error('[worker] feed snapshot failed:', error)
+  }
+}
+
 async function scheduledAlerts(): Promise<void> {
   if (Date.now() - lastAlertCheck < ALERT_CHECK_INTERVAL) return
   lastAlertCheck = Date.now()
@@ -359,6 +380,7 @@ async function loop(): Promise<void> {
       await scheduledWeeklyDigest()
       await scheduledDiscovery()
       await scheduledRetention()
+      await scheduledFeedSnapshots()
       await scheduledAlerts()
     } catch (error) {
       console.error('[worker] loop error:', error)

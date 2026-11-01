@@ -421,6 +421,38 @@ export async function findEnrichedRepos(
   return rows.map((row) => mapEnrichedRow(row, withSemantic))
 }
 
+/** 按 ID 取一小批仓库，供 feed 快照分页使用；顺序由调用方决定。 */
+export async function findEnrichedReposByIds(
+  pool: DbPool,
+  ids: number[],
+  options: Pick<EnrichedQueryOptions, 'profileEmbedding' | 'includeEmbedding'> = {},
+): Promise<EnrichedRepoRecord[]> {
+  if (ids.length === 0) return []
+  const profileEmbedding = vectorLiteral(options.profileEmbedding)
+  const withSemantic = profileEmbedding !== null
+  const withEmbedding = options.includeEmbedding ?? !withSemantic
+  const values: unknown[] = [ids]
+  let semanticExpression = 'NULL::double precision'
+  if (withSemantic) {
+    values.push(profileEmbedding)
+    semanticExpression = `CASE WHEN repos.embedding IS NULL THEN NULL ELSE 1 - (repos.embedding <=> $2::vector) END`
+  }
+  const { rows } = await pool.query<EnrichedRepoRow>(
+    `SELECT ${REPO_COLUMNS}, repos.summary, repos.problem, repos.audience, repos.verdict,
+       repos.reason, repos.quality_score,
+       (SELECT s.stars FROM star_snapshots s
+          WHERE s.repo_id = repos.id AND s.captured_on <= CURRENT_DATE - INTERVAL '7 days'
+          ORDER BY s.captured_on DESC LIMIT 1) AS stars_7d,
+       ${withEmbedding ? 'repos.embedding::text' : 'NULL::text'} AS embedding,
+       ${semanticExpression} AS semantic_score,
+       repos.verify_status, repos.verified_at
+     FROM repos
+     WHERE repos.id = ANY($1::bigint[]) AND repos.enriched_at IS NOT NULL`,
+    values,
+  )
+  return rows.map((row) => mapEnrichedRow(row, withSemantic))
+}
+
 export async function findRepoByFullName(pool: DbPool, fullName: string): Promise<EnrichedRepoRecord | null> {
   const { rows } = await pool.query<EnrichedRepoRow>(
     `SELECT ${REPO_COLUMNS}, summary, problem, audience, verdict, reason, quality_score,

@@ -44,6 +44,7 @@ describe.skipIf(!hasTestDatabase)('database integration', () => {
       '0004_prompt_versions',
       '0005_repo_translations',
       '0006_repos_enriched_quality',
+      '0007_feed_snapshots',
     ])
   })
 

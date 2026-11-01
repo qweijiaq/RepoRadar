@@ -22,6 +22,7 @@ import {
   listWatchIntents,
   listWatchMatches,
   loadConfig,
+  loadFeedSnapshotPage,
   loadFeedback,
   loadRecentReleaseRepoNames,
   loadReleaseEvents,
@@ -36,6 +37,7 @@ import {
   recordFeedImpressions,
   radarPersona,
   rankForUser,
+  refreshFeedSnapshot,
   risingRepos,
   warmRepoTranslations,
   type FeedOpportunity,
@@ -59,6 +61,9 @@ import { RefreshFeedButton } from './refresh-button'
 import { createRadarShareAction } from './share-action'
 
 export const dynamic = 'force-dynamic'
+
+// 同一用户短时间内只触发一次快照重建。
+const snapshotRefreshing = new Set<number>()
 
 interface FeedFilters {
   verified: boolean
@@ -239,8 +244,41 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
     }
     return true
   })
-  const ranked = rankForUser(profile, filteredRepos, Date.now(), context, subscriptions)
-  const diversified = diversifyRanking(ranked, { limit: isLibrary ? libraryLimit : 30 })
+  const pageLimit = isLibrary ? libraryLimit : 30
+  const plainFeed =
+    !filters.release && !filters.rising && !filters.language && !filters.verified && !query
+  const snapshotPage = plainFeed
+    ? await loadFeedSnapshotPage(pool, userId, pageLimit, {
+        profileEmbedding: profile?.embedding ?? null,
+      })
+    : null
+  let diversified: ReturnType<typeof rankForUser> = []
+  if (snapshotPage) {
+    // 快照已按分数和多样性排好序；这里只补算当前页的分数明细，保持快照顺序。
+    const scored = rankForUser(profile, snapshotPage, Date.now(), context, subscriptions)
+    const byName = new Map(scored.map((repo) => [repo.fullName, repo]))
+    diversified = snapshotPage
+      .map((repo) => byName.get(repo.fullName))
+      .filter((repo): repo is (typeof scored)[number] => Boolean(repo))
+  }
+  // 快照缺失、过期，或者页面上的项全被反馈过滤掉时，回退到实时排名。
+  if (diversified.length === 0) {
+    diversified = diversifyRanking(
+      rankForUser(profile, filteredRepos, Date.now(), context, subscriptions),
+      { limit: pageLimit },
+    )
+    // 先按实时排名渲染，响应结束后补一个快照给下次请求用。
+    if (plainFeed && profile && profile.starredCount > 0 && !snapshotRefreshing.has(userId)) {
+      snapshotRefreshing.add(userId)
+      after(async () => {
+        try {
+          await refreshFeedSnapshot(pool, userId)
+        } finally {
+          snapshotRefreshing.delete(userId)
+        }
+      })
+    }
+  }
   const groups = groupByProfileTopic(diversified, profile, {
     maxGroups: isLibrary ? 12 : 4,
     perGroup: isLibrary ? 30 : 8,
