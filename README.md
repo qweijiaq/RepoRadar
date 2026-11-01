@@ -71,7 +71,7 @@ pnpm radar pipeline --topics=llm --limit=20
 默认登录只申请 `read:user user:email`，用于读取公开资料和 star 画像。仓库管理、维护周报、Issue 修复方案和补丁生成需要额外的 `repo` + `delete_repo` 权限：
 
 - 打开 `/repos`，点击「授权仓库管理」重新走一次 GitHub OAuth；
-- 授权后 token 会更新，`/repos`、`/maintain`、`/issue-plan` 和补丁任务才能读取私有仓库并执行写操作；
+- 授权后 token 会更新，`/repos`、`/workbench/maintain`、`/issue-plan` 和补丁任务才能读取私有仓库并执行写操作；
 - GitHub 动态同步仍可使用基础登录权限；
 - 只需要公开数据的用户不需要授予仓库写权限。
 
@@ -114,15 +114,16 @@ pnpm dev:web        # http://localhost:3000
 | `/` | 落地页 |
 | `/setup` | 首次配置引导：创建 OAuth App、填写凭据 |
 | `/login` | GitHub 登录 / 本地演示登录 |
-| `/feed` | 精选雷达：机会卡 + 隐藏宝石；「工具库」标签保留全量列表 |
+| `/feed` | 精选雷达：机会卡 + 隐藏宝石；标签切换「工具库」「收藏」 |
 | `/settings` | 模型配置、口味画像、排除规则、订阅、重新同步 star、管理 OAuth |
-| `/integrations` | 基于你维护中的项目，推荐可接入或可替换的开源项目 |
-| `/library` | 建议库：按库汇总接入、关注、维护、选型对比和曝光优化，显示已处理 / 已忽略 / 未处理 |
-| `/maintain` | 维护工作台：健康度、依赖升级、Issue/PR 待办与修复方案 |
-| `/copilot` | AI 项目搭档：基于项目、周报、接入和关注目标对话 |
-| `/watch` | 用自然语言描述想找的项目，AI 在本地候选池和 GitHub 现场搜索中匹配 |
+| `/workbench` | 工作台入口，默认进入维护；顶部标签切换维护 / 接入 / 关注 / 周报 / 问雷达 |
+| `/workbench/maintain` | 维护工作台：健康度、依赖升级、Issue/PR 待办与修复方案 |
+| `/workbench/integrations` | 基于你维护中的项目，推荐可接入或可替换的开源项目 |
+| `/workbench/watch` | 用自然语言描述想找的项目，AI 在本地候选池和 GitHub 现场搜索中匹配 |
+| `/workbench/issue` | 技术周报：生成、预览和复制 Markdown |
+| `/workbench/copilot` | AI 项目搭档：基于项目、周报、接入和关注目标对话 |
+| `/library` | 建议库：按库汇总接入、关注、维护、选型对比和曝光优化，并包含历史报告标签 |
 | `/inbox` | 收件箱：发布、接入、任务和 GitHub 动态，支持单条已读 |
-| `/history` | 所有 AI 生成内容的历史记录与模型溯源 |
 | `/tasks` | 后台 AI 任务中心，可并行运行、查看进度和结果 |
 | `/compare` | 对一份接入报告里的候选做选型对比 |
 | `/issue-plan` | 单个 Issue 的修复方案与任务书 |
@@ -146,7 +147,7 @@ pnpm dev:web        # http://localhost:3000
 
 ### AI 搭档
 
-`/copilot` 是一个懂当前上下文的项目搭档：
+`/workbench/copilot` 是一个懂当前上下文的项目搭档：
 
 - 读取你的维护项目、最新维护周报、接入建议、关注代理和历史生成记录；
 - 可以问「这周先做什么」「我的项目最该补什么」「帮我从接入建议里挑一个」；
@@ -162,12 +163,12 @@ pnpm dev:web        # http://localhost:3000
 
 所有 AI 生成内容都会保留，重新生成不会覆盖旧版本：
 
-- `/history` 汇总接入建议、维护周报、技术周报、曝光优化、选型对比和 Issue 修复方案，显示生成时间、模型和原始内容入口；
+- `/library?tab=history` 汇总接入建议、维护周报、技术周报、曝光优化、选型对比和 Issue 修复方案，显示生成时间、模型和原始内容入口；
 - `/library` 把历史报告按库或条目聚合：接入推荐、关注命中、维护待办各自显示出现次数、涉及项目、已接入、不感兴趣和待处理；
 - 每类报告都可以通过 `?report=` / `?draft=` / `?plan=` 回看具体历史版本；
 - 接入报告会记录本次候选池，对比报告会记录本次候选，方便确认结论基于什么；
 - 收件箱里的新通知会直接链接到对应的报告版本；
-- `/history` 支持分页；导出 JSON 默认是索引元数据，`/api/history/export?full=1` 会包含完整报告正文、周报 HTML、补丁和周报记录。
+- 历史报告标签支持分页；导出 JSON 默认是索引元数据，`/api/history/export?full=1` 会包含完整报告正文、周报 HTML、补丁和周报记录。
 
 雷达、接入建议、维护待办、关注代理和隐藏宝石都支持「已接入 / 已完成 / 不感兴趣」状态；标记后不会再出现在后续推荐里，也不会被复制给代码 AI 的接入任务书。依赖完成状态绑定到具体的目标版本，新的大版本出现时会重新出现。
 
@@ -269,7 +270,7 @@ pnpm radar activity --user=你的登录名
 
 ### 接入建议
 
-打开 `/integrations`，标记正在维护的项目后生成报告。每份报告支持「复制全部给 AI」，单个项目也可以「复制给 AI」：
+打开 `/workbench/integrations`，标记正在维护的项目后生成报告。每份报告支持「复制全部给 AI」，单个项目也可以「复制给 AI」：
 
 - 复制出的 Markdown 任务书包含项目摘要、能力缺口、候选仓库、选择理由、参考步骤和给代码 AI 的执行约束；
 - 可以直接粘贴给 Claude Code、Cursor 等代码 AI，让它在目标项目里核实候选并执行接入；
@@ -279,7 +280,7 @@ pnpm radar activity --user=你的登录名
 
 ### 维护周报
 
-`/maintain` 把维护中项目的三件事合成一张周报：
+`/workbench/maintain` 把维护中项目的三件事合成一张周报：
 
 - **健康度**：测试、CI、Issue/PR 积压、维护活跃度，以及 3-5 条本周建议动作；
 - **依赖升级**：读取依赖清单和 lockfile（package-lock / pnpm / yarn / poetry / go / cargo），按实际安装版本查询 npm / PyPI 最新版本和 OSV 安全公告，标出风险，并尝试读取候选仓库的最新 release notes；
@@ -300,7 +301,7 @@ pnpm radar activity --user=你的登录名
 
 ### 订阅代理
 
-`/watch` 支持用一句话描述长期关注的项目，例如「MIT、TypeScript、能做 agent 长期记忆、最近三个月有 release」。AI 会在已收录的高质量候选池里判断匹配度、给出理由并写入通知，不需要拆成 topic / 语言规则。
+`/workbench/watch` 支持用一句话描述长期关注的项目，例如「MIT、TypeScript、能做 agent 长期记忆、最近三个月有 release」。AI 会在已收录的高质量候选池里判断匹配度，并在有 GitHub 授权时提取关键词现场搜索扩大候选，给出理由并写入通知，不需要拆成 topic / 语言规则。
 
 ### 选型对比
 

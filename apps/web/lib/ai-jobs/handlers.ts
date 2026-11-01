@@ -187,9 +187,9 @@ async function integrationJob(pool: DbPool, userId: number, job: JobRecord, prog
     body: `${report.projects.map((project) => project.repo).join('、')}${
       tokenInvalid ? '（GitHub 授权已失效，本轮未使用实时搜索，请重新登录）' : ''
     }`,
-    url: `/integrations?report=${reportId}`,
+    url: `/workbench/integrations?report=${reportId}`,
   })
-  return { href: `/integrations?report=${reportId}`, label: '查看接入建议' }
+  return { href: `/workbench/integrations?report=${reportId}`, label: '查看接入建议' }
 }
 
 function buildIntegrationCandidate(
@@ -286,9 +286,9 @@ async function maintainerJob(pool: DbPool, userId: number, job: JobRecord, progr
     kind: 'maintainer',
     title: '维护周报已生成',
     body: report.projects.map((project) => project.repo).join('、'),
-    url: `/maintain?report=${reportId}`,
+    url: `/workbench/maintain?report=${reportId}`,
   })
-  return { href: `/maintain?report=${reportId}`, label: '查看维护周报' }
+  return { href: `/workbench/maintain?report=${reportId}`, label: '查看维护周报' }
 }
 
 async function issueJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
@@ -305,9 +305,9 @@ async function issueJob(pool: DbPool, userId: number, job: JobRecord, progress: 
     kind: 'issue',
     title: '新一期周报已生成',
     body: generated.title,
-    url: `/issue?draft=${draftId}`,
+    url: `/workbench/issue?draft=${draftId}`,
   })
-  return { href: `/issue?draft=${draftId}`, label: '查看技术周报' }
+  return { href: `/workbench/issue?draft=${draftId}`, label: '查看技术周报' }
 }
 
 async function discoverabilityJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
@@ -702,10 +702,10 @@ async function watchJob(pool: DbPool, userId: number, job: JobRecord, progress: 
       kind: 'watch',
       title: '订阅代理发现新匹配',
       body: `${intent.text}：${activeMatches.slice(0, 3).map((match) => match.repo).join('、')}`,
-      url: '/watch',
+      url: '/workbench/watch',
     })
   }
-  return { href: '/watch', label: '查看关注匹配' }
+  return { href: '/workbench/watch', label: '查看关注匹配' }
 }
 
 async function enrichJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {

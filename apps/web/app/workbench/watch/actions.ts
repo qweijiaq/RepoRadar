@@ -29,16 +29,16 @@ export async function createWatchIntentAction(formData: FormData): Promise<void>
   if (!currentUser) redirect('/login')
 
   const text = String(formData.get('text') ?? '').trim()
-  if (text.length < 5 || text.length > 300) redirect('/watch?error=invalid')
+  if (text.length < 5 || text.length > 300) redirect('/workbench/watch?error=invalid')
 
   const pool = getPool()
   const userId = Number(currentUser.id)
   const existing = await listWatchIntents(pool, userId)
-  if (existing.length >= MAX_INTENTS) redirect('/watch?error=limit')
+  if (existing.length >= MAX_INTENTS) redirect('/workbench/watch?error=limit')
 
   await createWatchIntent(pool, userId, text)
-  revalidatePath('/watch')
-  redirect('/watch?created=1')
+  revalidatePath('/workbench/watch')
+  redirect('/workbench/watch?created=1')
 }
 
 export async function deleteWatchIntentAction(formData: FormData): Promise<void> {
@@ -49,9 +49,9 @@ export async function deleteWatchIntentAction(formData: FormData): Promise<void>
   const id = Number(formData.get('id'))
   if (Number.isFinite(id)) {
     await deleteWatchIntent(getPool(), Number(currentUser.id), id)
-    revalidatePath('/watch')
+    revalidatePath('/workbench/watch')
   }
-  redirect('/watch')
+  redirect('/workbench/watch')
 }
 
 export async function runWatchIntentAction(formData: FormData): Promise<void> {
@@ -66,7 +66,7 @@ export async function runWatchIntentAction(formData: FormData): Promise<void> {
 
   const id = Number(formData.get('id'))
   const intent = Number.isFinite(id) ? await findWatchIntent(pool, Number(currentUser.id), id) : null
-  if (!intent) redirect('/watch?error=not-found')
+  if (!intent) redirect('/workbench/watch?error=not-found')
 
   try {
     const repos = await findEnrichedRepos(pool, 80)
@@ -95,14 +95,14 @@ export async function runWatchIntentAction(formData: FormData): Promise<void> {
         kind: 'watch',
         title: '订阅代理发现新匹配',
         body: `${intent.text}：${activeMatches.slice(0, 3).map((match) => match.repo).join('、')}`,
-        url: '/watch',
+        url: '/workbench/watch',
       })
     }
-    revalidatePath('/watch')
-    redirect(`/watch?run=${activeMatches.length > 0 ? 'ok' : 'empty'}&count=${activeMatches.length}`)
+    revalidatePath('/workbench/watch')
+    redirect(`/workbench/watch?run=${activeMatches.length > 0 ? 'ok' : 'empty'}&count=${activeMatches.length}`)
   } catch (error) {
     console.error('[watch] 运行订阅代理失败：', error)
     const detail = error instanceof Error ? error.message : ''
-    redirect(`/watch?error=${/JSON|结构不符合/.test(detail) ? 'format' : 'run'}`)
+    redirect(`/workbench/watch?error=${/JSON|结构不符合/.test(detail) ? 'format' : 'run'}`)
   }
 }

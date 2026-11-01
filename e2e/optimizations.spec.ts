@@ -44,7 +44,9 @@ test('recommendation library aggregates history by repository', async ({ page })
   await page.goto('/library?tab=discoverability')
   await expect(page.getByRole('link', { name: /曝光优化/ }).first()).toBeVisible()
   await page.goto('/history?kind=integration')
-  await expect(page.getByRole('link', { name: '按库汇总' })).toBeVisible()
+  await expect(page).toHaveURL(/\/library\?tab=history/)
+  await expect(page.getByRole('heading', { name: '所有历史推荐，按库汇总' })).toBeVisible()
+  await expect(page.getByRole('link', { name: /历史报告/ }).first()).toBeVisible()
 })
 
 
@@ -56,4 +58,25 @@ test('task and inbox filters render', async ({ page }) => {
   await page.goto('/inbox?category=github&unread=1')
   await expect(page.getByRole('heading', { name: '收件箱' })).toBeVisible()
   await expect(page.getByRole('link', { name: /GitHub/ }).first()).toBeVisible()
+})
+
+
+test('navigation is consolidated and legacy routes redirect', async ({ page }) => {
+  await loginAsDemo(page)
+  const nav = page.locator('.site-nav')
+  await expect(nav.getByRole('link', { name: '雷达', exact: true })).toBeVisible()
+  await expect(nav.getByRole('link', { name: '工作台', exact: true })).toBeVisible()
+  await expect(nav.getByRole('link', { name: '建议库', exact: true })).toBeVisible()
+  await expect(nav.getByRole('link', { name: '仓库', exact: true })).toBeVisible()
+  await expect(nav.getByRole('link', { name: '设置', exact: true })).toBeVisible()
+  await expect(nav.getByRole('link', { name: '周报', exact: true })).toHaveCount(0)
+
+  await page.goto('/maintain')
+  await expect(page).toHaveURL(/\/workbench\/maintain/)
+  await expect(page.locator('.workbench-tabs')).toBeVisible()
+  await expect(page.locator('.workbench-tab.active')).toContainText('维护')
+
+  await page.goto('/collections')
+  await expect(page).toHaveURL(/\/feed\?tab=collections/)
+  await expect(page.getByRole('link', { name: '收藏' }).first()).toHaveClass(/active/)
 })

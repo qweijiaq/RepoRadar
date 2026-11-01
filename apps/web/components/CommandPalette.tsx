@@ -21,14 +21,15 @@ interface CommandItem {
 
 const ACTIONS: CommandItem[] = [
   { key: 'feed', label: '雷达', hint: '今日推荐', href: '/feed' },
-  { key: 'issue', label: '周报', hint: '生成或查看周报', href: '/issue' },
-  { key: 'collections', label: '收藏集', hint: '你的收藏', href: '/collections' },
-  { key: 'inbox', label: '收件箱', hint: '版本更新与动态', href: '/inbox' },
+  { key: 'workbench', label: '工作台', hint: '维护、接入、关注和周报', href: '/workbench' },
   { key: 'library', label: '建议库', hint: '历史推荐按库汇总', href: '/library' },
+  { key: 'repos', label: '仓库', hint: '管理 GitHub 仓库', href: '/repos' },
+  { key: 'collections', label: '收藏集', hint: '你的收藏', href: '/feed?tab=collections' },
+  { key: 'inbox', label: '收件箱', hint: '版本更新与动态', href: '/inbox' },
   { key: 'settings', label: '设置', hint: '模型与口味', href: '/settings' },
 ]
 
-export function CommandPalette() {
+export function CommandPalette({ compact = false }: { compact?: boolean }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -133,8 +134,23 @@ export function CommandPalette() {
 
   return (
     <>
-      <button type="button" className="search-trigger" onClick={() => setOpen(true)}>
-        搜索 <kbd>⌘K</kbd>
+      <button
+        type="button"
+        className={compact ? 'icon-button search-trigger compact' : 'search-trigger'}
+        onClick={() => setOpen(true)}
+        aria-label="搜索（⌘K）"
+        title="搜索（⌘K）"
+      >
+        {compact ? (
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="m16 16 4 4" />
+          </svg>
+        ) : (
+          <>
+            搜索 <kbd>⌘K</kbd>
+          </>
+        )}
       </button>
 
       {mounted && open

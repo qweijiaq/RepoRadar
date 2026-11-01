@@ -9,7 +9,7 @@ import {
   type LibraryStatus,
 } from '@repo-radar/core'
 import { enqueueComparisonAction } from '@/app/jobs/enqueue'
-import { CopyIntegrationButton } from '@/app/integrations/copy-button'
+import { CopyIntegrationButton } from '@/app/workbench/integrations/copy-button'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
@@ -32,7 +32,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
-  if (!project) redirect('/integrations')
+  if (!project) redirect('/workbench/integrations')
 
   const requestedReport = Number(params.report)
   const [latestReport, selectedReport] = await Promise.all([
@@ -46,7 +46,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
     return (
       <div className="page narrow">
         <p className="muted small">
-          <Link href="/integrations">← 返回接入建议</Link>
+          <Link href="/workbench/integrations">← 返回接入建议</Link>
         </p>
         <div className="empty">
           <p>还没有 {project} 的对比报告。</p>
@@ -102,7 +102,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
   return (
     <div className="page narrow">
       <p className="muted small">
-        <Link href="/integrations">← 返回接入建议</Link>
+        <Link href="/workbench/integrations">← 返回接入建议</Link>
       </p>
       {params.error === 'compare-candidates' ? (
         <div className="notice">至少选择 2 个候选才能生成对比。</div>
@@ -118,7 +118,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
           <p className="feed-meta">{latest.report.summary}</p>
         </div>
         <div className="feed-actions">
-          <Link className="btn small" href="/history?kind=comparison">
+          <Link className="btn small" href="/library?tab=history&kind=comparison">
             历史生成
           </Link>
           {remainingCandidates.length >= 2 ? (

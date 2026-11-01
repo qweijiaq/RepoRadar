@@ -53,34 +53,44 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {currentUser ? (
               <>
                 <NavLink href="/feed">雷达</NavLink>
-                <NavLink href="/issue">周报</NavLink>
-                <NavLink href="/maintain">维护</NavLink>
-                <NavLink href="/copilot">问雷达</NavLink>
-                <NavLink href="/watch">关注</NavLink>
-                <NavLink href="/collections">收藏</NavLink>
-                <NavLink href="/integrations">接入</NavLink>
+                <NavLink href="/workbench">工作台</NavLink>
                 <NavLink href="/library">建议库</NavLink>
                 <NavLink href="/repos">仓库</NavLink>
-                <NavLink href="/inbox">
-                  动态
-                  {unread > 0 ? <span className="nav-badge">{unread}</span> : null}
-                </NavLink>
-                <NavLink href="/history">历史</NavLink>
-                <JobsIndicator />
-                <ActivityHeartbeat />
                 <NavLink href="/settings">设置</NavLink>
-                <CommandPalette />
-                <span className="nav-user">{currentUser.login}</span>
-                <form action={signOutAction}>
-                  <button className="link-button" type="submit">
-                    退出
-                  </button>
-                </form>
+                <div className="nav-utilities">
+                  <CommandPalette compact />
+                  <Link
+                    className="icon-button inbox-button"
+                    href="/inbox"
+                    aria-label={`动态${unread > 0 ? `，${unread} 条未读` : ''}`}
+                    title="动态"
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <path d="M6 9a6 6 0 1 1 12 0v4.2l1.6 2.4a1 1 0 0 1-.8 1.6H5.2a1 1 0 0 1-.8-1.6L6 13.2Z" />
+                      <path d="M10 20h4" />
+                    </svg>
+                    {unread > 0 ? <span className="nav-badge">{unread}</span> : null}
+                  </Link>
+                  <Link className="icon-button" href="/workbench/copilot" aria-label="问雷达" title="问雷达">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6">
+                      <path d="M12 3.5 13.6 9l5.4 1.6-5.4 1.6L12 17.7l-1.6-5.5L5 10.6 10.4 9Z" />
+                      <path d="M18.5 16.5 19.2 19l2.3.8-2.3.8-.7 2.4-.7-2.4-2.3-.8 2.3-.8Z" />
+                    </svg>
+                  </Link>
+                  <JobsIndicator compact />
+                  <ActivityHeartbeat />
+                  <ThemeToggle compact />
+                  <span className="nav-user">{currentUser.login}</span>
+                  <form action={signOutAction}>
+                    <button className="link-button" type="submit">
+                      退出
+                    </button>
+                  </form>
+                </div>
               </>
             ) : (
               <NavLink href="/login">登录</NavLink>
             )}
-            <ThemeToggle />
           </nav>
         </header>
 

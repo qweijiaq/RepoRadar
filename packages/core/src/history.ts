@@ -151,7 +151,7 @@ export async function listHistory(
       createdAt: iso(row.created_at),
       model: payload.model ?? null,
       providerId: payload.providerId ?? null,
-      href: `/integrations?report=${row.id}`,
+      href: `/workbench/integrations?report=${row.id}`,
     })
   }
 
@@ -168,7 +168,7 @@ export async function listHistory(
       createdAt: iso(row.created_at),
       model: payload.model ?? null,
       providerId: payload.providerId ?? null,
-      href: `/maintain?report=${row.id}`,
+      href: `/workbench/maintain?report=${row.id}`,
     })
   }
 
@@ -181,7 +181,7 @@ export async function listHistory(
       createdAt: iso(row.created_at),
       model: row.model ?? null,
       providerId: row.provider_id ?? null,
-      href: `/issue?draft=${row.id}`,
+      href: `/workbench/issue?draft=${row.id}`,
     })
   }
 
@@ -250,7 +250,7 @@ export async function listHistory(
       createdAt: iso(row.created_at),
       model: row.model ?? null,
       providerId: row.provider_id ?? null,
-      href: '/watch',
+      href: '/workbench/watch',
     })
   }
 

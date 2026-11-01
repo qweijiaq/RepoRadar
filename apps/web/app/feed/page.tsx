@@ -47,6 +47,7 @@ import { enqueueDiscoveryAction } from '@/app/jobs/enqueue'
 import { RepoCard } from '@/components/RepoCard'
 import { isAdminUser } from '@/lib/admin'
 import { getPool } from '@/lib/db'
+import { CollectionsView } from '@/app/collections/collections-view'
 import { findLatestIssueDraft } from '@/lib/issue-drafts'
 import { resolveGithubToken, sessionUser } from '@/lib/session'
 import { findUserById } from '@/lib/users'
@@ -110,6 +111,25 @@ function rotateGems(gems: HiddenGem[], seed: number, count = 3): HiddenGem[] {
   return Array.from({ length: count }, (_, index) => gems[(offset + index) % gems.length]!).filter(Boolean)
 }
 
+function FeedTabs({ active }: { active: 'radar' | 'library' | 'collections' }) {
+  return (
+    <div className="feed-tabs">
+      <Link className={active === 'radar' ? 'feed-tab active' : 'feed-tab'} href="/feed">
+        精选
+      </Link>
+      <Link className={active === 'library' ? 'feed-tab active' : 'feed-tab'} href="/feed?tab=library">
+        工具库
+      </Link>
+      <Link
+        className={active === 'collections' ? 'feed-tab active' : 'feed-tab'}
+        href="/feed?tab=collections"
+      >
+        收藏
+      </Link>
+    </div>
+  )
+}
+
 const MODE_HEADLINE: Record<RadarMode, string> = {
   balanced: '今天值得看的几件事',
   focus: '先把项目往前推',
@@ -130,11 +150,28 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   const params = await searchParams
   const requestHeaders = await headers()
   const hardRefresh = /no-cache|max-age=0/i.test(requestHeaders.get('cache-control') ?? '')
-  const tab = params.tab === 'library' ? 'library' : 'radar'
+  const tab =
+    params.tab === 'library' ? 'library' : params.tab === 'collections' ? 'collections' : 'radar'
   const seed = Math.max(0, Number.parseInt(params.seed ?? '0', 10) || 0)
   const session = await auth()
   const sessionInfo = sessionUser(session)
   if (!sessionInfo) redirect('/login')
+  const userId = Number(sessionInfo.id)
+  if (tab === 'collections') {
+    return (
+      <div className="page">
+        <section className="feed-head">
+          <div>
+            <p className="eyebrow">收藏集</p>
+            <h1>你的收藏</h1>
+            <p className="feed-meta">把值得回看的项目收进集合，公开的集合可以分享给朋友。</p>
+          </div>
+        </section>
+        <FeedTabs active="collections" />
+        <CollectionsView userId={userId} />
+      </div>
+    )
+  }
 
   const filters: FeedFilters = {
     verified: params.verified === '1',
@@ -156,8 +193,6 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   ) => buildFilterHref(filters, overrides, { query, limit: extraLimit ?? libraryLimit })
   const isLibrary = tab === 'library'
   const returnTo = isLibrary ? '/feed?tab=library' : `/feed?seed=${seed}`
-
-  const userId = Number(sessionInfo.id)
   const pool = getPool()
   const githubToken = resolveGithubToken(session)?.token ?? null
   const [user, repos, feedback, signals, starred, subscriptions, latestDraft, projects, intents] =
@@ -404,7 +439,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
       label: '添加正在维护的项目',
       hint: '推荐会优先贴合这些项目的技术栈和缺口',
       done: projects.length > 0,
-      href: '/integrations#projects',
+      href: '/workbench/integrations#projects',
       cta: '添加项目',
     },
     {
@@ -412,7 +447,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
       label: '设置一个关注目标',
       hint: '让雷达持续追踪你关心的方向或仓库',
       done: intents.length > 0,
-      href: '/watch',
+      href: '/workbench/watch',
       cta: '设置目标',
     },
     {
@@ -420,7 +455,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
       label: '生成第一份 AI 周报',
       hint: '把本周变化整理成可以行动的情报',
       done: Boolean(latestDraft),
-      href: '/issue',
+      href: '/workbench/issue',
       cta: '生成周报',
     },
   ]
@@ -461,20 +496,13 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
               </div>
             </>
           ) : null}
-          <div className="feed-tabs">
-            <Link className={!isLibrary ? 'feed-tab active' : 'feed-tab'} href="/feed">
-              精选
-            </Link>
-            <Link className={isLibrary ? 'feed-tab active' : 'feed-tab'} href="/feed?tab=library">
-              工具库
-            </Link>
-          </div>
+          <FeedTabs active={isLibrary ? 'library' : 'radar'} />
         </div>
         <div className="feed-actions">
           {isLibrary ? (
             <>
               <RefreshFeedButton label="刷新列表" />
-              <Link className="btn solid small" href="/issue">
+              <Link className="btn solid small" href="/workbench/issue">
                 生成周报
               </Link>
               <Link className="btn small" href="/trends">
@@ -493,13 +521,13 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                   分享雷达
                 </button>
               </form>
-              <Link className="btn solid small" href="/copilot">
+              <Link className="btn solid small" href="/workbench/copilot">
                 问雷达
               </Link>
-              <Link className="btn small" href="/watch">
+              <Link className="btn small" href="/workbench/watch">
                 调整目标
               </Link>
-              <Link className="btn small" href="/maintain">
+              <Link className="btn small" href="/workbench/maintain">
                 维护周报
               </Link>
             </>
@@ -595,7 +623,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
           <section className="brief-panel">
             <div className="brief-head">
               <span className="eyebrow">今日简报</span>
-              <Link className="btn quiet small" href="/issue">
+              <Link className="btn quiet small" href="/workbench/issue">
                 {latestDraft ? '阅读完整周报' : '生成周报'}
               </Link>
             </div>
@@ -824,10 +852,10 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                     切回「综合」，或者先让 AI 看一眼你的项目。
                   </p>
                   <div className="radar-empty-actions">
-                    <Link className="btn small" href="/maintain">
+                    <Link className="btn small" href="/workbench/maintain">
                       生成维护周报
                     </Link>
-                    <Link className="btn small" href="/integrations">
+                    <Link className="btn small" href="/workbench/integrations">
                       生成接入建议
                     </Link>
                   </div>

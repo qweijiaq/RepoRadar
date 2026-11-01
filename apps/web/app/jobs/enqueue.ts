@@ -72,7 +72,7 @@ export async function enqueueIntegrationAction(formData: FormData): Promise<void
   await enqueueAndGo(pool, userId, 'integration', '生成接入建议', {
     focus: focus ?? undefined,
     token: encryptJobToken(token),
-    origin: '/integrations',
+    origin: '/workbench/integrations',
   })
 }
 
@@ -86,19 +86,19 @@ export async function enqueueMaintainerAction(): Promise<void> {
   if (!access.access) {
     redirect(
       access.reason === 'env-mismatch'
-        ? '/maintain?error=env-mismatch'
-        : repoScopeRedirect(access.reason, '/maintain?error=need-token'),
+        ? '/workbench/maintain?error=env-mismatch'
+        : repoScopeRedirect(access.reason, '/workbench/maintain?error=need-token'),
     )
   }
   await enqueueAndGo(pool, userId, 'maintainer', '生成维护周报', {
     token: encryptJobToken(access.access.token),
-    origin: '/maintain',
+    origin: '/workbench/maintain',
   })
 }
 
 export async function enqueueIssueAction(): Promise<void> {
   const { pool, userId } = await context()
-  await enqueueAndGo(pool, userId, 'issue', '生成技术周报', { origin: '/issue' })
+  await enqueueAndGo(pool, userId, 'issue', '生成技术周报', { origin: '/workbench/issue' })
 }
 
 export async function enqueueDiscoverabilityAction(formData: FormData): Promise<void> {
@@ -127,7 +127,7 @@ export async function enqueueComparisonAction(formData: FormData): Promise<void>
 
   const project = String(formData.get('project') ?? '').trim()
   const returnToRaw = String(formData.get('returnTo') ?? '')
-  const returnTo = returnToRaw.startsWith('/') ? returnToRaw : '/integrations'
+  const returnTo = returnToRaw.startsWith('/') ? returnToRaw : '/workbench/integrations'
   const candidates = [
     ...new Set(
       formData
@@ -163,16 +163,16 @@ export async function enqueueIssuePlanAction(formData: FormData): Promise<void> 
   const repo = String(formData.get('repo') ?? '').trim()
   const issueNumber = Number(formData.get('number'))
   if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo) || !Number.isFinite(issueNumber)) {
-    redirect('/maintain?error=issue-invalid')
+    redirect('/workbench/maintain?error=issue-invalid')
   }
   const access = await resolveRepoAccess(session, currentUser.login)
-  if (!access.access) redirect(repoScopeRedirect(access.reason, '/maintain?error=need-token'))
+  if (!access.access) redirect(repoScopeRedirect(access.reason, '/workbench/maintain?error=need-token'))
 
   await enqueueAndGo(pool, userId, 'issue-plan', `修复方案 · ${repo} #${issueNumber}`, {
     repo,
     issueNumber,
     token: encryptJobToken(access.access.token),
-    origin: '/maintain',
+    origin: '/workbench/maintain',
   })
 }
 
@@ -186,12 +186,12 @@ export async function enqueueUpgradeAction(formData: FormData): Promise<void> {
   const packageName = String(formData.get('package') ?? '').trim()
   const targetVersion = String(formData.get('version') ?? '').trim()
   const currentVersion = String(formData.get('current') ?? '').trim() || null
-  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo)) redirect('/maintain?error=upgrade-invalid')
-  if (!/^(@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/.test(packageName)) redirect('/maintain?error=upgrade-invalid')
-  if (!/^[A-Za-z0-9._+~-]{1,40}$/.test(targetVersion)) redirect('/maintain?error=upgrade-invalid')
+  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo)) redirect('/workbench/maintain?error=upgrade-invalid')
+  if (!/^(@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/.test(packageName)) redirect('/workbench/maintain?error=upgrade-invalid')
+  if (!/^[A-Za-z0-9._+~-]{1,40}$/.test(targetVersion)) redirect('/workbench/maintain?error=upgrade-invalid')
 
   const access = await resolveRepoAccess(session, currentUser.login)
-  if (!access.access) redirect(repoScopeRedirect(access.reason, '/maintain?error=need-token'))
+  if (!access.access) redirect(repoScopeRedirect(access.reason, '/workbench/maintain?error=need-token'))
 
   await enqueueAndGo(pool, userId, 'upgrade', `升级 ${packageName} · ${repo}`, {
     repo,
@@ -199,7 +199,7 @@ export async function enqueueUpgradeAction(formData: FormData): Promise<void> {
     targetVersion,
     ...(currentVersion ? { currentVersion } : {}),
     token: encryptJobToken(access.access.token),
-    origin: '/maintain',
+    origin: '/workbench/maintain',
   })
 }
 
@@ -212,10 +212,10 @@ export async function enqueuePatchAction(formData: FormData): Promise<void> {
   const repo = String(formData.get('repo') ?? '').trim()
   const issueNumber = Number(formData.get('number'))
   if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo) || !Number.isFinite(issueNumber) || issueNumber <= 0) {
-    redirect('/maintain?error=issue-invalid')
+    redirect('/workbench/maintain?error=issue-invalid')
   }
   const access = await resolveRepoAccess(session, currentUser.login)
-  if (!access.access) redirect(repoScopeRedirect(access.reason, '/maintain?error=need-token'))
+  if (!access.access) redirect(repoScopeRedirect(access.reason, '/workbench/maintain?error=need-token'))
 
   await enqueueAndGo(pool, userId, 'patch', `修复补丁 · ${repo} #${issueNumber}`, {
     repo,
@@ -232,13 +232,13 @@ export async function enqueueWatchRunAction(formData: FormData): Promise<void> {
   const { pool, userId } = await context()
 
   const intentId = Number(formData.get('id'))
-  if (!Number.isFinite(intentId)) redirect('/watch?error=not-found')
+  if (!Number.isFinite(intentId)) redirect('/workbench/watch?error=not-found')
   const intent = await findWatchIntent(pool, userId, intentId)
-  if (!intent) redirect('/watch?error=not-found')
+  if (!intent) redirect('/workbench/watch?error=not-found')
 
   await enqueueAndGo(pool, userId, 'watch', `关注代理 · ${intent.text.slice(0, 60)}`, {
     intentId,
-    origin: '/watch',
+    origin: '/workbench/watch',
   })
 }
 

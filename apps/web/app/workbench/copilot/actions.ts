@@ -13,8 +13,8 @@ export async function newCopilotThreadAction(): Promise<void> {
   if (!currentUser) redirect('/login')
 
   const thread = await createCopilotThread(getPool(), Number(currentUser.id))
-  revalidatePath('/copilot')
-  redirect(`/copilot?thread=${thread.id}`)
+  revalidatePath('/workbench/copilot')
+  redirect(`/workbench/copilot?thread=${thread.id}`)
 }
 
 export async function clearCopilotAction(formData: FormData): Promise<void> {
@@ -27,6 +27,6 @@ export async function clearCopilotAction(formData: FormData): Promise<void> {
     const thread = await getCopilotThread(getPool(), Number(currentUser.id), threadId)
     if (thread) await deleteCopilotThread(getPool(), Number(currentUser.id), threadId)
   }
-  revalidatePath('/copilot')
-  redirect('/copilot')
+  revalidatePath('/workbench/copilot')
+  redirect('/workbench/copilot')
 }

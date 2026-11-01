@@ -78,7 +78,7 @@ const SYSTEM_PROMPT = `你是 RepoRadar 的 AI 项目搭档。你了解用户正
 - 回答用中文，先给结论，再给 2-4 个具体下一步。
 - 区分「已经完成」和「建议去做」；不要声称你已经修改代码、提交 PR 或关闭 Issue。
 - 如果用户问“接什么/先做什么/哪里有问题”，优先引用上下文里的具体项目、依赖、Issue 和候选仓库。
-- 需要执行时，指向对应页面：/integrations、/maintain、/watch、/compare、/repos。
+- 需要执行时，指向对应页面：/workbench/integrations、/workbench/maintain、/workbench/watch、/compare、/repos。
 - 控制篇幅，不要复述整份报告。`
 
 export async function getOrCreateCopilotThread(pool: DbPool, userId: number): Promise<CopilotThread> {

@@ -425,7 +425,7 @@ export function aggregateMaintainerLibrary(
           label,
           detail: `${item.title}：${item.reason}`,
           status,
-          href: `/maintain?report=${record.id}`,
+          href: `/workbench/maintain?report=${record.id}`,
         })
         items.set(key, entry)
       }
@@ -470,7 +470,7 @@ export function aggregateMaintainerLibrary(
           label,
           detail: dependency.reason,
           status,
-          href: `/maintain?report=${record.id}`,
+          href: `/workbench/maintain?report=${record.id}`,
         })
         items.set(key, entry)
       }

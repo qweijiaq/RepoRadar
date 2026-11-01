@@ -71,9 +71,9 @@ export async function markFeedItemDoneAction(formData: FormData): Promise<void> 
   }
 
   revalidatePath('/feed')
-  revalidatePath('/maintain')
-  revalidatePath('/integrations')
-  revalidatePath('/watch')
+  revalidatePath('/workbench/maintain')
+  revalidatePath('/workbench/integrations')
+  revalidatePath('/workbench/watch')
   redirect(returnTo)
 }
 

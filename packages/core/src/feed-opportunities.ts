@@ -57,7 +57,7 @@ export function buildFeedOpportunities(input: OpportunityInput): FeedOpportunity
         kind: 'maintainer',
         title: `${project.repo} · ${item.kind === 'pull' ? 'PR' : 'Issue'} #${item.number}`,
         detail: `${item.title}：${item.reason}`,
-        href: '/maintain',
+        href: '/workbench/maintain',
         repo: project.repo,
         evidence: [
           `维护周报标记为${PRIORITY_LABEL[item.priority] ?? item.priority}`,
@@ -74,7 +74,7 @@ export function buildFeedOpportunities(input: OpportunityInput): FeedOpportunity
         kind: 'dependency',
         title: `${project.repo} 的 ${dependency.name} 需要升级`,
         detail: dependency.reason,
-        href: '/maintain',
+        href: '/workbench/maintain',
         repo: project.repo,
         evidence: [
           `${dependency.current ?? '未知'} → ${dependency.latest ?? '未知'}`,
@@ -96,7 +96,7 @@ export function buildFeedOpportunities(input: OpportunityInput): FeedOpportunity
             ? `给 ${project.repo} 补 ${suggestion.repo}`
             : `${project.repo} 可以考虑替换为 ${suggestion.repo}`,
         detail: suggestion.reason,
-        href: '/integrations',
+        href: '/workbench/integrations',
         repo: suggestion.repo,
         evidence: [suggestion.kind === 'missing' ? '缺失能力' : '可优化', suggestion.repo],
         priority: suggestion.kind === 'missing' ? 86 : 62,
@@ -111,7 +111,7 @@ export function buildFeedOpportunities(input: OpportunityInput): FeedOpportunity
         kind: 'watch',
         title: `关注代理命中 ${match.repo}`,
         detail: match.reason,
-        href: '/watch',
+        href: '/workbench/watch',
         repo: match.repo,
         evidence: [`「${entry.intent.text}」`, `匹配度 ${match.score}`],
         priority: match.score >= 90 ? 96 : match.score >= 80 ? 76 : 55,

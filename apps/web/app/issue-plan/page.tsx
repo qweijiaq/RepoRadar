@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { buildIssuePlanBrief, findIssuePlanById, findLatestIssuePlan, listPatchDrafts, loadHandledState } from '@repo-radar/core'
 import { enqueuePatchAction } from '@/app/jobs/enqueue'
-import { CopyIntegrationButton } from '@/app/integrations/copy-button'
+import { CopyIntegrationButton } from '@/app/workbench/integrations/copy-button'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
@@ -20,7 +20,7 @@ export default async function IssuePlanPage({ searchParams }: IssuePlanPageProps
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
-  if (!repo || !Number.isFinite(number)) redirect('/maintain')
+  if (!repo || !Number.isFinite(number)) redirect('/workbench/maintain')
 
   const requestedPlan = Number(params.plan)
   const [latestReport, selectedReport, patches, handled] = await Promise.all([
@@ -39,7 +39,7 @@ export default async function IssuePlanPage({ searchParams }: IssuePlanPageProps
     return (
       <div className="page narrow">
         <p className="muted small">
-          <Link href="/maintain">← 返回维护周报</Link>
+          <Link href="/workbench/maintain">← 返回维护周报</Link>
         </p>
         <div className="empty">
           <p>还没有这个 Issue 的修复方案。</p>
@@ -53,7 +53,7 @@ export default async function IssuePlanPage({ searchParams }: IssuePlanPageProps
   return (
     <div className="page narrow">
       <p className="muted small">
-        <Link href="/maintain">← 返回维护周报</Link>
+        <Link href="/workbench/maintain">← 返回维护周报</Link>
       </p>
       <section className="feed-head">
         <div>
@@ -64,7 +64,7 @@ export default async function IssuePlanPage({ searchParams }: IssuePlanPageProps
           <p className="feed-meta">{latest.issueTitle}</p>
         </div>
         <div className="feed-actions">
-          <Link className="btn small" href="/history?kind=issue-plan">
+          <Link className="btn small" href="/library?tab=history&kind=issue-plan">
             历史生成
           </Link>
           <CopyIntegrationButton text={brief} label="复制修复任务书" className="btn small" />

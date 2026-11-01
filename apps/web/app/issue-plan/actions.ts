@@ -24,11 +24,11 @@ export async function generateIssuePlanAction(formData: FormData): Promise<void>
   const repo = String(formData.get('repo') ?? '').trim()
   const issueNumber = Number(formData.get('number'))
   if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo) || !Number.isFinite(issueNumber) || issueNumber <= 0) {
-    redirect('/maintain?error=issue-invalid')
+    redirect('/workbench/maintain?error=issue-invalid')
   }
 
   const access = await resolveRepoAccess(session, currentUser.login)
-  if (!access.access) redirect('/maintain?error=need-token')
+  if (!access.access) redirect('/workbench/maintain?error=need-token')
 
   const pool = getPool()
   await guardAiQuota(pool, Number(currentUser.id))
@@ -37,7 +37,7 @@ export async function generateIssuePlanAction(formData: FormData): Promise<void>
 
   const token = access.access.token
   const issue = await fetchIssueContext(token, repo, issueNumber)
-  if (!issue) redirect('/maintain?error=issue-not-found')
+  if (!issue) redirect('/workbench/maintain?error=issue-not-found')
 
   let planId = 0
   try {
@@ -61,9 +61,9 @@ export async function generateIssuePlanAction(formData: FormData): Promise<void>
   } catch (error) {
     console.error('[issue-plan] 生成失败：', error)
     const detail = error instanceof Error ? error.message : ''
-    redirect(`/maintain?error=${/JSON|结构不符合/.test(detail) ? 'issue-format' : 'issue-generate'}`)
+    redirect(`/workbench/maintain?error=${/JSON|结构不符合/.test(detail) ? 'issue-format' : 'issue-generate'}`)
   }
 
-  revalidatePath('/maintain')
+  revalidatePath('/workbench/maintain')
   redirect(`/issue-plan?repo=${encodeURIComponent(repo)}&number=${issueNumber}&plan=${planId}`)
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 
 type Theme = 'light' | 'dark'
 
-export function ThemeToggle() {
+export function ThemeToggle({ compact = false }: { compact?: boolean }) {
   const [theme, setTheme] = useState<Theme>('light')
 
   useEffect(() => {
@@ -25,7 +25,13 @@ export function ThemeToggle() {
   const nextLabel = theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'
 
   return (
-    <button type="button" className="theme-toggle" onClick={toggle} aria-label={nextLabel} title={nextLabel}>
+    <button
+      type="button"
+      className={compact ? 'theme-toggle compact' : 'theme-toggle'}
+      onClick={toggle}
+      aria-label={nextLabel}
+      title={nextLabel}
+    >
       {theme === 'dark' ? (
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6">
           <circle cx="12" cy="12" r="4" />
@@ -36,7 +42,7 @@ export function ThemeToggle() {
           <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" />
         </svg>
       )}
-      <span>{theme === 'dark' ? '浅色' : '深色'}</span>
+      {compact ? null : <span>{theme === 'dark' ? '浅色' : '深色'}</span>}
     </button>
   )
 }

@@ -87,7 +87,7 @@ export function CopilotChat({
     }
 
     try {
-      const response = await fetch('/api/copilot', {
+      const response = await fetch('/api/workbench/copilot', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ message, threadId, ...(options.regenerate ? { regenerate: true } : {}) }),

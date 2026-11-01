@@ -8,7 +8,7 @@ import {
   listDiscoverabilityHistory,
   listOwnedRepos,
 } from '@repo-radar/core'
-import { CopyIntegrationButton } from '@/app/integrations/copy-button'
+import { CopyIntegrationButton } from '@/app/workbench/integrations/copy-button'
 import { enqueueDiscoverabilityAction } from '@/app/jobs/enqueue'
 import { applyDiscoverabilityAction } from '@/app/repos/actions'
 import { auth } from '@/auth'
@@ -56,7 +56,7 @@ export default async function OptimizePage({ params, searchParams }: OptimizePag
   return (
     <div className="page narrow">
       <p className="muted small">
-        <Link href="/repos">← 返回仓库管理</Link> · <Link href="/history?kind=discoverability">历史生成</Link>
+        <Link href="/repos">← 返回仓库管理</Link> · <Link href="/library?tab=history&kind=discoverability">历史生成</Link>
       </p>
       <section className="feed-head">
         <div>
@@ -68,7 +68,7 @@ export default async function OptimizePage({ params, searchParams }: OptimizePag
         </div>
         {access.access ? (
           <div className="feed-actions">
-            <Link className="btn small" href="/history?kind=discoverability">
+            <Link className="btn small" href="/library?tab=history&kind=discoverability">
               历史生成
             </Link>
             <form action={enqueueDiscoverabilityAction}>

@@ -383,15 +383,15 @@ export async function generateIssueAction(): Promise<void> {
       kind: 'issue',
       title: '新一期周报已生成',
       body: generated.title,
-      url: `/issue?draft=${draftId}`,
+      url: `/workbench/issue?draft=${draftId}`,
     })
   } catch (error) {
     console.error('[issue] 生成周报失败：', error)
-    redirect('/issue?error=1')
+    redirect('/workbench/issue?error=1')
   }
 
-  revalidatePath('/issue')
-  redirect(`/issue?draft=${draftId}`)
+  revalidatePath('/workbench/issue')
+  redirect(`/workbench/issue?draft=${draftId}`)
 }
 
 export async function markInboxReadAction(): Promise<void> {
@@ -411,7 +411,7 @@ export async function createCollectionAction(formData: FormData): Promise<void> 
   if (!currentUser) redirect('/login')
 
   const name = String(formData.get('name') ?? '').trim()
-  if (!name) redirect('/collections?error=name')
+  if (!name) redirect('/feed?tab=collections&error=name')
   const description = String(formData.get('description') ?? '').trim()
   const id = await createCollection(
     getPool(),
@@ -419,7 +419,7 @@ export async function createCollectionAction(formData: FormData): Promise<void> 
     name.slice(0, 80),
     description ? description.slice(0, 300) : null,
   )
-  revalidatePath('/collections')
+  revalidatePath('/feed?tab=collections')
   redirect(`/collections/${id}`)
 }
 
@@ -441,7 +441,7 @@ export async function addToCollectionAction(formData: FormData): Promise<void> {
   const collectionId = Number(formData.get('collectionId'))
   const repoFullName = String(formData.get('repo') ?? '').trim()
   const note = String(formData.get('note') ?? '').trim()
-  const returnTo = safeReturnTo(formData.get('returnTo'), '/collections')
+  const returnTo = safeReturnTo(formData.get('returnTo'), '/feed?tab=collections')
 
   if (repoFullName && (await ownedCollection(collectionId, Number(currentUser.id)))) {
     await addCollectionItem(getPool(), collectionId, repoFullName, note || null)
@@ -488,9 +488,9 @@ export async function deleteCollectionAction(formData: FormData): Promise<void> 
   const collectionId = Number(formData.get('collectionId'))
   if (await ownedCollection(collectionId, Number(currentUser.id))) {
     await deleteCollection(getPool(), collectionId)
-    revalidatePath('/collections')
+    revalidatePath('/feed?tab=collections')
   }
-  redirect('/collections')
+  redirect('/feed?tab=collections')
 }
 
 export async function toggleProjectActiveAction(formData: FormData): Promise<void> {
@@ -502,9 +502,9 @@ export async function toggleProjectActiveAction(formData: FormData): Promise<voi
   const active = String(formData.get('active') ?? '') === '1'
   if (repoFullName) {
     await setUserProjectActive(getPool(), Number(currentUser.id), repoFullName, active)
-    revalidatePath('/integrations')
+    revalidatePath('/workbench/integrations')
   }
-  redirect('/integrations')
+  redirect('/workbench/integrations')
 }
 
 export async function addUserProjectAction(formData: FormData): Promise<void> {
@@ -513,27 +513,27 @@ export async function addUserProjectAction(formData: FormData): Promise<void> {
   if (!currentUser) redirect('/login')
 
   const fullName = String(formData.get('repo') ?? '').trim()
-  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(fullName)) redirect('/integrations?error=invalid')
+  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(fullName)) redirect('/workbench/integrations?error=invalid')
 
   const pool = getPool()
   let repo = await findRepoByFullName(pool, fullName)
   if (!repo) {
     const token = sessionAccessToken(session)
-    if (!token) redirect('/integrations?error=need-token')
+    if (!token) redirect('/workbench/integrations?error=need-token')
     const fetched = await fetchGitHubRepo(fullName, token)
-    if (!fetched) redirect('/integrations?error=not-found')
+    if (!fetched) redirect('/workbench/integrations?error=not-found')
     await upsertRepo(pool, fetched)
     repo = await findRepoByFullName(pool, fullName)
   }
-  if (!repo) redirect('/integrations?error=not-found')
+  if (!repo) redirect('/workbench/integrations?error=not-found')
 
   await upsertUserProject(pool, Number(currentUser.id), repo.fullName, {
     source: 'manual',
     active: true,
     lastPushedAt: repo.pushedAt,
   })
-  revalidatePath('/integrations')
-  redirect('/integrations')
+  revalidatePath('/workbench/integrations')
+  redirect('/workbench/integrations')
 }
 
 export async function removeUserProjectAction(formData: FormData): Promise<void> {
@@ -544,9 +544,9 @@ export async function removeUserProjectAction(formData: FormData): Promise<void>
   const repoFullName = String(formData.get('repo') ?? '').trim()
   if (repoFullName) {
     await removeUserProject(getPool(), Number(currentUser.id), repoFullName)
-    revalidatePath('/integrations')
+    revalidatePath('/workbench/integrations')
   }
-  redirect('/integrations')
+  redirect('/workbench/integrations')
 }
 
 function sleep(ms: number): Promise<void> {
@@ -572,7 +572,7 @@ export async function generateIntegrationAction(formData: FormData): Promise<voi
     selected = projects.filter((project) => project.source === 'owned').slice(0, 3)
     auto = selected.length > 0
   }
-  if (selected.length === 0) redirect('/integrations?error=no-projects')
+  if (selected.length === 0) redirect('/workbench/integrations?error=no-projects')
   selected = selected.slice(0, 3)
 
   let reportId = 0
@@ -660,17 +660,17 @@ export async function generateIntegrationAction(formData: FormData): Promise<voi
       kind: 'integration',
       title: '接入建议已生成',
       body: report.projects.map((project) => project.repo).join('、'),
-      url: `/integrations?report=${reportId}`,
+      url: `/workbench/integrations?report=${reportId}`,
     })
   } catch (error) {
     console.error('[integrations] 生成接入建议失败：', error)
     const detail = error instanceof Error ? error.message : ''
     const code = /JSON|结构不符合/.test(detail) ? 'format' : 'generate'
-    redirect(`/integrations?error=${code}`)
+    redirect(`/workbench/integrations?error=${code}`)
   }
 
-  revalidatePath('/integrations')
-  redirect(`/integrations?report=${reportId}`)
+  revalidatePath('/workbench/integrations')
+  redirect(`/workbench/integrations?report=${reportId}`)
 }
 
 export async function setIntegrationOutcomeAction(formData: FormData): Promise<void> {
@@ -681,13 +681,13 @@ export async function setIntegrationOutcomeAction(formData: FormData): Promise<v
   const project = String(formData.get('project') ?? '').trim()
   const repo = String(formData.get('repo') ?? '').trim()
   const status = String(formData.get('status') ?? '') === 'rejected' ? 'rejected' : 'adopted'
-  if (!project || !repo) redirect('/integrations')
+  if (!project || !repo) redirect('/workbench/integrations')
 
   await setIntegrationOutcome(getPool(), Number(currentUser.id), project, repo, status)
-  revalidatePath('/integrations')
+  revalidatePath('/workbench/integrations')
   revalidatePath('/library')
   const requested = String(formData.get('returnTo') ?? '')
-  redirect(requested.startsWith('/integrations') ? requested : '/integrations')
+  redirect(requested.startsWith('/workbench/integrations') ? requested : '/workbench/integrations')
 }
 
 export async function clearIntegrationOutcomeAction(formData: FormData): Promise<void> {
@@ -697,13 +697,13 @@ export async function clearIntegrationOutcomeAction(formData: FormData): Promise
 
   const project = String(formData.get('project') ?? '').trim()
   const repo = String(formData.get('repo') ?? '').trim()
-  if (!project || !repo) redirect('/integrations')
+  if (!project || !repo) redirect('/workbench/integrations')
 
   await clearIntegrationOutcome(getPool(), Number(currentUser.id), project, repo)
-  revalidatePath('/integrations')
+  revalidatePath('/workbench/integrations')
   revalidatePath('/library')
   const requested = String(formData.get('returnTo') ?? '')
-  redirect(requested.startsWith('/integrations') ? requested : '/integrations')
+  redirect(requested.startsWith('/workbench/integrations') ? requested : '/workbench/integrations')
 }
 
 export async function markNotificationReadAction(formData: FormData): Promise<void> {

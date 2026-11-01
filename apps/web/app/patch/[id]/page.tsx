@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { buildPatchBrief, buildPullRequestBrief, findPatchDraft } from '@repo-radar/core'
-import { CopyIntegrationButton } from '@/app/integrations/copy-button'
+import { CopyIntegrationButton } from '@/app/workbench/integrations/copy-button'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
@@ -39,7 +39,7 @@ export default async function PatchPage({ params }: PatchPageProps) {
   const pullRequestBrief = buildPullRequestBrief(patch)
   const issueHref = patch.issueNumber
     ? `/issue-plan?repo=${encodeURIComponent(patch.repo)}&number=${patch.issueNumber}`
-    : '/maintain'
+    : '/workbench/maintain'
 
   return (
     <div className="page narrow">

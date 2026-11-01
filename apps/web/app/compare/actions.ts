@@ -25,7 +25,7 @@ export async function generateComparisonAction(formData: FormData): Promise<void
   if (!currentUser) redirect('/login')
 
   const project = String(formData.get('project') ?? '').trim()
-  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(project)) redirect('/integrations?error=compare')
+  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(project)) redirect('/workbench/integrations?error=compare')
 
   const pool = getPool()
   await guardAiQuota(pool, Number(currentUser.id))
@@ -33,7 +33,7 @@ export async function generateComparisonAction(formData: FormData): Promise<void
   if (!llm) redirect('/settings?llm=missing')
 
   const access = await resolveRepoAccess(session, currentUser.login)
-  if (!access.access) redirect('/integrations?error=compare-token')
+  if (!access.access) redirect('/workbench/integrations?error=compare-token')
 
   const latest = await findLatestIntegrationReport(pool, Number(currentUser.id))
   const projectReport = latest?.report.projects.find(
@@ -42,7 +42,7 @@ export async function generateComparisonAction(formData: FormData): Promise<void
   const suggestionRepos = [
     ...new Set(projectReport?.suggestions.map((suggestion) => suggestion.repo) ?? []),
   ]
-  if (suggestionRepos.length < 2) redirect('/integrations?error=compare-candidates')
+  if (suggestionRepos.length < 2) redirect('/workbench/integrations?error=compare-candidates')
 
   let reportId = 0
   try {
@@ -93,10 +93,10 @@ export async function generateComparisonAction(formData: FormData): Promise<void
   } catch (error) {
     console.error('[comparison] 生成对比失败：', error)
     const detail = error instanceof Error ? error.message : ''
-    redirect(`/integrations?error=${/JSON|结构不符合/.test(detail) ? 'compare-format' : 'compare'}`)
+    redirect(`/workbench/integrations?error=${/JSON|结构不符合/.test(detail) ? 'compare-format' : 'compare'}`)
   }
 
-  revalidatePath('/integrations')
+  revalidatePath('/workbench/integrations')
   revalidatePath('/compare')
   redirect(`/compare?project=${encodeURIComponent(project)}&report=${reportId}`)
 }

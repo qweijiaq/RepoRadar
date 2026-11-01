@@ -9,7 +9,7 @@ interface JobSummary {
   title: string
 }
 
-export function JobsIndicator() {
+export function JobsIndicator({ compact = false }: { compact?: boolean }) {
   const [jobs, setJobs] = useState<JobSummary[]>([])
 
   useEffect(() => {
@@ -37,8 +37,20 @@ export function JobsIndicator() {
   const active = jobs.filter((job) => job.status === 'queued' || job.status === 'running').length
 
   return (
-    <Link className="nav-link job-indicator" href="/tasks" aria-label={`后台任务${active > 0 ? `，${active} 个运行中` : ''}`}>
-      任务
+    <Link
+      className={compact ? 'icon-button job-indicator compact' : 'nav-link job-indicator'}
+      href="/tasks"
+      aria-label={`后台任务${active > 0 ? `，${active} 个运行中` : ''}`}
+      title="后台任务"
+    >
+      {compact ? (
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7">
+          <path d="M9 6h11M9 12h11M9 18h11" />
+          <path d="m4 6 1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" />
+        </svg>
+      ) : (
+        '任务'
+      )}
       {active > 0 ? <span className="nav-badge">{active}</span> : null}
     </Link>
   )

@@ -233,7 +233,7 @@ export default async function RepoPage({ params }: RepoPageProps) {
               </form>
             ) : (
               <p className="muted small">
-                还没有收藏集。<Link href="/collections">创建一个</Link>。
+                还没有收藏集。<Link href="/feed?tab=collections">创建一个</Link>。
               </p>
             )}
           </section>

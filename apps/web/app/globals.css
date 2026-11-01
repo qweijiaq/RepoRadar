@@ -243,9 +243,11 @@ h3 {
 }
 
 .nav-link {
+  flex: none;
   padding: 3px 0;
   border-bottom: 1px solid transparent;
   color: var(--text-45);
+  white-space: nowrap;
 }
 
 .nav-link:hover {
@@ -4347,4 +4349,128 @@ details[open] > .advanced-summary::before {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+/* ── Workbench ──────────────────────────────────────────────────────── */
+
+.workbench-tabbar {
+  padding: 12px var(--column) 0;
+}
+
+.workbench-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-bg);
+  scrollbar-width: none;
+}
+
+.workbench-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.workbench-label {
+  flex: none;
+  padding: 0 10px 0 6px;
+  color: var(--text-45);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+}
+
+.workbench-tab {
+  flex: none;
+  padding: 5px 12px;
+  border-radius: 999px;
+  color: var(--text-70);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.workbench-tab:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.workbench-tab.active {
+  background: var(--accent);
+  color: var(--solid-text);
+}
+
+@media (max-width: 760px) {
+  .workbench-tabbar {
+    padding: 10px 18px 0;
+  }
+}
+
+/* ── Compact header utilities ────────────────────────────────────────── */
+
+.nav-utilities {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
+.icon-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-45);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  border-color: var(--line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.icon-button .nav-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0 3px;
+  font-size: 8.5px;
+}
+
+.search-trigger.compact,
+.theme-toggle.compact,
+.job-indicator.compact {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 8px;
+}
+
+.search-trigger.compact:hover,
+.theme-toggle.compact:hover,
+.job-indicator.compact:hover {
+  border-color: var(--line);
+  background: var(--accent-soft);
+}
+
+.nav-utilities .nav-user {
+  margin-left: 4px;
+}
+
+.nav-utilities form {
+  display: flex;
 }

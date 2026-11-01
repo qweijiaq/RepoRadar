@@ -34,7 +34,7 @@ export async function generateMaintainerAction(): Promise<void> {
 
   const access = await resolveRepoAccess(session, currentUser.login)
   if (!access.access) {
-    redirect(access.reason === 'env-mismatch' ? '/maintain?error=env-mismatch' : '/maintain?error=need-token')
+    redirect(access.reason === 'env-mismatch' ? '/workbench/maintain?error=env-mismatch' : '/workbench/maintain?error=need-token')
   }
 
   const userId = Number(currentUser.id)
@@ -43,7 +43,7 @@ export async function generateMaintainerAction(): Promise<void> {
   let selected = projects.filter((project) => project.active)
   if (selected.length === 0) selected = projects.filter((project) => project.source === 'owned')
   selected = selected.slice(0, MAX_PROJECTS)
-  if (selected.length === 0) redirect('/maintain?error=no-projects')
+  if (selected.length === 0) redirect('/workbench/maintain?error=no-projects')
 
   let reportId = 0
   try {
@@ -106,15 +106,15 @@ export async function generateMaintainerAction(): Promise<void> {
       kind: 'maintainer',
       title: '维护周报已生成',
       body: report.projects.map((project) => project.repo).join('、'),
-      url: `/maintain?report=${reportId}`,
+      url: `/workbench/maintain?report=${reportId}`,
     })
   } catch (error) {
     console.error('[maintainer] 生成维护周报失败：', error)
     const detail = error instanceof Error ? error.message : ''
     const code = /JSON|结构不符合/.test(detail) ? 'format' : 'generate'
-    redirect(`/maintain?error=${code}`)
+    redirect(`/workbench/maintain?error=${code}`)
   }
 
-  revalidatePath('/maintain')
-  redirect(`/maintain?report=${reportId}`)
+  revalidatePath('/workbench/maintain')
+  redirect(`/workbench/maintain?report=${reportId}`)
 }

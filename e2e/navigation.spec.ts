@@ -12,8 +12,9 @@ test('core pages render for a signed-in user', async ({ page }) => {
   await page.goto('/inbox')
   await expect(page.getByRole('heading', { name: '收件箱' })).toBeVisible()
 
-  await page.goto('/history')
-  await expect(page.getByRole('heading', { name: '所有 AI 生成内容' })).toBeVisible()
+  await page.goto('/library?tab=history')
+  await expect(page.getByRole('heading', { name: '所有历史推荐，按库汇总' })).toBeVisible()
+  await expect(page.getByRole('link', { name: /历史报告/ }).first()).toBeVisible()
 
   await page.goto('/privacy')
   await expect(page.getByRole('heading', { name: '隐私说明' })).toBeVisible()

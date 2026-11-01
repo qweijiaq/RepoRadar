@@ -130,7 +130,7 @@ export async function createReposAction(
   }
 
   revalidatePath('/repos')
-  revalidatePath('/integrations')
+  revalidatePath('/workbench/integrations')
   const summary = finish('已创建', results)
   return {
     ...summary,
@@ -210,7 +210,7 @@ export async function updateReposAction(
   }
 
   revalidatePath('/repos')
-  revalidatePath('/integrations')
+  revalidatePath('/workbench/integrations')
   return finish('已更新', results)
 }
 
@@ -248,7 +248,7 @@ export async function deleteReposAction(
   }
 
   revalidatePath('/repos')
-  revalidatePath('/integrations')
+  revalidatePath('/workbench/integrations')
   return finish('已删除', results)
 }
 

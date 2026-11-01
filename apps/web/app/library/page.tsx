@@ -1,23 +1,97 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import {
+  HISTORY_LABEL,
   loadComparisonLibrary,
   loadDiscoverabilityLibrary,
   loadIntegrationLibrary,
   loadMaintainerLibrary,
   loadWatchLibrary,
+  type HistoryKind,
   type LibraryStatus,
 } from '@repo-radar/core'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
+import { HistoryPanel } from './history-panel'
 
 export const dynamic = 'force-dynamic'
 
-type LibraryTab = 'integration' | 'watch' | 'maintainer' | 'comparison' | 'discoverability'
+type LibraryTab =
+  | 'integration'
+  | 'watch'
+  | 'maintainer'
+  | 'comparison'
+  | 'discoverability'
+  | 'history'
 
 interface LibraryPageProps {
-  searchParams: Promise<{ tab?: string; status?: string; q?: string; sort?: string }>
+  searchParams: Promise<{
+    tab?: string
+    status?: string
+    q?: string
+    sort?: string
+    kind?: string
+    page?: string
+  }>
+}
+
+const HISTORY_KINDS = Object.keys(HISTORY_LABEL) as HistoryKind[]
+
+function LibraryHeader() {
+  return (
+    <section className="feed-head">
+      <div>
+        <p className="eyebrow">建议库</p>
+        <h1>所有历史推荐，按库汇总</h1>
+        <p className="feed-meta">
+          接入、关注、维护、选型对比和曝光优化都按库或条目汇总；历史报告也可以在这里回看。
+        </p>
+      </div>
+      <div className="feed-actions">
+        <Link className="btn small" href="/workbench/integrations">
+          接入建议
+        </Link>
+        <Link className="btn quiet small" href="/workbench/watch">
+          关注代理
+        </Link>
+        <Link className="btn quiet small" href="/library?tab=history">
+          历史报告
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+function LibraryTabs({
+  active,
+  counts,
+}: {
+  active: LibraryTab
+  counts?: Partial<Record<LibraryTab, number>>
+}) {
+  const tabs: Array<{ value: LibraryTab; label: string }> = [
+    { value: 'integration', label: '接入建议' },
+    { value: 'watch', label: '关注命中' },
+    { value: 'maintainer', label: '维护待办' },
+    { value: 'comparison', label: '选型对比' },
+    { value: 'discoverability', label: '曝光优化' },
+    { value: 'history', label: '历史报告' },
+  ]
+  return (
+    <div className="library-tabs">
+      {tabs.map((item) => (
+        <Link
+          key={item.value}
+          className={active === item.value ? 'feed-tab active' : 'feed-tab'}
+          href={`/library?tab=${item.value}`}
+        >
+          {item.label}
+          {counts?.[item.value] !== undefined ? ` · ${counts[item.value]}` : ''}
+        </Link>
+      ))}
+    </div>
+  )
 }
 
 interface LibraryRowOccurrence {
@@ -75,7 +149,9 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           ? 'comparison'
           : params.tab === 'discoverability'
             ? 'discoverability'
-            : 'integration'
+            : params.tab === 'history'
+              ? 'history'
+              : 'integration'
   const requestedStatus = params.status
   const status: LibraryStatus | null =
     requestedStatus === 'pending' || requestedStatus === 'adopted' || requestedStatus === 'rejected'
@@ -87,6 +163,20 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   const sort = params.sort === 'count' ? 'count' : 'recent'
   const pool = getPool()
   const userId = Number(currentUser.id)
+  if (tab === 'history') {
+    const kind = params.kind && HISTORY_KINDS.includes(params.kind as HistoryKind)
+      ? (params.kind as HistoryKind)
+      : null
+    const requestedPage = Number.parseInt(params.page ?? '', 10)
+    const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1
+    return (
+      <div className="page">
+        <LibraryHeader />
+        <LibraryTabs active="history" />
+        <HistoryPanel userId={userId} kind={kind} page={page} />
+      </div>
+    )
+  }
   const [integration, watch, maintainer, comparison, discoverability] = await Promise.all([
     loadIntegrationLibrary(pool, userId),
     loadWatchLibrary(pool, userId),
@@ -113,14 +203,14 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           detail: occurrence.reason,
           at: occurrence.at,
           status: occurrence.status,
-          href: '/watch',
+          href: '/workbench/watch',
         })),
       }))
     }
     if (tab === 'maintainer') {
       return maintainer.items.map((item) => ({
         repo: item.label,
-        targetHref: item.occurrences[0]?.href ?? '/maintain',
+        targetHref: item.occurrences[0]?.href ?? '/workbench/maintain',
         total: item.total,
         groups: [item.project],
         meta: `出现在 ${item.reports} 份维护周报 · ${item.kind === 'item' ? 'Issue/PR 待办' : '依赖升级'} · 最近 ${formatDate(item.lastSeenAt)}`,
@@ -197,7 +287,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
         detail: occurrence.reason,
         at: occurrence.generatedAt,
         status: occurrence.status,
-        href: `/integrations?report=${occurrence.reportId}`,
+        href: `/workbench/integrations?report=${occurrence.reportId}`,
       })),
     }))
   })()
@@ -279,59 +369,18 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
 
   return (
     <div className="page">
-      <section className="feed-head">
-        <div>
-          <p className="eyebrow">建议库</p>
-          <h1>所有历史推荐，按库汇总</h1>
-          <p className="feed-meta">
-            不再只看单篇报告：接入、关注、维护、选型对比和曝光优化都按库或条目汇总；出现次数、已处理、已忽略和未处理都在这里。
-          </p>
-        </div>
-        <div className="feed-actions">
-          <Link className="btn small" href="/integrations">
-            接入建议
-          </Link>
-          <Link className="btn quiet small" href="/watch">
-            关注代理
-          </Link>
-          <Link className="btn quiet small" href="/history">
-            生成历史
-          </Link>
-        </div>
-      </section>
+      <LibraryHeader />
 
-      <div className="library-tabs">
-        <Link
-          className={tab === 'integration' ? 'feed-tab active' : 'feed-tab'}
-          href={href({ tab: 'integration' })}
-        >
-          接入建议 · {integration.totals.items}
-        </Link>
-        <Link
-          className={tab === 'watch' ? 'feed-tab active' : 'feed-tab'}
-          href={href({ tab: 'watch' })}
-        >
-          关注命中 · {watch.totals.items}
-        </Link>
-        <Link
-          className={tab === 'maintainer' ? 'feed-tab active' : 'feed-tab'}
-          href={href({ tab: 'maintainer' })}
-        >
-          维护待办 · {maintainer.totals.items}
-        </Link>
-        <Link
-          className={tab === 'comparison' ? 'feed-tab active' : 'feed-tab'}
-          href={href({ tab: 'comparison' })}
-        >
-          选型对比 · {comparison.totals.items}
-        </Link>
-        <Link
-          className={tab === 'discoverability' ? 'feed-tab active' : 'feed-tab'}
-          href={href({ tab: 'discoverability' })}
-        >
-          曝光优化 · {discoverability.totals.items}
-        </Link>
-      </div>
+      <LibraryTabs
+        active={tab}
+        counts={{
+          integration: integration.totals.items,
+          watch: watch.totals.items,
+          maintainer: maintainer.totals.items,
+          comparison: comparison.totals.items,
+          discoverability: discoverability.totals.items,
+        }}
+      />
 
       <div className="library-stat-grid">
         <div className="library-stat">
@@ -432,14 +481,14 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
               className="btn small"
               href={
                 tab === 'watch'
-                  ? '/watch'
+                  ? '/workbench/watch'
                   : tab === 'maintainer'
-                    ? '/maintain'
+                    ? '/workbench/maintain'
                     : tab === 'comparison'
-                      ? '/integrations'
+                      ? '/workbench/integrations'
                       : tab === 'discoverability'
                         ? '/repos'
-                        : '/integrations'
+                        : '/workbench/integrations'
               }
             >
               {tab === 'watch'

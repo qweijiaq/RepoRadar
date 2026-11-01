@@ -65,7 +65,7 @@ export default async function CollectionDetailPage({ params, searchParams }: Col
   return (
     <div className="page">
       <p className="breadcrumb">
-        <Link href="/collections">← 收藏集</Link>
+        <Link href="/feed?tab=collections">← 收藏集</Link>
       </p>
 
       <section className="feed-head">
