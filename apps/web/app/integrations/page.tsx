@@ -5,11 +5,15 @@ import {
   buildProjectIntegrationBrief,
   findIntegrationReportById,
   findLatestIntegrationReport,
+  listFeedDismissals,
+  listFeedStatuses,
   listIntegrationOutcomes,
   listUserProjects,
+  removeHandledSuggestions,
 } from '@repo-radar/core'
 import {
   addUserProjectAction,
+  clearIntegrationOutcomeAction,
   removeUserProjectAction,
   setIntegrationOutcomeAction,
   toggleProjectActiveAction,
@@ -35,18 +39,45 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
 
   const pool = getPool()
   const requestedReport = Number(params.report)
-  const [projects, latestReport, outcomes, selectedReport] = await Promise.all([
+  const [projects, latestReport, outcomes, selectedReport, dismissals, statuses] = await Promise.all([
     listUserProjects(pool, Number(currentUser.id)),
     findLatestIntegrationReport(pool, Number(currentUser.id)),
     listIntegrationOutcomes(pool, Number(currentUser.id)),
     Number.isFinite(requestedReport) && requestedReport > 0
       ? findIntegrationReportById(pool, Number(currentUser.id), requestedReport)
       : Promise.resolve(null),
+    listFeedDismissals(pool, Number(currentUser.id)),
+    listFeedStatuses(pool, Number(currentUser.id)),
   ])
   const latest = selectedReport ?? latestReport
   const outcomeMap = new Map(
-    outcomes.map((outcome) => [`${outcome.projectFullName}|${outcome.suggestionRepo}`, outcome.status]),
+    outcomes.map((outcome) => [
+      `${outcome.projectFullName}|${outcome.suggestionRepo}`.toLowerCase(),
+      outcome.status,
+    ]),
   )
+  const dismissedIntegrationKeys = new Set(
+    dismissals
+      .filter((entry) => entry.key.startsWith('integration:'))
+      .map((entry) => entry.key.toLowerCase()),
+  )
+  const doneIntegrationKeys = new Set(
+    statuses
+      .filter((entry) => entry.key.startsWith('integration:'))
+      .map((entry) => entry.key.toLowerCase()),
+  )
+  function suggestionStatus(project: string, repo: string): 'adopted' | 'rejected' | null {
+    const explicit = outcomeMap.get(`${project}|${repo}`.toLowerCase())
+    if (explicit) return explicit
+    const key = `integration:${project}:${repo}`.toLowerCase()
+    if (dismissedIntegrationKeys.has(key)) return 'rejected'
+    if (doneIntegrationKeys.has(key)) return 'adopted'
+    return null
+  }
+  const returnTo =
+    selectedReport && Number.isFinite(requestedReport) && requestedReport > 0
+      ? `/integrations?report=${requestedReport}`
+      : '/integrations'
   const activeProjects = projects.filter((project) => project.active)
   const briefMeta = latest
     ? {
@@ -56,7 +87,39 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
         auto: latest.auto,
       }
     : null
-  const allBrief = latest && briefMeta ? buildIntegrationBrief(latest.report.projects, briefMeta) : ''
+  function pairFromIntegrationKey(key: string): string | null {
+    if (!key.startsWith('integration:')) return null
+    const rest = key.slice('integration:'.length)
+    const separator = rest.indexOf(':')
+    if (separator <= 0) return null
+    return `${rest.slice(0, separator)}|${rest.slice(separator + 1)}`
+  }
+  const handledPairs = new Set(outcomeMap.keys())
+  for (const key of [...dismissedIntegrationKeys, ...doneIntegrationKeys]) {
+    const pair = pairFromIntegrationKey(key)
+    if (pair) handledPairs.add(pair)
+  }
+  const copyableProjects = latest ? removeHandledSuggestions(latest.report.projects, handledPairs) : []
+  const copyableSuggestions = copyableProjects.reduce(
+    (count, project) => count + project.suggestions.length,
+    0,
+  )
+  const reportStatusCounts = (latest?.report.projects ?? []).reduce(
+    (counts, project) => {
+      for (const suggestion of project.suggestions) {
+        const status = suggestionStatus(project.repo, suggestion.repo)
+        if (status === 'adopted') counts.adopted += 1
+        else if (status === 'rejected') counts.rejected += 1
+        else counts.pending += 1
+      }
+      return counts
+    },
+    { adopted: 0, rejected: 0, pending: 0 },
+  )
+  const allBrief =
+    latest && briefMeta && copyableSuggestions > 0
+      ? buildIntegrationBrief(copyableProjects, briefMeta)
+      : ''
 
   return (
     <div className="page">
@@ -69,7 +132,10 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
           </p>
         </div>
         <div className="feed-actions">
-          <Link className="btn small" href="/history?kind=integration">
+          <Link className="btn small" href="/library?tab=integration">
+            建议库
+          </Link>
+          <Link className="btn quiet small" href="/history?kind=integration">
             历史生成
           </Link>
           <form action={enqueueIntegrationAction} className="integration-generate">
@@ -111,12 +177,24 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
       ) : null}
 
       <section className="panel" id="projects">
-        <h2>正在维护的项目</h2>
-        <p className="muted small">
-          标记为「维护中」的项目会参与接入建议。没有标记时，AI 会根据最近推送的仓库自动选择。
-        </p>
+        <div className="panel-heading-row">
+          <div>
+            <h2>正在维护的项目</h2>
+            <p className="muted small">
+              标记为「维护中」的项目会参与接入建议，每轮最多分析 5 个；没有标记时，AI 会根据最近推送的仓库自动选择。
+            </p>
+          </div>
+          <span className="muted small">
+            {projects.length} 个 · {activeProjects.length} 个维护中
+          </span>
+        </div>
 
         {projects.length > 0 ? (
+          <details className="collapsible-section" open={projects.length <= 5}>
+            <summary className="collapsible-summary">
+              <span>项目列表</span>
+              <span className="muted small">点击展开或收起</span>
+            </summary>
           <ul className="project-list">
             {projects.map((project) => (
               <li className={project.active ? 'project-row active' : 'project-row'} key={project.repoFullName}>
@@ -155,6 +233,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
               </li>
             ))}
           </ul>
+          </details>
         ) : (
           <p className="muted small">还没有项目。可以在下面手动添加，或先同步 GitHub 画像。</p>
         )}
@@ -177,10 +256,32 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
               {latest.model ? ` · ${latest.model}` : ''}
               {selectedReport ? ' · 历史版本' : ''}
             </p>
-            <CopyIntegrationButton text={allBrief} label="复制全部给 AI" className="btn small" />
+            <div className="library-statuses">
+              <span className="chip release">待处理 {reportStatusCounts.pending}</span>
+              {reportStatusCounts.adopted > 0 ? (
+                <span className="chip verified">已接入 {reportStatusCounts.adopted}</span>
+              ) : null}
+              {reportStatusCounts.rejected > 0 ? (
+                <span className="chip subtle">不感兴趣 {reportStatusCounts.rejected}</span>
+              ) : null}
+            </div>
+            <div className="feed-actions">
+              <Link className="btn quiet small" href="/library?tab=integration">
+                历史建议库
+              </Link>
+              {copyableSuggestions > 0 ? (
+                <CopyIntegrationButton
+                  text={allBrief}
+                  label={`复制全部给 AI（${copyableSuggestions} 条待处理）`}
+                  className="btn small"
+                />
+              ) : (
+                <span className="chip verified">所有建议都已处理</span>
+              )}
+            </div>
           </div>
           <p className="muted small integration-copy-hint">
-            复制后粘贴给 Claude Code、Cursor 等代码 AI，它会按任务书核实候选并在目标项目里执行接入。
+            复制后粘贴给 Claude Code、Cursor 等代码 AI，它会按任务书核实候选并在目标项目里执行接入。已接入和不感兴趣的候选不会出现在任务书里。
           </p>
           {latest.candidateRepos?.length ? (
             <details className="trace-details">
@@ -197,10 +298,13 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
             </details>
           ) : null}
           {latest.report.projects.map((project) => {
-            const projectBrief = buildProjectIntegrationBrief(project, {
-              generatedAt: briefMeta?.generatedAt,
-              focus: briefMeta?.focus,
-            })
+            const copyProject = copyableProjects.find((item) => item.repo === project.repo)
+            const projectBrief = copyProject
+              ? buildProjectIntegrationBrief(copyProject, {
+                  generatedAt: briefMeta?.generatedAt,
+                  focus: briefMeta?.focus,
+                })
+              : ''
             return (
               <article className="integration-card" key={project.repo}>
                 <header className="integration-head">
@@ -217,7 +321,14 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                         </button>
                       </form>
                     ) : null}
-                    <CopyIntegrationButton text={projectBrief} label="复制给 AI" />
+                    {copyProject ? (
+                      <CopyIntegrationButton
+                        text={projectBrief}
+                        label={`复制给 AI（${copyProject.suggestions.length} 条）`}
+                      />
+                    ) : (
+                      <span className="chip verified">全部已处理</span>
+                    )}
                   </div>
                 </header>
               <p className="muted">{project.summary}</p>
@@ -251,15 +362,20 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                         </ol>
                       ) : null}
                       {(() => {
-                        const outcome = outcomeMap.get(`${project.repo}|${suggestion.repo}`)
+                        const status = suggestionStatus(project.repo, suggestion.repo)
+                        const explicitOutcome = outcomeMap.get(
+                          `${project.repo}|${suggestion.repo}`.toLowerCase(),
+                        )
                         return (
                           <div className="suggestion-feedback">
-                            {outcome === 'adopted' ? <span className="chip verified">已接入</span> : null}
-                            {outcome === 'rejected' ? <span className="chip subtle">已忽略</span> : null}
+                            {status === 'adopted' ? <span className="chip verified">已接入</span> : null}
+                            {status === 'rejected' ? <span className="chip subtle">已忽略</span> : null}
+                            {status === null ? <span className="chip">待处理</span> : null}
                             <form action={setIntegrationOutcomeAction}>
                               <input type="hidden" name="project" value={project.repo} />
                               <input type="hidden" name="repo" value={suggestion.repo} />
                               <input type="hidden" name="status" value="adopted" />
+                              <input type="hidden" name="returnTo" value={returnTo} />
                               <button className="btn quiet small" type="submit">
                                 标记已接入
                               </button>
@@ -268,10 +384,21 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                               <input type="hidden" name="project" value={project.repo} />
                               <input type="hidden" name="repo" value={suggestion.repo} />
                               <input type="hidden" name="status" value="rejected" />
+                              <input type="hidden" name="returnTo" value={returnTo} />
                               <button className="btn quiet small" type="submit">
                                 不感兴趣
                               </button>
                             </form>
+                            {explicitOutcome ? (
+                              <form action={clearIntegrationOutcomeAction}>
+                                <input type="hidden" name="project" value={project.repo} />
+                                <input type="hidden" name="repo" value={suggestion.repo} />
+                                <input type="hidden" name="returnTo" value={returnTo} />
+                                <button className="btn quiet small" type="submit">
+                                  重置状态
+                                </button>
+                              </form>
+                            ) : null}
                           </div>
                         )
                       })()}

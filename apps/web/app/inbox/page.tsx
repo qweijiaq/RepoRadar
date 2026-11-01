@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { listNotifications } from '@repo-radar/core'
+import { listNotifications, loadNotificationCounts } from '@repo-radar/core'
 import { markInboxReadAction, markNotificationReadAction } from '@/app/actions'
 import { enqueueActivitySyncAction } from '@/app/jobs/enqueue'
 import { auth } from '@/auth'
@@ -28,8 +28,11 @@ const KIND_LABELS: Record<string, string> = {
 }
 
 interface InboxPageProps {
-  searchParams: Promise<{ error?: string; category?: string; unread?: string }>
+  searchParams: Promise<{ error?: string; category?: string; unread?: string; page?: string }>
 }
+
+const PAGE_SIZE = 30
+const AI_KINDS = ['integration', 'maintainer', 'watch', 'comparison', 'discoverability', 'issue-plan']
 
 const CATEGORIES = [
   { value: 'all', label: '全部' },
@@ -39,19 +42,28 @@ const CATEGORIES = [
   { value: 'system', label: '系统' },
 ] as const
 
-function categoryOf(kind: string): string {
-  if (kind.startsWith('github-')) return 'github'
-  if (['integration', 'maintainer', 'watch', 'comparison', 'discoverability', 'issue-plan'].includes(kind)) return 'ai'
-  if (kind === 'release') return 'release'
-  return 'system'
-}
-
-function inboxHref(category: string, unreadOnly: boolean): string {
+function inboxHref(category: string, unreadOnly: boolean, page = 1): string {
   const params = new URLSearchParams()
   if (category !== 'all') params.set('category', category)
   if (unreadOnly) params.set('unread', '1')
+  if (page > 1) params.set('page', String(page))
   const query = params.toString()
   return query ? `/inbox?${query}` : '/inbox'
+}
+
+function categoryFilter(category: string): {
+  kinds?: string[]
+  prefixes?: string[]
+  excludeKinds?: string[]
+  excludePrefixes?: string[]
+} {
+  if (category === 'github') return { prefixes: ['github-'] }
+  if (category === 'ai') return { kinds: AI_KINDS }
+  if (category === 'release') return { kinds: ['release'] }
+  if (category === 'system') {
+    return { excludePrefixes: ['github-'], excludeKinds: [...AI_KINDS, 'release'] }
+  }
+  return {}
 }
 
 export default async function InboxPage({ searchParams }: InboxPageProps) {
@@ -60,17 +72,26 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
 
-  const allNotifications = await listNotifications(getPool(), Number(currentUser.id), 100)
   const category = CATEGORIES.some((item) => item.value === params.category) ? params.category! : 'all'
   const unreadOnly = params.unread === '1'
-  const notifications = allNotifications.filter(
-    (item) => (category === 'all' || categoryOf(item.kind) === category) && (!unreadOnly || !item.readAt),
-  )
-  const unread = allNotifications.filter((item) => !item.readAt).length
-  const categoryCounts = new Map<string, number>()
-  for (const item of allNotifications) {
-    const key = categoryOf(item.kind)
-    categoryCounts.set(key, (categoryCounts.get(key) ?? 0) + 1)
+  const requestedPage = Number.parseInt(params.page ?? '', 10)
+  const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1
+  const [notificationsPage, counts] = await Promise.all([
+    listNotifications(getPool(), Number(currentUser.id), PAGE_SIZE + 1, {
+      offset: (page - 1) * PAGE_SIZE,
+      unreadOnly,
+      ...categoryFilter(category),
+    }),
+    loadNotificationCounts(getPool(), Number(currentUser.id), AI_KINDS),
+  ])
+  const hasMore = notificationsPage.length > PAGE_SIZE
+  const notifications = notificationsPage.slice(0, PAGE_SIZE)
+  const unread = counts.unread
+  const categoryCounts: Record<string, number> = {
+    github: counts.github,
+    ai: counts.ai,
+    release: counts.release,
+    system: counts.system,
   }
   const access = await resolveRepoAccess(session, currentUser.login, { requireRepoScope: false })
   const autoQueued = access.access
@@ -84,7 +105,7 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
           <p className="eyebrow">动态</p>
           <h1>收件箱</h1>
           <p className="feed-meta">
-            {allNotifications.length === 0 ? '还没有动态' : `${notifications.length} 条动态 · ${unread} 条未读`}
+            {counts.total === 0 ? '还没有动态' : `第 ${page} 页 · ${notifications.length} 条 · ${unread} 条未读`}
           </p>
         </div>
         <div className="feed-actions">
@@ -95,7 +116,7 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
           </form>
           {unread > 0 ? (
             <form action={markInboxReadAction}>
-              <input type="hidden" name="returnTo" value={inboxHref(category, unreadOnly)} />
+              <input type="hidden" name="returnTo" value={inboxHref(category, unreadOnly, page)} />
               <button className="btn small" type="submit">
                 全部标记已读
               </button>
@@ -119,15 +140,15 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
           <Link
             key={item.value}
             className={category === item.value ? 'chip toggle active' : 'chip toggle'}
-            href={inboxHref(item.value, unreadOnly)}
+            href={inboxHref(item.value, unreadOnly, 1)}
           >
             {item.label}
-            {item.value !== 'all' ? ` ${categoryCounts.get(item.value) ?? 0}` : ` ${allNotifications.length}`}
+            {item.value !== 'all' ? ` ${categoryCounts[item.value] ?? 0}` : ` ${counts.total}`}
           </Link>
         ))}
         <Link
           className={unreadOnly ? 'chip toggle active' : 'chip toggle'}
-          href={inboxHref(category, !unreadOnly)}
+          href={inboxHref(category, !unreadOnly, 1)}
         >
           只看未读
         </Link>
@@ -135,7 +156,7 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
 
       {notifications.length === 0 ? (
         <div className="empty">
-          <p>{allNotifications.length === 0 ? '还没有动态。' : '这个分类下还没有动态。'}</p>
+          <p>{counts.total === 0 ? '还没有动态。' : '这个筛选下还没有动态。'}</p>
           <p className="small">
             订阅仓库的 release、生成周报之后，这里会收到通知。也可以点「同步 GitHub 动态」检查自己仓库的新 star、fork、Issue 和 PR。
           </p>
@@ -167,6 +188,22 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
           ))}
         </ul>
       )}
+
+      {page > 1 || hasMore ? (
+        <div className="history-pagination">
+          {page > 1 ? (
+            <Link className="btn small" href={inboxHref(category, unreadOnly, page - 1)}>
+              上一页
+            </Link>
+          ) : null}
+          <span className="muted small">第 {page} 页</span>
+          {hasMore ? (
+            <Link className="btn small" href={inboxHref(category, unreadOnly, page + 1)}>
+              下一页
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

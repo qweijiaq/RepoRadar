@@ -10,7 +10,17 @@ export const dynamic = 'force-dynamic'
 const KINDS = Object.keys(HISTORY_LABEL) as HistoryKind[]
 
 interface HistoryPageProps {
-  searchParams: Promise<{ kind?: string }>
+  searchParams: Promise<{ kind?: string; page?: string }>
+}
+
+const PAGE_SIZE = 40
+
+function pageHref(kind: HistoryKind | null, page: number): string {
+  const params = new URLSearchParams()
+  if (kind) params.set('kind', kind)
+  if (page > 1) params.set('page', String(page))
+  const query = params.toString()
+  return query ? `/history?${query}` : '/history'
 }
 
 export default async function HistoryPage({ searchParams }: HistoryPageProps) {
@@ -21,8 +31,18 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
 
-  const entries = await listHistory(getPool(), Number(currentUser.id), 80)
-  const filtered = filter ? entries.filter((entry) => entry.kind === filter) : entries
+  const requestedPage = Number.parseInt(params.page ?? '', 10)
+  const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1
+  const offset = (page - 1) * PAGE_SIZE
+  const entries = await listHistory(
+    getPool(),
+    Number(currentUser.id),
+    PAGE_SIZE + 1,
+    offset,
+    filter ?? undefined,
+  )
+  const hasMore = entries.length > PAGE_SIZE
+  const filtered = entries.slice(0, PAGE_SIZE)
 
   return (
     <div className="page narrow">
@@ -35,11 +55,34 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
           </p>
         </div>
         <div className="feed-actions">
-          <a className="btn small" href="/api/history/export">
-            导出 JSON
+          <Link
+            className="btn small"
+            href={`/library?tab=${
+              filter === 'watch'
+                ? 'watch'
+                : filter === 'maintainer'
+                  ? 'maintainer'
+                  : filter === 'comparison'
+                    ? 'comparison'
+                    : filter === 'discoverability'
+                      ? 'discoverability'
+                      : 'integration'
+            }`}
+          >
+            按库汇总
+          </Link>
+          <a className="btn quiet small" href="/api/history/export?full=1">
+            导出完整 JSON
           </a>
         </div>
       </section>
+
+      {filter && ['integration', 'watch', 'maintainer', 'comparison', 'discoverability'].includes(filter) ? (
+        <div className="notice history-library-hint">
+          历史报告适合回看单次生成；想按库或条目查看出现次数、已接入、不感兴趣和待处理，请打开{' '}
+          <Link href={`/library?tab=${filter}`}>建议库</Link>。
+        </div>
+      ) : null}
 
       <div className="filter-bar">
         <span className="filter-label">类型</span>
@@ -55,7 +98,7 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
             {HISTORY_LABEL[kind]}
           </Link>
         ))}
-        <span className="filter-count">{filtered.length} 条</span>
+        <span className="filter-count">第 {page} 页 · {filtered.length} 条</span>
       </div>
 
       {filtered.length === 0 ? (
@@ -91,6 +134,22 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
           ))}
         </ul>
       )}
+
+      {page > 1 || hasMore ? (
+        <div className="history-pagination">
+          {page > 1 ? (
+            <Link className="btn small" href={pageHref(filter, page - 1)}>
+              上一页
+            </Link>
+          ) : null}
+          <span className="muted small">第 {page} 页</span>
+          {hasMore ? (
+            <Link className="btn small" href={pageHref(filter, page + 1)}>
+              下一页
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

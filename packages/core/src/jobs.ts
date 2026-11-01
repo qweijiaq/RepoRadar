@@ -22,6 +22,7 @@ export interface JobPayload {
   token?: EncryptedBox | null
   origin?: string
   project?: string
+  candidates?: string[]
   repo?: string
   issueNumber?: number
   intentId?: number
@@ -218,12 +219,24 @@ export async function getJob(pool: DbPool, userId: number, id: number): Promise<
   return rows[0] ? mapJob(rows[0]) : null
 }
 
-export async function listJobs(pool: DbPool, userId: number, limit = 30): Promise<JobRecord[]> {
+export async function listJobs(
+  pool: DbPool,
+  userId: number,
+  limit = 30,
+  options: { offset?: number; status?: JobStatus } = {},
+): Promise<JobRecord[]> {
+  const params: unknown[] = [userId, limit, Math.max(0, options.offset ?? 0)]
+  let statusFilter = ''
+  if (options.status) {
+    params.push(options.status)
+    statusFilter = `AND status = $${params.length}`
+  }
   const { rows } = await pool.query<JobRow>(
     `SELECT id, kind, title, status, payload, result, error, progress, attempts, max_attempts,
             cancel_requested, heartbeat_at, created_at, started_at, finished_at
-     FROM ai_jobs WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
-    [userId, limit],
+     FROM ai_jobs WHERE user_id = $1 ${statusFilter}
+     ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+    params,
   )
   return rows.map(mapJob)
 }

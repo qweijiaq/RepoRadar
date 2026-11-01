@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { listFeedStatuses, listWatchIntents, listWatchMatches } from '@repo-radar/core'
+import { listWatchIntents, listWatchMatches, loadHandledState, watchMatchHandled } from '@repo-radar/core'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
@@ -23,16 +23,15 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
   if (!currentUser) redirect('/login')
 
   const pool = getPool()
-  const [intents, statuses] = await Promise.all([
+  const [intents, handled] = await Promise.all([
     listWatchIntents(pool, Number(currentUser.id)),
-    listFeedStatuses(pool, Number(currentUser.id)),
+    loadHandledState(pool, Number(currentUser.id)),
   ])
-  const statusKeys = new Set(statuses.map((status) => status.key))
   const withMatches = await Promise.all(
     intents.map(async (intent) => ({
       intent,
       matches: (await listWatchMatches(pool, intent.id)).filter(
-        (match) => !statusKeys.has(`watch:${intent.id}:${match.repo}`),
+        (match) => !watchMatchHandled(intent.id, match.repo, handled),
       ),
     })),
   )
@@ -48,7 +47,10 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
           </p>
         </div>
         <div className="feed-actions">
-          <Link className="btn small" href="/history?kind=watch">
+          <Link className="btn small" href="/library?tab=watch">
+            命中库
+          </Link>
+          <Link className="btn quiet small" href="/history?kind=watch">
             历史生成
           </Link>
         </div>
@@ -82,7 +84,7 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
           </div>
         </form>
         <p className="muted small">
-          当前会在已收录的高质量候选池里匹配（按质量分取前 120 个），不会自动向 GitHub 发起搜索。
+          匹配会使用已收录的高质量候选池（按质量分取前 180 个），并在有 GitHub 授权时根据描述提取关键词现场搜索 GitHub，扩大候选范围。
         </p>
       </section>
 
@@ -119,6 +121,11 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
             </header>
 
             {matches.length > 0 ? (
+              <details className="collapsible-section watch-matches-section" open={matches.length <= 3}>
+                <summary className="collapsible-summary">
+                  <span>匹配结果</span>
+                  <span className="muted small">{matches.length} 个 · 点击展开或收起</span>
+                </summary>
               <ul className="watch-matches">
                 {matches.map((match) => (
                   <li key={match.repo}>
@@ -144,6 +151,7 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
                   </li>
                 ))}
               </ul>
+              </details>
             ) : (
               <p className="muted small watch-empty">还没有匹配结果。点击「运行匹配」开始。</p>
             )}

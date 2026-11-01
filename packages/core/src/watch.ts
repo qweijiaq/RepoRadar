@@ -46,8 +46,9 @@ const SYSTEM_PROMPT = `你是用户的长期开源项目侦察员。用户会用
 - 只引用候选列表里的仓库全名，不得编造。
 - score 0-100：越高越符合用户意图。
 - reason 要具体说明匹配了哪些条件，以及可能不符合的地方。
-- 最多返回 8 个，按 score 降序。
+- 最多返回 10 个，按 score 降序。
 - 不要因为 stars 高就推荐，意图优先。
+- 不要输出分析、推理、思考过程或候选点评；第一个字符必须是 {，最后一个字符必须是 }。
 
 只输出一个合法 JSON 对象，不要 Markdown 围栏或解释：
 { "matches": [{ "repo": "owner/name", "score": 88, "reason": "..." }] }`
@@ -55,9 +56,9 @@ const SYSTEM_PROMPT = `你是用户的长期开源项目侦察员。用户会用
 function compactCandidates(candidates: WatchCandidate[]) {
   return candidates.map((candidate) => ({
     repo: candidate.repo,
-    summary: candidate.summary.slice(0, 180),
+    summary: candidate.summary.slice(0, 120),
     language: candidate.language,
-    topics: candidate.topics.slice(0, 8),
+    topics: candidate.topics.slice(0, 5),
     stars: candidate.stars,
   }))
 }
@@ -109,6 +110,114 @@ export function groundWatchReport(report: WatchReport, candidates: WatchCandidat
   }
 }
 
+const QUERY_PROMPT = `你是 GitHub 搜索助手。把用户的关注描述转成 2-3 条适合 GitHub 仓库搜索的英文关键词查询。
+规则：
+- 每条只包含 2-5 个英文关键词，不要包含 stars/pushed/topic 等操作符，不要引号。
+- 覆盖不同表达：能力名、技术栈、使用场景。
+- 如果描述本身是中文，也翻译成常见的英文开源术语。
+只输出一个合法 JSON 对象：{"queries":["...","..."]}`
+
+export async function deriveWatchSearchQueries(intent: string, llm: LlmConfig): Promise<string[]> {
+  try {
+    const raw = await chatCompletion(
+      llm,
+      [
+        { role: 'system', content: QUERY_PROMPT },
+        { role: 'user', content: intent },
+      ],
+      { temperature: 0.2, maxTokens: 240, jsonMode: true },
+    )
+    const cleaned = raw.replace(/```(?:json)?/gi, '').trim()
+    for (const candidate of extractJsonObjects(cleaned)) {
+      try {
+        const parsed = JSON.parse(candidate) as { queries?: unknown }
+        if (!Array.isArray(parsed.queries)) continue
+        const queries = parsed.queries
+          .filter((query): query is string => typeof query === 'string')
+          .map((query) => query.replace(/[\"\r\n]/g, ' ').trim())
+          .filter((query) => query.length >= 2 && query.length <= 80)
+          .slice(0, 3)
+        if (queries.length > 0) return queries
+      } catch {
+        // 尝试下一个 JSON 对象
+      }
+    }
+  } catch {
+    // 关键词提取失败时只使用本地候选池
+  }
+  return []
+}
+
+const STOP_WORDS = new Set([
+  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'project', 'projects', 'open',
+  'source', 'written', 'using', 'want', 'looking', 'follow', 'track', 'about', 'into',
+  'app', 'apps', 'tool', 'tools', 'library', 'libraries', 'framework', 'frameworks',
+])
+
+function intentTokens(intent: string): string[] {
+  const lower = intent.toLowerCase()
+  const tokens = new Set<string>()
+  for (const token of lower.match(/[a-z0-9][a-z0-9.+#_-]{1,}/g) ?? []) {
+    if (token.length >= 2 && !STOP_WORDS.has(token)) tokens.add(token)
+  }
+  for (const run of intent.match(/[\u3400-\u9fff]{2,}/g) ?? []) {
+    for (let index = 0; index < run.length - 1; index++) {
+      const bigram = run.slice(index, index + 2)
+      if (!['项目', '一个', '可以', '支持', '的是', '写的', '想要', '关注'].includes(bigram)) {
+        tokens.add(bigram)
+      }
+    }
+  }
+  return [...tokens]
+}
+
+function scoreCandidate(
+  intent: string,
+  candidate: WatchCandidate,
+): { score: number; semanticScore: number; matched: string[] } {
+  const tokens = intentTokens(intent)
+  const haystack = [candidate.repo, candidate.summary, ...candidate.topics].join(' ').toLowerCase()
+  const matched: string[] = []
+  let score = 0
+  for (const token of tokens) {
+    if (!haystack.includes(token)) continue
+    matched.push(token)
+    score += token.length >= 4 ? 3 : 1
+  }
+  const semanticScore = score
+  if (candidate.language && intent.toLowerCase().includes(candidate.language.toLowerCase())) {
+    score += 5
+    matched.push(candidate.language)
+  }
+  return { score, semanticScore, matched: [...new Set(matched)] }
+}
+
+/** 模型输出无法解析时的确定性兜底：按意图关键词和语言做简单匹配。 */
+export function fallbackWatchMatches(
+  intent: string,
+  candidates: WatchCandidate[],
+  limit = 5,
+): WatchMatch[] {
+  return candidates
+    .map((candidate) => ({ candidate, ...scoreCandidate(intent, candidate) }))
+    .filter((item) => item.semanticScore >= 2)
+    .sort((left, right) => right.score - left.score || right.candidate.stars - left.candidate.stars)
+    .slice(0, limit)
+    .map((item) => ({
+      repo: item.candidate.repo,
+      score: Math.min(92, 45 + item.score * 5),
+      reason: `关键词匹配（模型输出格式异常时的回退）：命中 ${item.matched.slice(0, 5).join('、') || '项目信息'}。建议稍后重跑以获取模型判断。`,
+    }))
+}
+
+function prioritizeCandidates(intent: string, candidates: WatchCandidate[], limit: number): WatchCandidate[] {
+  return candidates
+    .map((candidate) => ({ candidate, score: scoreCandidate(intent, candidate).score }))
+    .sort((left, right) => right.score - left.score || right.candidate.stars - left.candidate.stars)
+    .slice(0, limit)
+    .map((item) => item.candidate)
+}
+
 export async function generateWatchMatches(
   intent: string,
   candidates: WatchCandidate[],
@@ -120,7 +229,7 @@ export async function generateWatchMatches(
     { role: 'user' as const, content: prompt },
   ]
 
-  let raw = await chatCompletion(llm, messages, { temperature: 0.3, maxTokens: 3000, jsonMode: true })
+  let raw = await chatCompletion(llm, messages, { temperature: 0.25, maxTokens: 7000, jsonMode: true })
   let report: WatchReport | null = null
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -129,17 +238,28 @@ export async function generateWatchMatches(
     } catch (error) {
       console.error(`[watch] 第 ${attempt + 1} 次输出解析失败：`, error, '\n', raw.slice(0, 800))
       if (attempt === 1) break
+      const compact = prioritizeCandidates(intent, candidates, 60)
       raw = await chatCompletion(
         llm,
         [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: `${prompt}\n\n上一次输出不是合法 JSON。只输出 {"matches":[]} 结构。` },
+          {
+            role: 'user',
+            content: `${buildWatchPrompt(intent, compact)}\n\n上一次输出不是合法 JSON，且包含了分析过程。不要解释、不要点评、不要写思考过程，直接输出 {"matches":[{"repo":"owner/name","score":80,"reason":"..."}]} 结构。`,
+          },
         ],
-        { temperature: 0.2, maxTokens: 3000, jsonMode: true },
+        { temperature: 0.15, maxTokens: 5000, jsonMode: true },
       )
     }
   }
-  if (!report) throw new Error('模型没有返回合法 JSON（已自动重试）')
+  if (!report) {
+    const fallback = fallbackWatchMatches(intent, candidates, 5)
+    if (fallback.length > 0) {
+      console.warn(`[watch] 模型连续两次返回非法 JSON，使用关键词兜底 ${fallback.length} 条`)
+      return fallback
+    }
+    throw new Error('模型没有返回合法 JSON（已自动重试）')
+  }
   return groundWatchReport(report, candidates).matches
 }
 

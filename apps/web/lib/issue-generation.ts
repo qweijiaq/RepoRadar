@@ -4,8 +4,10 @@ import {
   findEnrichedRepos,
   generateIssueDraft,
   groupEvidence,
+  handledRepoNames,
   listFeedbackSignals,
   loadFeedback,
+  loadHandledState,
   loadReleaseEvents,
   loadSubscriptions,
   loadUserStars,
@@ -36,24 +38,28 @@ export async function generateIssueForUser(userId: number, llm: LlmConfig): Prom
   const user = await findUserById(userId)
   if (!user) throw new Error('用户不存在')
 
-  const repos = await findEnrichedRepos(pool, 500)
-  if (repos.length === 0) throw new Error('还没有已富化的仓库，先运行采集与富化')
-
-  const [feedback, signals, subscriptions, starred] = await Promise.all([
+  const [allRepos, feedback, signals, subscriptions, starred, handled] = await Promise.all([
+    findEnrichedRepos(pool, 500),
     loadFeedback(pool, userId),
     listFeedbackSignals(pool, userId),
     loadSubscriptions(pool, userId),
     loadUserStars(pool, userId),
+    loadHandledState(pool, userId),
   ])
+  const hiddenNames = handledRepoNames(handled)
+  const repos = allRepos.filter((repo) => !hiddenNames.has(repo.fullName.toLowerCase()))
+  if (repos.length === 0) throw new Error('还没有可用的已富化仓库，先运行采集与富化')
 
   const context = buildFeedbackContext(feedback, signals)
   const ranked = rankForUser(user.profile, repos, Date.now(), context, subscriptions)
-  const candidates = diversifyRanking(ranked, { limit: 12 })
-  const groups = groupEvidence(candidates, user.profile, 3, 3)
+  const candidates = diversifyRanking(ranked, { limit: 18 })
+  const groups = groupEvidence(candidates, user.profile, 4, 4)
 
   const watched = subscriptions.filter((sub) => sub.kind === 'release').map((sub) => sub.value)
-  const targets = [...new Set([...starred, ...watched, ...candidates.map((repo) => repo.fullName)])].slice(0, 20)
-  const events = await loadReleaseEvents(pool, targets, 12)
+  const targets = [...new Set([...starred, ...watched, ...candidates.map((repo) => repo.fullName)])]
+    .filter((name) => !hiddenNames.has(name.toLowerCase()))
+    .slice(0, 24)
+  const events = await loadReleaseEvents(pool, targets, 16)
   const now = Date.now()
   const releases: IssueReleaseEvidence[] = events.map((event) => {
     const published = event.publishedAt
@@ -72,7 +78,7 @@ export async function generateIssueForUser(userId: number, llm: LlmConfig): Prom
     profile: summarizeProfile(user.profile),
     releases,
     groups,
-    rising: risingRepos(repos, 3).map((repo) => ({ ...repoEvidence(repo), growth: repo.growth })),
+    rising: risingRepos(repos, 5).map((repo) => ({ ...repoEvidence(repo), growth: repo.growth })),
   }
 
   const draft = await generateIssueDraft(evidence, llm)

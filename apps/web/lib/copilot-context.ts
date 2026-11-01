@@ -1,4 +1,6 @@
 import {
+  filterIntegrationProjects,
+  filterMaintainerReport,
   findLatestIntegrationReport,
   findLatestMaintainerReport,
   findUserById,
@@ -6,6 +8,11 @@ import {
   listUserProjects,
   listWatchIntents,
   listWatchMatches,
+  loadHandledState,
+  loadIntegrationLibrary,
+  loadMaintainerLibrary,
+  loadWatchLibrary,
+  watchMatchHandled,
   type CopilotContext,
   type DbPool,
 } from '@repo-radar/core'
@@ -18,14 +25,25 @@ export async function loadCopilotContext(
   userId: number,
   login: string,
 ): Promise<CopilotContext> {
-  const [user, projects, maintainer, integration, intents, history] = await Promise.all([
-    findUserById(pool, userId),
-    listUserProjects(pool, userId),
-    findLatestMaintainerReport(pool, userId),
-    findLatestIntegrationReport(pool, userId),
-    listWatchIntents(pool, userId),
-    listHistory(pool, userId, 12),
-  ])
+  const [user, projects, maintainer, integration, intents, history, handled, integrationLibrary, watchLibrary, maintainerLibrary] =
+    await Promise.all([
+      findUserById(pool, userId),
+      listUserProjects(pool, userId),
+      findLatestMaintainerReport(pool, userId),
+      findLatestIntegrationReport(pool, userId),
+      listWatchIntents(pool, userId),
+      listHistory(pool, userId, 12),
+      loadHandledState(pool, userId),
+      loadIntegrationLibrary(pool, userId),
+      loadWatchLibrary(pool, userId),
+      loadMaintainerLibrary(pool, userId),
+    ])
+  const filteredMaintainer = maintainer
+    ? { ...maintainer, report: filterMaintainerReport(maintainer.report, handled) }
+    : null
+  const filteredIntegration = integration
+    ? { ...integration, report: { ...integration.report, projects: filterIntegrationProjects(integration.report.projects, handled) } }
+    : null
 
   const watch = await Promise.all(
     intents
@@ -33,11 +51,13 @@ export async function loadCopilotContext(
       .slice(0, 5)
       .map(async (intent) => ({
         intent: intent.text,
-        matches: (await listWatchMatches(pool, intent.id, 5)).map((match) => ({
-          repo: match.repo,
-          score: match.score,
-          reason: match.reason,
-        })),
+        matches: (await listWatchMatches(pool, intent.id, 5))
+          .filter((match) => !watchMatchHandled(intent.id, match.repo, handled))
+          .map((match) => ({
+            repo: match.repo,
+            score: match.score,
+            reason: match.reason,
+          })),
       })),
   )
 
@@ -65,9 +85,9 @@ export async function loadCopilotContext(
         language: project.language,
         topics: project.topics.slice(0, 8),
       })),
-    maintainer: maintainer
+    maintainer: filteredMaintainer
       ? {
-          projects: maintainer.report.projects.map((project) => ({
+          projects: filteredMaintainer.report.projects.map((project) => ({
             repo: project.repo,
             healthScore: project.healthScore,
             summary: project.summary,
@@ -89,9 +109,9 @@ export async function loadCopilotContext(
           })),
         }
       : null,
-    integration: integration
+    integration: filteredIntegration
       ? {
-          projects: integration.report.projects.map((project) => ({
+          projects: filteredIntegration.report.projects.map((project) => ({
             repo: project.repo,
             summary: project.summary,
             gaps: project.gaps.slice(0, 4),
@@ -104,6 +124,60 @@ export async function loadCopilotContext(
         }
       : null,
     watch,
+    library: {
+      integration: {
+        totals: {
+          items: integrationLibrary.totals.items,
+          pending: integrationLibrary.totals.pending,
+          adopted: integrationLibrary.totals.adopted,
+          rejected: integrationLibrary.totals.rejected,
+        },
+        pendingItems: integrationLibrary.items
+          .filter((item) => item.pending > 0)
+          .slice(0, 10)
+          .map((item) => ({
+            repo: item.repo,
+            total: item.total,
+            projects: item.projects,
+            latestReason: item.latestReason,
+          })),
+      },
+      watch: {
+        totals: {
+          items: watchLibrary.totals.items,
+          pending: watchLibrary.totals.pending,
+          adopted: watchLibrary.totals.adopted,
+          rejected: watchLibrary.totals.rejected,
+        },
+        pendingItems: watchLibrary.items
+          .filter((item) => item.pending > 0)
+          .slice(0, 10)
+          .map((item) => ({
+            repo: item.repo,
+            total: item.total,
+            intents: item.intents,
+            latestReason: item.latestReason,
+          })),
+      },
+      maintainer: {
+        totals: {
+          items: maintainerLibrary.totals.items,
+          pending: maintainerLibrary.totals.pending,
+          adopted: maintainerLibrary.totals.adopted,
+          rejected: maintainerLibrary.totals.rejected,
+        },
+        pendingItems: maintainerLibrary.items
+          .filter((item) => item.pending > 0)
+          .slice(0, 10)
+          .map((item) => ({
+            label: item.label,
+            project: item.project,
+            kind: item.kind,
+            total: item.total,
+            latestDetail: item.latestDetail,
+          })),
+      },
+    },
     history: history.map((entry) => ({
       kind: entry.kind,
       title: entry.title,

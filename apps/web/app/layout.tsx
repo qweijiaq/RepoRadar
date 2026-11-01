@@ -59,6 +59,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <NavLink href="/watch">关注</NavLink>
                 <NavLink href="/collections">收藏</NavLink>
                 <NavLink href="/integrations">接入</NavLink>
+                <NavLink href="/library">建议库</NavLink>
                 <NavLink href="/repos">仓库</NavLink>
                 <NavLink href="/inbox">
                   动态

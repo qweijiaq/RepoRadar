@@ -5,6 +5,7 @@ import {
   findDiscoverabilityReportById,
   findLatestDiscoverabilityReport,
   findRepoByFullName,
+  listDiscoverabilityHistory,
   listOwnedRepos,
 } from '@repo-radar/core'
 import { CopyIntegrationButton } from '@/app/integrations/copy-button'
@@ -35,7 +36,7 @@ export default async function OptimizePage({ params, searchParams }: OptimizePag
   const pool = getPool()
   const access = await resolveRepoAccess(session, currentUser.login)
   const requestedReport = Number(query.report)
-  const [latestReport, selectedReport, dbRepo, githubRepo, owned] = await Promise.all([
+  const [latestReport, selectedReport, dbRepo, githubRepo, owned, scoreHistory] = await Promise.all([
     findLatestDiscoverabilityReport(pool, Number(currentUser.id), fullName),
     Number.isFinite(requestedReport) && requestedReport > 0
       ? findDiscoverabilityReportById(pool, Number(currentUser.id), requestedReport)
@@ -43,11 +44,14 @@ export default async function OptimizePage({ params, searchParams }: OptimizePag
     findRepoByFullName(pool, fullName),
     access.access ? fetchGitHubRepo(fullName, access.access.token) : Promise.resolve(null),
     access.access ? listOwnedRepos(access.access.token) : Promise.resolve([]),
+    listDiscoverabilityHistory(pool, Number(currentUser.id), fullName, 12),
   ])
   const latest = selectedReport ?? latestReport
   const repo = githubRepo ?? dbRepo
   const isPrivate = owned.some((item) => item.fullName.toLowerCase() === fullName.toLowerCase() && item.private)
-  const brief = latest ? buildDiscoverabilityBrief(latest) : ''
+  const brief = latest
+    ? buildDiscoverabilityBrief(latest, { skipApplied: Boolean(latest.appliedAt) })
+    : ''
 
   return (
     <div className="page narrow">
@@ -123,9 +127,21 @@ export default async function OptimizePage({ params, searchParams }: OptimizePag
                 {new Date(latest.generatedAt).toLocaleString('zh-CN')}
                 {latest.model ? ` · ${latest.providerId ? `${latest.providerId} · ` : ''}${latest.model}` : ''}
                 {selectedReport ? ' · 历史版本' : ''}
+                {latest.appliedAt
+                  ? ` · 已应用于 ${new Date(latest.appliedAt).toLocaleString('zh-CN')}`
+                  : ' · 尚未应用'}
               </p>
+              {latest.appliedAt ? (
+                <p className="muted small">
+                  这份报告的建议已写入 GitHub；复制任务书前请确认是否还需要重复执行。
+                </p>
+              ) : null}
             </div>
-            <CopyIntegrationButton text={brief} label="复制优化任务书" className="btn small" />
+            <CopyIntegrationButton
+              text={brief}
+              label={latest.appliedAt ? '复制剩余优化建议' : '复制优化任务书'}
+              className="btn small"
+            />
           </section>
 
           <section className="panel">
@@ -146,6 +162,26 @@ export default async function OptimizePage({ params, searchParams }: OptimizePag
             </ul>
           </section>
 
+          {scoreHistory.length > 1 ? (
+            <section className="panel">
+              <h2>评分历史</h2>
+              <ul className="score-history">
+                {scoreHistory.map((point) => (
+                  <li key={point.id}>
+                    <span className="score-history-date">
+                      {new Date(point.generatedAt).toLocaleDateString('zh-CN')}
+                    </span>
+                    <span className="score-history-bar">
+                      <span style={{ width: `${Math.max(0, Math.min(100, point.score))}%` }} />
+                    </span>
+                    <span className="muted small">{point.score} 分</span>
+                    {point.appliedAt ? <span className="chip verified">已应用</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
           <section className="panel">
             <h2>建议</h2>
             <h3 className="maintain-subhead">新的描述</h3>
@@ -163,18 +199,24 @@ export default async function OptimizePage({ params, searchParams }: OptimizePag
               )}
             </div>
             {latest.report.readmeSuggestions.length > 0 ? (
-              <>
-                <h3 className="maintain-subhead">README 首屏</h3>
+              <details className="collapsible-section" open={latest.report.readmeSuggestions.length <= 3}>
+                <summary className="collapsible-summary">
+                  <span>README 首屏建议</span>
+                  <span className="muted small">{latest.report.readmeSuggestions.length} 条</span>
+                </summary>
                 <ul className="maintain-list">
                   {latest.report.readmeSuggestions.map((suggestion) => (
                     <li key={suggestion}>{suggestion}</li>
                   ))}
                 </ul>
-              </>
+              </details>
             ) : null}
             {latest.report.actions.length > 0 ? (
-              <>
-                <h3 className="maintain-subhead">执行动作</h3>
+              <details className="collapsible-section" open={latest.report.actions.length <= 3}>
+                <summary className="collapsible-summary">
+                  <span>执行动作</span>
+                  <span className="muted small">{latest.report.actions.length} 项</span>
+                </summary>
                 <ul className="growth-actions">
                   {latest.report.actions.map((action) => (
                     <li key={action.title}>
@@ -189,7 +231,7 @@ export default async function OptimizePage({ params, searchParams }: OptimizePag
                     </li>
                   ))}
                 </ul>
-              </>
+              </details>
             ) : null}
             {access.access ? (
               <div className="form-actions">
@@ -208,21 +250,29 @@ export default async function OptimizePage({ params, searchParams }: OptimizePag
 
           {latest.report.problems.length > 0 ? (
             <section className="panel">
-              <h2>主要问题</h2>
-              <ul className="maintain-list">
-                {latest.report.problems.map((problem) => (
-                  <li key={problem}>{problem}</li>
-                ))}
-              </ul>
+              <details className="collapsible-section" open={latest.report.problems.length <= 3}>
+                <summary className="collapsible-summary">
+                  <span>主要问题</span>
+                  <span className="muted small">{latest.report.problems.length} 项</span>
+                </summary>
+                <ul className="maintain-list">
+                  {latest.report.problems.map((problem) => (
+                    <li key={problem}>{problem}</li>
+                  ))}
+                </ul>
+              </details>
               {latest.report.strengths.length > 0 ? (
-                <>
-                  <h3 className="maintain-subhead">可以保留的优势</h3>
+                <details className="collapsible-section" open={latest.report.strengths.length <= 3}>
+                  <summary className="collapsible-summary">
+                    <span>可以保留的优势</span>
+                    <span className="muted small">{latest.report.strengths.length} 项</span>
+                  </summary>
                   <ul className="maintain-list">
                     {latest.report.strengths.map((strength) => (
                       <li key={strength}>{strength}</li>
                     ))}
                   </ul>
-                </>
+                </details>
               ) : null}
             </section>
           ) : null}

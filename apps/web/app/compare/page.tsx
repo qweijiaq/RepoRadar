@@ -1,6 +1,14 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { buildComparisonBrief, findComparisonReportById, findLatestComparisonReport } from '@repo-radar/core'
+import {
+  buildComparisonBrief,
+  findComparisonReportById,
+  findLatestComparisonReport,
+  loadHandledState,
+  loadIntegrationLibrary,
+  type LibraryStatus,
+} from '@repo-radar/core'
+import { enqueueComparisonAction } from '@/app/jobs/enqueue'
 import { CopyIntegrationButton } from '@/app/integrations/copy-button'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
@@ -15,7 +23,7 @@ const EFFORT_LABEL: Record<string, string> = {
 }
 
 interface ComparePageProps {
-  searchParams: Promise<{ project?: string; report?: string }>
+  searchParams: Promise<{ project?: string; report?: string; error?: string }>
 }
 
 export default async function ComparePage({ searchParams }: ComparePageProps) {
@@ -48,12 +56,61 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
     )
   }
 
-  const brief = buildComparisonBrief(latest)
+  const [handled, library] = await Promise.all([
+    loadHandledState(getPool(), Number(currentUser.id)),
+    loadIntegrationLibrary(getPool(), Number(currentUser.id)),
+  ])
+  function candidateStatus(repo: string): LibraryStatus | null {
+    const pair = `${latest!.report.project}|${repo}`.toLowerCase()
+    const outcome = handled.outcomes.get(pair)
+    if (outcome) return outcome
+    const key = `integration:${latest!.report.project}:${repo}`.toLowerCase()
+    if (handled.dismissed.has(key)) return 'rejected'
+    if (handled.done.has(key)) return 'adopted'
+    return null
+  }
+  const remainingCandidates = latest.report.candidates.filter(
+    (candidate) => candidateStatus(candidate.repo) === null,
+  )
+  const recommendedHandled = remainingCandidates.every(
+    (candidate) => candidate.repo !== latest.report.recommendation.repo,
+  )
+  const fallbackRecommendation = remainingCandidates
+    .slice()
+    .sort((left, right) => right.fitScore - left.fitScore)[0]
+  const filteredReport = {
+    ...latest,
+    report: {
+      ...latest.report,
+      candidates: remainingCandidates,
+      recommendation: recommendedHandled && fallbackRecommendation
+        ? {
+            repo: fallbackRecommendation.repo,
+            reason: `原推荐已处理，改选当前未处理候选里匹配度最高的 ${fallbackRecommendation.repo}。`,
+          }
+        : latest.report.recommendation,
+    },
+  }
+  const brief = remainingCandidates.length >= 2 ? buildComparisonBrief(filteredReport) : ''
+  const pickerCandidates = library.items
+    .filter(
+      (item) =>
+        item.pending > 0 &&
+        item.projects.some((itemProject) => itemProject.toLowerCase() === project.toLowerCase()),
+    )
+    .slice(0, 40)
   return (
     <div className="page narrow">
       <p className="muted small">
         <Link href="/integrations">← 返回接入建议</Link>
       </p>
+      {params.error === 'compare-candidates' ? (
+        <div className="notice">至少选择 2 个候选才能生成对比。</div>
+      ) : null}
+      {params.error === 'compare-token' ? (
+        <div className="notice">生成对比需要 GitHub 授权，请重新登录后再试。</div>
+      ) : null}
+      {params.error === 'compare' ? <div className="notice">对比参数不正确。</div> : null}
       <section className="feed-head">
         <div>
           <p className="eyebrow">选型对比</p>
@@ -64,7 +121,15 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
           <Link className="btn small" href="/history?kind=comparison">
             历史生成
           </Link>
-          <CopyIntegrationButton text={brief} label="复制对比给 AI" className="btn small" />
+          {remainingCandidates.length >= 2 ? (
+            <CopyIntegrationButton
+              text={brief}
+              label={`复制对比给 AI（${remainingCandidates.length} 个未处理）`}
+              className="btn small"
+            />
+          ) : (
+            <span className="chip verified">候选都已处理</span>
+          )}
         </div>
       </section>
 
@@ -89,7 +154,19 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
       <section className="panel compare-recommendation">
         <p className="eyebrow">推荐</p>
         <h2>{latest.report.recommendation.repo}</h2>
+        {candidateStatus(latest.report.recommendation.repo) === 'adopted' ? (
+          <span className="chip verified">已接入</span>
+        ) : null}
+        {candidateStatus(latest.report.recommendation.repo) === 'rejected' ? (
+          <span className="chip subtle">不感兴趣</span>
+        ) : null}
         <p className="muted">{latest.report.recommendation.reason}</p>
+        {recommendedHandled && fallbackRecommendation ? (
+          <p className="muted small">
+            原推荐已处理，复制任务书时会改用当前未处理候选里匹配度最高的{' '}
+            {fallbackRecommendation.repo}。
+          </p>
+        ) : null}
       </section>
 
       <div className="compare-grid">
@@ -107,6 +184,12 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
                 {candidate.repo}
               </Link>
               <span className="chip used">{candidate.fitScore}</span>
+              {candidateStatus(candidate.repo) === 'adopted' ? (
+                <span className="chip verified">已接入</span>
+              ) : null}
+              {candidateStatus(candidate.repo) === 'rejected' ? (
+                <span className="chip subtle">不感兴趣</span>
+              ) : null}
             </header>
             <p className="muted small">
               迁移成本：{EFFORT_LABEL[candidate.migrationEffort] ?? candidate.migrationEffort}
@@ -143,6 +226,54 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
           <p className="muted small">迁移成本是初步估算，真正替换前先用目标项目里的小范围 spike 验证。</p>
         </section>
       ) : null}
+
+      <section className="panel">
+        <details className="collapsible-section" open={remainingCandidates.length < 2}>
+          <summary className="collapsible-summary">
+            <span>从建议库换候选重新对比</span>
+            <span className="muted small">{pickerCandidates.length} 个未处理候选</span>
+          </summary>
+          {pickerCandidates.length >= 2 ? (
+            <form action={enqueueComparisonAction} className="compare-picker">
+              <input type="hidden" name="project" value={project} />
+              <input
+                type="hidden"
+                name="returnTo"
+                value={`/compare?project=${encodeURIComponent(project)}`}
+              />
+              <p className="muted small">
+                勾选 2-5 个候选，重新生成一份对比报告。已接入和不感兴趣的候选不会出现在这里。
+              </p>
+              <div className="compare-picker-grid">
+                {pickerCandidates.map((item, index) => (
+                  <label className="compare-picker-item" key={item.repo}>
+                    <input
+                      type="checkbox"
+                      name="repos"
+                      value={item.repo}
+                      defaultChecked={index < 3}
+                    />
+                    <span>{item.repo}</span>
+                    <span className="muted small">
+                      待处理 {item.pending}
+                      {item.total > item.pending ? ` / 历史 ${item.total}` : ''}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="form-actions">
+                <button className="btn solid small" type="submit">
+                  重新生成对比
+                </button>
+              </div>
+            </form>
+          ) : (
+            <p className="muted small">
+              这个项目在建议库里还没有足够的未处理候选，先去接入页生成新的建议。
+            </p>
+          )}
+        </details>
+      </section>
     </div>
   )
 }

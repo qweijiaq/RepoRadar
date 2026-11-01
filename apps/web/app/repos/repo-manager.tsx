@@ -479,6 +479,14 @@ export function RepoManager({ initialRepos }: { initialRepos: ManagedRepo[] }) {
           <p className="small">{initialRepos.length === 0 ? '点击右上角「新建仓库」开始。' : '换个关键词试试。'}</p>
         </div>
       ) : (
+        <details
+          className="collapsible-section repo-list-collapse"
+          open={initialRepos.length <= 10 || Boolean(query.trim())}
+        >
+          <summary className="collapsible-summary">
+            <span>仓库列表</span>
+            <span className="muted small">{filtered.length} 个 · 点击展开或收起</span>
+          </summary>
         <ul className="repo-manage-list">
           {filtered.map((repo) => {
             const checked = selected.has(repo.fullName)
@@ -520,6 +528,7 @@ export function RepoManager({ initialRepos }: { initialRepos: ManagedRepo[] }) {
             )
           })}
         </ul>
+        </details>
       )}
 
       {dialog?.kind === 'create' ? <CreateDialog onClose={() => setDialog(null)} /> : null}

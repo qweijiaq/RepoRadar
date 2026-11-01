@@ -11,6 +11,7 @@ import {
   findLatestMaintainerReport,
   groupByProfileTopic,
   hiddenGemsFromLibrary,
+  isLikelyEnglishDescription,
   listFeedDismissals,
   listFeedImpressions,
   listFeedStatuses,
@@ -19,8 +20,10 @@ import {
   listUserProjects,
   listWatchIntents,
   listWatchMatches,
+  loadConfig,
   loadFeedback,
   loadRecentReleaseRepoNames,
+  loadStoredLlmConfig,
   loadReleaseEvents,
   loadSubscriptions,
   loadUserStars,
@@ -32,6 +35,7 @@ import {
   radarPersona,
   rankForUser,
   risingRepos,
+  translateRepoDescriptions,
   type FeedOpportunity,
   type HiddenGem,
   type OpportunityKind,
@@ -279,7 +283,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
       watch,
       dismissed: dismissedKeys,
       kinds: MODE_OPPORTUNITY_KINDS[radarMode],
-      limit: radarMode === 'explore' ? 2 : 3,
+      limit: radarMode === 'explore' ? 3 : 5,
     })
 
     const activeProjects = projects.filter((project) => project.active)
@@ -303,7 +307,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
           ? projectTopics
           : profileTopics
     ).slice(0, 3)
-    const gemCount = radarMode === 'focus' ? 1 : 3
+    const gemCount = radarMode === 'focus' ? 2 : 4
     const known = new Set(
       [...starred, ...projects.map((project) => project.repoFullName), ...feedback.keys()].map((name) =>
         name.toLowerCase(),
@@ -328,7 +332,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
       maxAgeDays: radarMode === 'new' ? 365 : undefined,
       sort: radarMode === 'new' ? ('fresh' as const) : ('score' as const),
       fresh: Boolean(params.refresh) || hardRefresh,
-      limit: 18,
+      limit: 36,
     }
 
     const searchGems = await discoverHiddenGems(githubToken, gemContext)
@@ -350,6 +354,19 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
     if (gems.length > 0 && gemPoolSize > gems.length) {
       await recordFeedImpressions(pool, userId, gems.map((gem) => gem.repo.fullName))
     }
+    const descriptions = gems
+      .map((gem) => gem.repo.description ?? '')
+      .filter((description) => description.trim().length > 0)
+    if (descriptions.some(isLikelyEnglishDescription)) {
+      const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
+      const translations = await translateRepoDescriptions(descriptions, llm)
+      if (translations.size > 0) {
+        gems = gems.map((gem) => {
+          const translated = translations.get(gem.repo.description ?? '')
+          return translated ? { ...gem, descriptionZh: translated } : gem
+        })
+      }
+    }
   }
 
   const shareSnapshot = JSON.stringify({
@@ -364,7 +381,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
     })),
     gems: gems.map((gem) => ({
       repo: gem.repo.fullName,
-      description: gem.repo.description ?? '',
+      description: gem.descriptionZh ?? gem.repo.description ?? '',
       stars: gem.repo.stars,
       language: gem.repo.language,
       reasons: gem.reasons,
@@ -743,7 +760,12 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                       : '来自维护周报、接入建议和你的关注代理，不是按标签挑仓库。'}
                   </p>
                 </div>
-                <span className="radar-count">{opportunities.length} 条</span>
+                <div className="radar-section-actions">
+                  <span className="radar-count">{opportunities.length} 条</span>
+                  <Link className="btn quiet small" href="/library">
+                    建议库
+                  </Link>
+                </div>
               </div>
               {opportunities.length > 0 ? (
                 <div className="opportunity-grid">
@@ -844,6 +866,9 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                     换一批
                   </Link>
                 ) : null}
+                <Link className="btn quiet small" href="/feed?tab=library">
+                  查看全部候选
+                </Link>
               </div>
             </div>
             {gems.length > 0 ? (
@@ -851,31 +876,54 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                 {gems.map((gem) => (
                   <article className="gem-card" key={gem.repo.fullName}>
                     <div className="gem-head">
-                      <a href={gem.repo.htmlUrl} target="_blank" rel="noreferrer" className="repo-name">
-                        {gem.repo.fullName}
-                      </a>
+                      <div className="gem-title">
+                        <a href={gem.repo.htmlUrl} target="_blank" rel="noreferrer" className="repo-name">
+                          {gem.repo.fullName}
+                        </a>
+                        <span className="gem-source">{gem.source === 'search' ? '刚发现' : '已收录'}</span>
+                      </div>
                       <span className="repo-stars">★ {gem.repo.stars}</span>
                     </div>
-                    <p className="gem-desc">{gem.repo.description || '暂无描述'}</p>
+                    <div className="gem-description">
+                      <p className="gem-desc">
+                        {gem.descriptionZh || gem.repo.description || '暂无描述'}
+                      </p>
+                      {gem.descriptionZh && gem.repo.description ? (
+                        <details className="gem-original">
+                          <summary>查看英文原文</summary>
+                          <p>{gem.repo.description}</p>
+                        </details>
+                      ) : null}
+                    </div>
                     <div className="chips">
-                      {gem.reasons.map((reason) => (
+                      {gem.reasons.slice(0, 3).map((reason) => (
                         <span className="chip used" key={reason}>
                           {reason}
                         </span>
                       ))}
+                      {gem.reasons.length > 3 ? (
+                        <span className="chip subtle">+{gem.reasons.length - 3}</span>
+                      ) : null}
                     </div>
                     <div className="gem-foot">
-                      <span className="muted small">
-                        {gem.repo.language ?? '未知语言'} · {gem.source === 'search' ? '刚发现' : '已收录'}
-                      </span>
+                      <div className="gem-meta-line">
+                        <span>{gem.repo.language ?? '未知语言'}</span>
+                        <FeedDismissButton
+                          itemKey={`gem:${gem.repo.fullName}`}
+                          kind="gem"
+                          returnTo={returnTo}
+                          triggerClassName="link-button gem-dismiss-link"
+                          label="不感兴趣"
+                        />
+                      </div>
                       <div className="gem-actions">
                         {gem.source === 'library' ? (
-                          <Link className="btn quiet small" href={`/r/${gem.repo.fullName}`}>
+                          <Link className="btn small" href={`/r/${gem.repo.fullName}`}>
                             详情
                           </Link>
                         ) : (
                           <a
-                            className="btn quiet small"
+                            className="btn small"
                             href={gem.repo.htmlUrl}
                             target="_blank"
                             rel="noreferrer"
@@ -883,11 +931,6 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                             GitHub
                           </a>
                         )}
-                        <FeedDismissButton
-                          itemKey={`gem:${gem.repo.fullName}`}
-                          kind="gem"
-                          returnTo={returnTo}
-                        />
                         <form action={markFeedItemDoneAction} className="inline-form">
                           <input type="hidden" name="itemKey" value={`gem:${gem.repo.fullName}`} />
                           <input type="hidden" name="kind" value="gem" />

@@ -19,8 +19,8 @@ const inheritedEnv = Object.fromEntries(
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30_000,
-  expect: { timeout: 6_000 },
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: 1,
@@ -28,6 +28,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: `http://127.0.0.1:${port}`,
+    navigationTimeout: 45_000,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

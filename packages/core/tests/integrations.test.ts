@@ -210,7 +210,7 @@ describe('buildDiscoveryQueries', () => {
     expect(queries[0]).toContain('topic:web')
     expect(queries[0]).toContain('language:TypeScript')
     expect(queries[0]).toContain('pushed:>=2026-05-03')
-    expect(queries[0]).toContain('stars:>=100')
+    expect(queries[0]).toContain('stars:>=50')
   })
 
   it('deduplicates topics across projects and caps queries', () => {

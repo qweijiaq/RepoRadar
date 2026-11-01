@@ -12,7 +12,8 @@ RepoRadar watches GitHub and turns noisy project lists into decisions: what dese
 - **Evidence, not just lists** — every recommendation carries repo metadata, activity signals and an LLM-written explanation. High-scoring projects can be built in a Docker sandbox with logs kept as evidence.
 - **Weekly intelligence** — generates a narrative digest of what changed, why it matters and what to try next.
 - **Maintainer reports** — analyzes your repositories' health, open issues/PRs and outdated dependencies.
-- **Integration suggestions** — given a project you maintain, finds libraries that fill a real gap, with copy-ready briefs for an AI coding agent.
+- **Integration suggestions** — given a project you maintain, finds libraries that fill a real gap, with copy-ready briefs for an AI coding agent. Up to five projects and five suggestions per project are analyzed per run.
+- **Recommendation library** — `/library` aggregates every historical recommendation by repository with adoption, rejection and pending counts, instead of forcing you to re-read old reports.
 - **Watch intents** — describe what you are looking for in one sentence; the AI matches it against a curated pool.
 - **Repository management** — batch create, edit and delete your GitHub repositories (requires elevated OAuth scope).
 - **Partner chat** — a Copilot that has read your projects, reports and watch intents. Renders Markdown, supports copy and regenerate.

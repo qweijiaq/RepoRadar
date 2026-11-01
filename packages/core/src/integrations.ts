@@ -50,7 +50,7 @@ export const integrationProjectSchema = z.object({
 })
 
 export const integrationReportSchema = z.object({
-  projects: z.array(integrationProjectSchema).min(1).max(3),
+  projects: z.array(integrationProjectSchema).min(1).max(5),
 })
 
 export type IntegrationSuggestion = z.infer<typeof integrationSuggestionSchema>
@@ -70,16 +70,18 @@ export interface StoredIntegrationReport {
 }
 
 const SYSTEM_PROMPT = `你是资深架构师兼开源选型顾问。用户会给出他正在维护的项目（README、依赖、元数据）和候选开源仓库列表。
-任务：对每个项目，先找出 2-4 个能力缺口或可优化点，然后只从候选列表中挑选 1-4 个可以接入的项目。
+任务：对每个项目，先找出 3-5 个能力缺口或可优化点，然后只从候选列表中挑选 2-5 个可以接入的项目。
 
 分类规则：
 - missing：当前项目没有这项能力，接入候选可以补足。
 - optimize：当前项目已有类似能力，但候选更成熟/更活跃/更合适，可以替换或优化。
 - 如果候选的 alreadyUsed=true，说明项目依赖里已经有它，只能作为 optimize（升级/替换）建议，不要当作 missing。
 - 不要推荐项目自身。
-- reason 要具体说明补足了什么缺口，或替代/优化了什么。
+- 不要推荐 awesome-list、教程、清单、合集类仓库；优先中小型、维护活跃、可以真正接入的库。
+- reason 要具体说明当前项目缺什么、候选补了什么，不要泛泛而谈。
 - steps 给出 1-3 条可执行的接入步骤（安装、替换位置、配置方式），要具体。
-- 每个项目最多 3 条建议，每条 steps 最多 2 条，内容尽量精简。
+- 每个项目最多 5 条建议，每条 steps 最多 3 条，内容尽量精简。
+- 建议尽量覆盖不同方向，不要用 5 个同类库凑数；没有足够合适的候选就少给。
 - 只能引用候选列表中的仓库全名，不得编造。
 
 只输出一个合法 JSON 对象，不要 Markdown 围栏、不要解释、不要输出思考过程：
@@ -167,14 +169,16 @@ function relaxReport(value: unknown): unknown {
 
   return {
     ...record,
-    projects: record.projects.map((project) => {
+    projects: record.projects.slice(0, 5).map((project) => {
       if (typeof project !== 'object' || project === null) return project
       const entry = project as Record<string, unknown>
       const gaps = Array.isArray(entry.gaps)
         ? entry.gaps.filter((gap) => typeof gap === 'string' && gap.length >= 2 && gap.length <= 160)
         : []
       const suggestions = Array.isArray(entry.suggestions)
-        ? entry.suggestions.filter((suggestion) => integrationSuggestionSchema.safeParse(suggestion).success)
+        ? entry.suggestions
+            .filter((suggestion) => integrationSuggestionSchema.safeParse(suggestion).success)
+            .slice(0, 5)
         : []
       return { ...entry, gaps, suggestions }
     }),
@@ -320,7 +324,7 @@ export async function generateIntegrationReport(
     { role: 'user' as const, content: userPrompt },
   ]
 
-  let raw = await chatCompletion(llm, messages, { temperature: 0.4, maxTokens: 6000, jsonMode: true })
+  let raw = await chatCompletion(llm, messages, { temperature: 0.4, maxTokens: 8000, jsonMode: true })
   let report: IntegrationReport | null = null
 
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -341,7 +345,7 @@ export async function generateIntegrationReport(
           { role: 'system', content: SYSTEM_PROMPT },
           {
             role: 'user',
-            content: `${userPrompt}\n\n上一次输出不是合法 JSON。请只输出一个合法 JSON 对象，不要 Markdown 围栏或解释；每个项目最多 3 条建议，每条 steps 最多 2 条，内容尽量精简。`,
+            content: `${userPrompt}\n\n上一次输出不是合法 JSON。请只输出一个合法 JSON 对象，不要 Markdown 围栏或解释；每个项目最多 5 条建议，每条 steps 最多 3 条，内容尽量精简。`,
           },
         ],
         { temperature: 0.2, maxTokens: 8000, jsonMode: true },
@@ -367,13 +371,13 @@ export function buildDiscoveryQueries(
   projects: IntegrationProjectInput[],
   options: { minStars?: number; days?: number; maxQueries?: number; now?: Date } = {},
 ): string[] {
-  const minStars = options.minStars ?? 100
+  const minStars = options.minStars ?? 50
   const days = options.days ?? 180
   const since = new Date((options.now ?? new Date()).getTime() - days * DAY_MS).toISOString().slice(0, 10)
   const queries = new Set<string>()
 
   for (const project of projects) {
-    for (const topic of project.topics.slice(0, 2)) {
+    for (const topic of project.topics.slice(0, 4)) {
       const language = project.language ? ` language:${project.language}` : ''
       queries.add(
         `topic:${topic}${language} stars:>=${minStars} pushed:>=${since} archived:false fork:false`,
@@ -381,7 +385,7 @@ export function buildDiscoveryQueries(
     }
   }
 
-  return [...queries].slice(0, options.maxQueries ?? 6)
+  return [...queries].slice(0, options.maxQueries ?? 10)
 }
 
 export function isDependencyUsed(repoFullName: string, dependencies: string[]): boolean {

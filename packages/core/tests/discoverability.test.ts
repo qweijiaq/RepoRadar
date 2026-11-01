@@ -55,3 +55,22 @@ describe('buildDiscoverabilityBrief', () => {
     expect(brief).toContain('不要夸大或编造功能')
   })
 })
+
+
+describe('buildDiscoverabilityBrief applied state', () => {
+  it('omits applied description and topics from the remaining-work brief', () => {
+    const brief = buildDiscoverabilityBrief(
+      {
+        report,
+        repo: 'me/app',
+        generatedAt: '2026-10-31T00:00:00Z',
+        appliedAt: '2026-11-01T00:00:00Z',
+      },
+      { skipApplied: true },
+    )
+    expect(brief).not.toContain('## 建议的新描述')
+    expect(brief).not.toContain('## 建议 Topics')
+    expect(brief).toContain('已应用内容')
+    expect(brief).toContain('README 首屏建议')
+  })
+})

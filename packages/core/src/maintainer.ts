@@ -79,7 +79,7 @@ export const maintainerProjectSchema = z.object({
 })
 
 export const maintainerReportSchema = z.object({
-  projects: z.array(maintainerProjectSchema).min(1).max(3),
+  projects: z.array(maintainerProjectSchema).min(1).max(5),
 })
 
 export type MaintainerDependency = z.infer<typeof maintainerDependencySchema>
@@ -390,7 +390,7 @@ export async function generateMaintainerReport(
     { role: 'user' as const, content: userPrompt },
   ]
 
-  let raw = await chatCompletion(llm, messages, { temperature: 0.3, maxTokens: 7000, jsonMode: true })
+  let raw = await chatCompletion(llm, messages, { temperature: 0.3, maxTokens: 9000, jsonMode: true })
   let report: MaintainerReport | null = null
 
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -414,7 +414,7 @@ export async function generateMaintainerReport(
             content: `${userPrompt}\n\n上一次输出不是合法 JSON。请只输出一个合法 JSON 对象，不要解释；每个项目最多 4 条依赖、6 条 issue/PR，内容精简。`,
           },
         ],
-        { temperature: 0.2, maxTokens: 8000, jsonMode: true },
+        { temperature: 0.2, maxTokens: 9000, jsonMode: true },
       )
     }
   }

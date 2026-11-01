@@ -66,6 +66,12 @@ export default async function PatchPage({ params }: PatchPageProps) {
         </div>
       </section>
 
+      {patch.status !== 'validated' ? (
+        <div className="notice">
+          这个补丁{patch.status === 'failed' ? '验证未通过' : '还是草稿'}。复制、下载或交给 AI 前请先仔细检查 diff 和验证结果。
+        </div>
+      ) : null}
+
       {patch.summary ? (
         <section className="panel">
           <h2>改动说明</h2>

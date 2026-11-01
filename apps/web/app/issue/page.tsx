@@ -4,6 +4,8 @@ import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
 import { findIssueDraft, findLatestIssueDraft } from '@/lib/issue-drafts'
 import { sessionUser } from '@/lib/session'
+import { CopyIntegrationButton } from '@/app/integrations/copy-button'
+import { IssuePreview } from './issue-preview'
 import { GenerateIssueButton } from './generate-button'
 
 export const dynamic = 'force-dynamic'
@@ -49,9 +51,12 @@ export default async function IssuePage({ searchParams }: IssuePageProps) {
             <GenerateIssueButton hasDraft={Boolean(draft)} />
           </form>
           {draft ? (
-            <a className="btn small" href={`/api/issues/${draft.id}`}>
-              下载 HTML
-            </a>
+            <>
+              <CopyIntegrationButton text={draft.markdown} label="复制 Markdown" className="btn quiet small" />
+              <a className="btn small" href={`/api/issues/${draft.id}`}>
+                下载 HTML
+              </a>
+            </>
           ) : null}
         </div>
       </section>
@@ -61,7 +66,7 @@ export default async function IssuePage({ searchParams }: IssuePageProps) {
       ) : null}
 
       {draft ? (
-        <iframe className="issue-preview" title={draft.title} srcDoc={draft.html} sandbox="" />
+        <IssuePreview html={draft.html} title={draft.title} />
       ) : (
         <div className="empty">
           <p>还没有生成过周报。</p>

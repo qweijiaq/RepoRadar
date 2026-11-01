@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { listJobs, recoverStaleJobs, type JobKind, type JobStatus } from '@repo-radar/core'
+import { countActiveJobs, listJobs, recoverStaleJobs, type JobKind, type JobStatus } from '@repo-radar/core'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
@@ -33,7 +33,25 @@ const STATUS_LABEL: Record<JobStatus, string> = {
 }
 
 interface TasksPageProps {
-  searchParams: Promise<{ job?: string; quota?: string }>
+  searchParams: Promise<{ job?: string; quota?: string; status?: string; page?: string }>
+}
+
+const PAGE_SIZE = 20
+const STATUS_FILTERS: Array<{ value: JobStatus | null; label: string }> = [
+  { value: null, label: '全部' },
+  { value: 'queued', label: '排队中' },
+  { value: 'running', label: '运行中' },
+  { value: 'succeeded', label: '已完成' },
+  { value: 'failed', label: '失败' },
+  { value: 'cancelled', label: '已取消' },
+]
+
+function tasksHref(status: JobStatus | null, page: number): string {
+  const params = new URLSearchParams()
+  if (status) params.set('status', status)
+  if (page > 1) params.set('page', String(page))
+  const query = params.toString()
+  return query ? `/tasks?${query}` : '/tasks'
 }
 
 export default async function TasksPage({ searchParams }: TasksPageProps) {
@@ -43,8 +61,21 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
   if (!currentUser) redirect('/login')
 
   await recoverStaleJobs(getPool())
-  const jobs = await listJobs(getPool(), Number(currentUser.id), 40)
-  const active = jobs.filter((job) => job.status === 'queued' || job.status === 'running').length
+  const requestedStatus = params.status as JobStatus | undefined
+  const status = requestedStatus && STATUS_FILTERS.some((item) => item.value === requestedStatus)
+    ? requestedStatus
+    : null
+  const requestedPage = Number.parseInt(params.page ?? '', 10)
+  const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1
+  const [jobsPage, active] = await Promise.all([
+    listJobs(getPool(), Number(currentUser.id), PAGE_SIZE + 1, {
+      offset: (page - 1) * PAGE_SIZE,
+      ...(status ? { status } : {}),
+    }),
+    countActiveJobs(getPool(), Number(currentUser.id)),
+  ])
+  const hasMore = jobsPage.length > PAGE_SIZE
+  const jobs = jobsPage.slice(0, PAGE_SIZE)
   const highlight = Number(params.job)
 
   return (
@@ -62,9 +93,23 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
 
       {params.quota ? <div className="notice">{params.quota}</div> : null}
 
+      <div className="filter-bar">
+        <span className="filter-label">状态</span>
+        {STATUS_FILTERS.map((item) => (
+          <Link
+            key={item.value ?? 'all'}
+            className={status === item.value ? 'chip toggle active' : 'chip toggle'}
+            href={tasksHref(item.value, 1)}
+          >
+            {item.label}
+          </Link>
+        ))}
+        <span className="filter-count">第 {page} 页 · {jobs.length} 条</span>
+      </div>
+
       {jobs.length === 0 ? (
         <div className="empty">
-          <p>还没有后台任务。</p>
+          <p>{status ? '这个状态下还没有任务。' : '还没有后台任务。'}</p>
           <p className="small">在接入、维护、周报、曝光或关注页点击 AI 生成，就会出现在这里。</p>
         </div>
       ) : (
@@ -128,6 +173,22 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
           ))}
         </ul>
       )}
+
+      {page > 1 || hasMore ? (
+        <div className="history-pagination">
+          {page > 1 ? (
+            <Link className="btn small" href={tasksHref(status, page - 1)}>
+              上一页
+            </Link>
+          ) : null}
+          <span className="muted small">第 {page} 页</span>
+          {hasMore ? (
+            <Link className="btn small" href={tasksHref(status, page + 1)}>
+              下一页
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
 
       {active > 0 ? <JobAutoRefresh /> : null}
     </div>

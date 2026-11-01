@@ -7,11 +7,25 @@ import {
   createPool,
   diversifyRanking,
   findEnrichedRepos,
+  filterIntegrationProjects,
+  filterMaintainerReport,
+  findLatestIntegrationReport,
+  findLatestMaintainerReport,
   findLatestVerification,
   findRepoByFullName,
   findUserByLogin,
+  handledRepoNames,
   isValidSubscriptionValue,
   listFeedbackSignals,
+  listWatchIntents,
+  listWatchMatches,
+  loadComparisonLibrary,
+  loadDiscoverabilityLibrary,
+  loadHandledState,
+  loadIntegrationLibrary,
+  loadMaintainerLibrary,
+  loadWatchLibrary,
+  watchMatchHandled,
   loadConfig,
   loadFeedback,
   loadReleaseEvents,
@@ -71,10 +85,15 @@ function createServer(pool: DbPool): McpServer {
 
   async function buildRecommendations(login: string | undefined, limit: number) {
     const user = await resolveUser(login)
-    const repos = await findEnrichedRepos(pool, 500)
-    const feedback = user ? await loadFeedback(pool, user.id) : new Map()
-    const signals = user ? await listFeedbackSignals(pool, user.id) : []
-    const subscriptions = user ? await loadSubscriptions(pool, user.id) : []
+    const [allRepos, feedback, signals, subscriptions, handled] = await Promise.all([
+      findEnrichedRepos(pool, 500),
+      user ? loadFeedback(pool, user.id) : Promise.resolve(new Map()),
+      user ? listFeedbackSignals(pool, user.id) : Promise.resolve([]),
+      user ? loadSubscriptions(pool, user.id) : Promise.resolve([]),
+      user ? loadHandledState(pool, user.id) : Promise.resolve(null),
+    ])
+    const hiddenNames = handled ? handledRepoNames(handled) : new Set<string>()
+    const repos = allRepos.filter((repo) => !hiddenNames.has(repo.fullName.toLowerCase()))
     const context = buildFeedbackContext(feedback, signals)
     const ranked = rankForUser(user?.profile ?? null, repos, Date.now(), context, subscriptions)
     return diversifyRanking(ranked, { limit }).map((repo) => toItem(repo))
@@ -140,6 +159,186 @@ function createServer(pool: DbPool): McpServer {
           baseUrl,
         }),
       )
+    },
+  )
+
+  server.registerTool(
+    'get_recommendation_library',
+    {
+      title: '按库查看历史建议',
+      description: '汇总接入、关注、维护、选型对比或曝光优化的历史建议，并返回处理和未处理数量',
+      inputSchema: {
+        login: z.string().optional(),
+        kind: z.enum(['integration', 'watch', 'maintainer', 'comparison', 'discoverability']),
+        status: z.enum(['pending', 'adopted', 'rejected']).optional(),
+        limit: z.number().int().min(1).max(50).optional(),
+      },
+    },
+    async ({ login, kind, status, limit }) => {
+      const user = await resolveUser(login)
+      if (!user) return errorResult('需要提供 login，或设置 RADAR_MCP_USER 环境变量')
+      const max = limit ?? 20
+      if (kind === 'integration') {
+        const library = await loadIntegrationLibrary(pool, user.id)
+        const items = library.items
+          .filter((item) => !status || item[status] > 0)
+          .slice(0, max)
+          .map((item) => ({
+            repo: item.repo,
+            total: item.total,
+            reports: item.reports,
+            projects: item.projects,
+            adopted: item.adopted,
+            rejected: item.rejected,
+            pending: item.pending,
+            lastSeenAt: item.lastSeenAt,
+            latestReason: item.latestReason,
+          }))
+        return textResult({ kind, totals: library.totals, items })
+      }
+      if (kind === 'watch') {
+        const library = await loadWatchLibrary(pool, user.id)
+        const items = library.items
+          .filter((item) => !status || item[status] > 0)
+          .slice(0, max)
+          .map((item) => ({
+            repo: item.repo,
+            total: item.total,
+            intents: item.intents,
+            adopted: item.adopted,
+            rejected: item.rejected,
+            pending: item.pending,
+            lastSeenAt: item.lastSeenAt,
+            latestReason: item.latestReason,
+          }))
+        return textResult({ kind, totals: library.totals, items })
+      }
+      if (kind === 'maintainer') {
+        const library = await loadMaintainerLibrary(pool, user.id)
+        const items = library.items
+          .filter((item) => !status || item[status] > 0)
+          .slice(0, max)
+          .map((item) => ({
+            label: item.label,
+            project: item.project,
+            type: item.kind,
+            total: item.total,
+            reports: item.reports,
+            adopted: item.adopted,
+            rejected: item.rejected,
+            pending: item.pending,
+            lastSeenAt: item.lastSeenAt,
+            latestDetail: item.latestDetail,
+          }))
+        return textResult({ kind, totals: library.totals, items })
+      }
+      if (kind === 'comparison') {
+        const library = await loadComparisonLibrary(pool, user.id)
+        const items = library.items
+          .filter((item) => !status || item[status] > 0)
+          .slice(0, max)
+          .map((item) => ({
+            repo: item.repo,
+            total: item.total,
+            projects: item.projects,
+            recommended: item.recommended,
+            bestFitScore: item.bestFitScore,
+            adopted: item.adopted,
+            rejected: item.rejected,
+            pending: item.pending,
+            lastSeenAt: item.lastSeenAt,
+          }))
+        return textResult({ kind, totals: library.totals, items })
+      }
+      const library = await loadDiscoverabilityLibrary(pool, user.id)
+      const items = library.items
+        .filter((item) => !status || (status === 'pending' ? item.pending > 0 : status === 'adopted' ? item.applied > 0 : false))
+        .slice(0, max)
+        .map((item) => ({
+          repo: item.repo,
+          reports: item.total,
+          latestScore: item.latestScore,
+          bestScore: item.bestScore,
+          applied: item.applied,
+          pending: item.pending,
+          lastSeenAt: item.lastSeenAt,
+        }))
+      return textResult({ kind, totals: library.totals, items })
+    },
+  )
+
+  server.registerTool(
+    'get_pending_work',
+    {
+      title: '查看未处理的建议和待办',
+      description: '返回未处理的接入建议、维护 Issue/依赖和关注命中，自动排除已接入、忽略和已完成内容',
+      inputSchema: {
+        login: z.string().optional(),
+        limit: z.number().int().min(1).max(50).optional(),
+      },
+    },
+    async ({ login, limit }) => {
+      const user = await resolveUser(login)
+      if (!user) return errorResult('需要提供 login，或设置 RADAR_MCP_USER 环境变量')
+      const max = limit ?? 20
+      const [handled, integration, maintainer, intents] = await Promise.all([
+        loadHandledState(pool, user.id),
+        findLatestIntegrationReport(pool, user.id),
+        findLatestMaintainerReport(pool, user.id),
+        listWatchIntents(pool, user.id),
+      ])
+      const integrationItems = integration
+        ? filterIntegrationProjects(integration.report.projects, handled).flatMap((project) =>
+            project.suggestions.map((suggestion) => ({
+              project: project.repo,
+              repo: suggestion.repo,
+              kind: suggestion.kind,
+              reason: suggestion.reason,
+            })),
+          )
+        : []
+      const maintainerProjects = maintainer
+        ? filterMaintainerReport(maintainer.report, handled).projects
+        : []
+      const watch = await Promise.all(
+        intents
+          .filter((intent) => intent.active)
+          .slice(0, 5)
+          .map(async (intent) => ({
+            intent: intent.text,
+            matches: (await listWatchMatches(pool, intent.id, 10))
+              .filter((match) => !watchMatchHandled(intent.id, match.repo, handled))
+              .slice(0, 5)
+              .map((match) => ({ repo: match.repo, score: match.score, reason: match.reason })),
+          })),
+      )
+      return textResult({
+        integration: integrationItems.slice(0, max),
+        maintainer: maintainerProjects
+          .filter((project) => project.items.length > 0 || project.dependencies.length > 0)
+          .map((project) => ({
+            repo: project.repo,
+            items: project.items.map((item) => ({
+              kind: item.kind,
+              number: item.number,
+              title: item.title,
+              priority: item.priority,
+            })),
+            dependencies: project.dependencies.map((dependency) => ({
+              name: dependency.name,
+              current: dependency.current,
+              latest: dependency.latest,
+              risk: dependency.risk,
+            })),
+          }))
+          .slice(0, max),
+        watch,
+        handledCounts: {
+          dismissed: handled.dismissed.size,
+          done: handled.done.size,
+          outcomes: handled.outcomes.size,
+        },
+      })
     },
   )
 

@@ -40,7 +40,7 @@ export const comparisonReportSchema = z.object({
     repo: z.string().min(3).max(120),
     reason: z.string().min(4).max(300),
   }),
-  candidates: z.array(comparisonCandidateSchema).min(2).max(4),
+  candidates: z.array(comparisonCandidateSchema).min(2).max(5),
   nextSteps: z.array(z.string().min(2).max(200)).max(5).default([]),
 })
 
@@ -55,7 +55,7 @@ export interface StoredComparisonReport {
   candidateRepos?: string[]
 }
 
-const SYSTEM_PROMPT = `你是技术选型顾问。用户会给出一个正在维护的项目（README、依赖、技术栈）和 2-4 个候选开源项目。
+const SYSTEM_PROMPT = `你是技术选型顾问。用户会给出一个正在维护的项目（README、依赖、技术栈）和 2-5 个候选开源项目。
 请做一份证据导向的对比，帮助用户决定接哪个、是否值得替换现有方案。
 
 规则：

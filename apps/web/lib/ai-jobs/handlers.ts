@@ -3,6 +3,11 @@ import {
   buildDiscoveryQueries,
   buildFeedbackContext,
   checkProjectDependencies,
+  diversifyRanking,
+  deriveWatchSearchQueries,
+  filterIntegrationProjects,
+  loadHandledState,
+  watchMatchHandled,
   fetchIssueContext,
   fetchMaintainerSnapshot,
   enrichPendingRepos,
@@ -23,8 +28,8 @@ import {
   generateMaintainerReport,
   generatePatch,
   generateWatchMatches,
+  GitHubApiError,
   isDependencyUsed,
-  listFeedStatuses,
   listFeedbackSignals,
   listIntegrationOutcomes,
   listUserGithubTokens,
@@ -79,18 +84,27 @@ function sleep(ms: number): Promise<void> {
 
 async function integrationJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
   const llm = await loadLlm(pool)
-  const token = decryptJobToken(job.payload.token)
+  let token = decryptJobToken(job.payload.token)
+  if (!token) {
+    const stored = await listUserGithubTokens(pool)
+    token = stored.find((entry) => entry.userId === userId)?.token ?? stored[0]?.token ?? null
+  }
   const focus = job.payload.focus ?? null
 
   const projects = await listUserProjects(pool, userId)
   let selected = projects.filter((project) => project.active)
   let auto = false
   if (selected.length === 0) {
-    selected = projects.filter((project) => project.source === 'owned').slice(0, 3)
+    selected = projects.filter((project) => project.source === 'owned').slice(0, 5)
     auto = selected.length > 0
   }
   if (selected.length === 0) throw new Error('还没有可分析的项目')
-  selected = selected.slice(0, 3)
+  selected = [...selected]
+    .sort(
+      (left, right) =>
+        Date.parse(right.lastPushedAt ?? '') - Date.parse(left.lastPushedAt ?? ''),
+    )
+    .slice(0, 5)
 
   await progress('读取项目上下文…')
   const contexts = await Promise.all(selected.map((project) => loadProjectContext(project.repoFullName, token)))
@@ -111,19 +125,24 @@ async function integrationJob(pool: DbPool, userId: number, job: JobRecord, prog
     Date.now(),
     buildFeedbackContext(feedback, signals),
     subscriptions,
-  ).slice(0, 40)
-
+  )
+  const diverse = diversifyRanking(ranked, { limit: 70, maxPerTopic: 4, maxPerLanguage: 30 })
+  const diverseNames = new Set(diverse.map((repo) => repo.fullName))
+  const verifiedExtras = ranked
+    .filter((repo) => repo.verifyStatus === 'verified' && !diverseNames.has(repo.fullName))
+    .slice(0, 20)
   const candidateMap = new Map<string, ReturnType<typeof buildIntegrationCandidate>>()
-  for (const repo of ranked) {
+  for (const repo of [...diverse, ...verifiedExtras]) {
     candidateMap.set(repo.fullName, buildIntegrationCandidate(repo, dependencies))
   }
 
+  let tokenInvalid = false
   if (token) {
     await progress('搜索可作为补充的候选…')
     for (const query of buildDiscoveryQueries(contexts)) {
-      if (candidateMap.size >= 60) break
+      if (candidateMap.size >= 100) break
       try {
-        const found = await searchRepos(query, { token, perPage: 10 })
+        const found = await searchRepos(query, { token, perPage: 20 })
         for (const repo of found) {
           if (projectNames.has(repo.fullName) || candidateMap.has(repo.fullName)) continue
           await upsertRepo(pool, repo)
@@ -137,9 +156,10 @@ async function integrationJob(pool: DbPool, userId: number, job: JobRecord, prog
             reason: 'GitHub 搜索发现',
             alreadyUsed: isDependencyUsed(repo.fullName, dependencies),
           })
-          if (candidateMap.size >= 60) break
+          if (candidateMap.size >= 100) break
         }
       } catch (error) {
+        if (error instanceof GitHubApiError && error.status === 401) tokenInvalid = true
         console.error('[job:integration] 候选搜索失败：', error)
       }
       await sleep(350)
@@ -164,7 +184,9 @@ async function integrationJob(pool: DbPool, userId: number, job: JobRecord, prog
   await addNotification(pool, userId, {
     kind: 'integration',
     title: '接入建议已生成',
-    body: report.projects.map((project) => project.repo).join('、'),
+    body: `${report.projects.map((project) => project.repo).join('、')}${
+      tokenInvalid ? '（GitHub 授权已失效，本轮未使用实时搜索，请重新登录）' : ''
+    }`,
     url: `/integrations?report=${reportId}`,
   })
   return { href: `/integrations?report=${reportId}`, label: '查看接入建议' }
@@ -195,11 +217,13 @@ function buildIntegrationCandidate(
 async function maintainerJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
   const llm = await loadLlm(pool)
   const token = requireToken(job)
-  const completed = new Set((await listFeedStatuses(pool, userId)).map((status) => status.key))
+  const handled = await loadHandledState(pool, userId)
+  const isBlocked = (key: string) =>
+    handled.done.has(key.toLowerCase()) || handled.dismissed.has(key.toLowerCase())
   const projects = await listUserProjects(pool, userId)
   let selected = projects.filter((project) => project.active)
   if (selected.length === 0) selected = projects.filter((project) => project.source === 'owned')
-  selected = selected.slice(0, 3)
+  selected = selected.slice(0, 5)
   if (selected.length === 0) throw new Error('还没有可分析的项目')
 
   const inputs = []
@@ -230,7 +254,7 @@ async function maintainerJob(pool: DbPool, userId: number, job: JobRecord, progr
       manifest: context.manifest,
       dependencies: dependencies.items.filter(
         (dependency) =>
-          !completed.has(
+          !isBlocked(
             `dependency:${project.repoFullName}:${dependency.name}:${dependency.latest ?? 'unknown'}`,
           ),
       ),
@@ -242,7 +266,8 @@ async function maintainerJob(pool: DbPool, userId: number, job: JobRecord, progr
           /pytest|vitest|jest/i.test(context.manifest ?? ''),
       },
       items: snapshot.items.filter(
-        (item) => !completed.has(`maintainer:${project.repoFullName}:${item.kind}:${item.number}`),
+        (item) =>
+          !isBlocked(`maintainer:${project.repoFullName}:${item.kind}:${item.number}`),
       ),
     })
   }
@@ -335,18 +360,40 @@ async function comparisonJob(pool: DbPool, userId: number, job: JobRecord, progr
   const project = job.payload.project?.trim()
   if (!project) throw new Error('缺少项目参数')
   await progress('读取项目与候选…')
-  const latest = await findLatestIntegrationReport(pool, userId)
-  const projectReport = latest?.report.projects.find(
-    (item) => item.repo.toLowerCase() === project.toLowerCase(),
-  )
-  const suggestionRepos = [
-    ...new Set(projectReport?.suggestions.map((suggestion) => suggestion.repo) ?? []),
-  ]
-  if (suggestionRepos.length < 2) throw new Error('对比至少需要 2 个候选')
+  const handled = await loadHandledState(pool, userId)
+  const blockedCandidate = (repo: string) => {
+    const pair = `${project}|${repo}`.toLowerCase()
+    if (handled.outcomes.has(pair)) return true
+    const key = `integration:${project}:${repo}`.toLowerCase()
+    return handled.done.has(key) || handled.dismissed.has(key)
+  }
+  const explicit = [...new Set(job.payload.candidates ?? [])]
+    .filter((repo) => !blockedCandidate(repo))
+    .slice(0, 5)
+  let suggestionRepos: string[] = explicit
+  if (suggestionRepos.length < 2) {
+    const latest = await findLatestIntegrationReport(pool, userId)
+    const filtered = latest
+      ? {
+          ...latest,
+          report: {
+            ...latest.report,
+            projects: filterIntegrationProjects(latest.report.projects, handled),
+          },
+        }
+      : null
+    const projectReport = filtered?.report.projects.find(
+      (item) => item.repo.toLowerCase() === project.toLowerCase(),
+    )
+    suggestionRepos = [
+      ...new Set(projectReport?.suggestions.map((suggestion) => suggestion.repo) ?? []),
+    ].slice(0, 5)
+  }
+  if (suggestionRepos.length < 2) throw new Error('对比至少需要 2 个候选，请先在建议库选择')
 
   const context = await loadProjectContext(project, token)
   const candidates = []
-  for (const repo of suggestionRepos.slice(0, 3)) {
+  for (const repo of suggestionRepos.slice(0, 5)) {
     const candidateContext = await loadProjectContext(repo, token)
     const record = await findRepoByFullName(pool, repo)
     candidates.push({
@@ -578,26 +625,71 @@ async function upgradeJob(pool: DbPool, userId: number, job: JobRecord, progress
   }
 }
 
-async function watchJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {  const llm = await loadLlm(pool)
+async function watchJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const llm = await loadLlm(pool)
   const intentId = Number(job.payload.intentId)
   if (!Number.isFinite(intentId)) throw new Error('缺少关注意图')
   const intent = await findWatchIntent(pool, userId, intentId)
   if (!intent) throw new Error('关注意图不存在')
+  let token = decryptJobToken(job.payload.token)
+  if (!token) {
+    const stored = await listUserGithubTokens(pool)
+    token = stored.find((entry) => entry.userId === userId)?.token ?? stored[0]?.token ?? null
+  }
   await progress('从候选池筛选匹配…')
-  const repos = await findEnrichedRepos(pool, 120)
-  const candidates = repos.map((repo) => ({
-    repo: repo.fullName,
-    summary: (repo.summary ?? repo.description ?? '').slice(0, 180),
-    language: repo.language,
-    topics: repo.topics,
-    stars: repo.stars,
-  }))
+  const repos = await findEnrichedRepos(pool, 140)
+  const candidateMap = new Map(
+    repos.map((repo) => [
+      repo.fullName.toLowerCase(),
+      {
+        repo: repo.fullName,
+        summary: (repo.summary ?? repo.description ?? '').slice(0, 120),
+        language: repo.language,
+        topics: repo.topics,
+        stars: repo.stars,
+      },
+    ]),
+  )
+
+  if (token) {
+    await progress('提取关键词并搜索 GitHub…')
+    const queries = await deriveWatchSearchQueries(intent.text, llm)
+    const since = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10)
+    for (const query of queries) {
+      if (candidateMap.size >= 160) break
+      try {
+        const found = await searchRepos(
+          `${query} stars:>=50 pushed:>=${since} archived:false fork:false`,
+          { token, perPage: 10 },
+        )
+        for (const repo of found) {
+          if (candidateMap.has(repo.fullName.toLowerCase())) continue
+          await upsertRepo(pool, repo)
+          candidateMap.set(repo.fullName.toLowerCase(), {
+            repo: repo.fullName,
+            summary: (repo.description ?? '').slice(0, 120),
+            language: repo.language,
+            topics: repo.topics,
+            stars: repo.stars,
+          })
+          if (candidateMap.size >= 160) break
+        }
+      } catch (error) {
+        if (!(error instanceof GitHubApiError && error.status === 401)) {
+          console.error('[job:watch] GitHub 搜索失败：', error)
+        }
+      }
+      await sleep(300)
+    }
+  }
+
+  const candidates = [...candidateMap.values()]
   if (candidates.length === 0) throw new Error('候选池为空，请先运行采集和富化')
   await progress('模型判断匹配度…')
   const matches = await generateWatchMatches(intent.text, candidates, llm)
-  const completed = new Set((await listFeedStatuses(pool, userId)).map((status) => status.key))
+  const handled = await loadHandledState(pool, userId)
   const activeMatches = matches.filter(
-    (match) => !completed.has(`watch:${intent.id}:${match.repo}`),
+    (match) => !watchMatchHandled(intent.id, match.repo, handled),
   )
   await saveWatchMatches(pool, intent.id, activeMatches)
   await saveWatchRun(pool, intent.id, {

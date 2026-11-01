@@ -24,6 +24,7 @@ const ACTIONS: CommandItem[] = [
   { key: 'issue', label: '周报', hint: '生成或查看周报', href: '/issue' },
   { key: 'collections', label: '收藏集', hint: '你的收藏', href: '/collections' },
   { key: 'inbox', label: '收件箱', hint: '版本更新与动态', href: '/inbox' },
+  { key: 'library', label: '建议库', hint: '历史推荐按库汇总', href: '/library' },
   { key: 'settings', label: '设置', hint: '模型与口味', href: '/settings' },
 ]
 

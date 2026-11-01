@@ -5,6 +5,7 @@ import {
   findRepoByFullName,
   findSimilarRepos,
   listCollections,
+  loadHandledState,
   loadReleaseHistory,
   loadStarHistory,
   loadUserStars,
@@ -63,11 +64,28 @@ export default async function RepoPage({ params }: RepoPageProps) {
   let nearest: { repo: EnrichedRepoRecord; similarity: number } | null = null
   let collections: CollectionRecord[] = []
 
+  let adoptedProjects: string[] = []
+  let rejectedProjects: string[] = []
+  let markHandled = false
   if (currentUser) {
     starred = await loadUserStars(pool, Number(currentUser.id))
     const starredRepos = allRepos.filter((item) => starred.has(item.fullName))
     nearest = findSimilarRepos(repo, starredRepos, 1)[0] ?? null
-    collections = await listCollections(pool, Number(currentUser.id))
+    const [userCollections, handled] = await Promise.all([
+      listCollections(pool, Number(currentUser.id)),
+      loadHandledState(pool, Number(currentUser.id)),
+    ])
+    collections = userCollections
+    const repoKey = repo.fullName.toLowerCase()
+    for (const [pair, status] of handled.outcomes) {
+      if (!pair.endsWith(`|${repoKey}`)) continue
+      const project = pair.slice(0, pair.lastIndexOf('|'))
+      if (status === 'adopted') adoptedProjects.push(project)
+      else rejectedProjects.push(project)
+    }
+    markHandled =
+      handled.done.has(`gem:${repoKey}`) ||
+      [...handled.done].some((key) => key.startsWith('watch:') && key.endsWith(`:${repoKey}`))
   }
 
   return (
@@ -75,6 +93,15 @@ export default async function RepoPage({ params }: RepoPageProps) {
       <p className="breadcrumb">
         <Link href="/feed">← 返回雷达</Link>
       </p>
+
+      <nav className="repo-detail-toc" aria-label="仓库详情导航">
+        <a href="#about">这是什么</a>
+        <a href="#trend">star 走势</a>
+        <a href="#releases">版本</a>
+        <a href="#similar">同类项目</a>
+        {currentUser ? <a href="#relation">和你的关系</a> : null}
+        <a href="#verification">验证</a>
+      </nav>
 
       <article className="repo-detail">
         <header className="repo-detail-head">
@@ -88,7 +115,7 @@ export default async function RepoPage({ params }: RepoPageProps) {
           </div>
         </header>
 
-        <section className="panel">
+        <section className="panel" id="about">
           <h2>这是什么</h2>
           <p>{repo.summary ?? repo.description ?? '暂无摘要'}</p>
           {repo.problem ? (
@@ -111,12 +138,12 @@ export default async function RepoPage({ params }: RepoPageProps) {
           ) : null}
         </section>
 
-        <section className="panel">
+        <section className="panel" id="trend">
           <h2>star 走势（30 天）</h2>
           <StarChart points={history} />
         </section>
 
-        <section className="panel">
+        <section className="panel" id="releases">
           <h2>版本时间线</h2>
           {releases.length > 0 ? (
             <ul className="timeline">
@@ -144,7 +171,7 @@ export default async function RepoPage({ params }: RepoPageProps) {
         </section>
 
         {similar.length > 0 ? (
-          <section className="panel">
+          <section className="panel" id="similar">
             <h2>同类项目</h2>
             <ul className="similar-list">
               {similar.map(({ repo: item, similarity }) => (
@@ -161,7 +188,7 @@ export default async function RepoPage({ params }: RepoPageProps) {
         ) : null}
 
         {currentUser ? (
-          <section className="panel">
+          <section className="panel" id="relation">
             <h2>和你的关系</h2>
             <p className="muted small">
               {starred.has(repo.fullName) ? '你已经 star 过这个项目。' : '你还没有 star 过这个项目。'}
@@ -169,6 +196,19 @@ export default async function RepoPage({ params }: RepoPageProps) {
                 ? `它和你 star 过的 ${nearest.repo.fullName} 最相似（${Math.round(nearest.similarity * 100)}%）。`
                 : ''}
             </p>
+            <div className="chips">
+              {adoptedProjects.length > 0 ? (
+                <span className="chip verified">
+                  已接入 {adoptedProjects.length} 个项目
+                </span>
+              ) : null}
+              {rejectedProjects.length > 0 ? (
+                <span className="chip subtle">
+                  不感兴趣 {rejectedProjects.length} 个项目
+                </span>
+              ) : null}
+              {markHandled ? <span className="chip used">你已标记过这个项目</span> : null}
+            </div>
           </section>
         ) : null}
 
@@ -199,7 +239,7 @@ export default async function RepoPage({ params }: RepoPageProps) {
           </section>
         ) : null}
 
-        <section className="panel">
+        <section className="panel" id="verification">
           <h2>验证状态</h2>
           {latestVerification ? (
             <>

@@ -161,7 +161,7 @@ async function scheduledWeeklyDigest(): Promise<void> {
       if (!resolveNotificationEmail(user)) continue
       try {
         const siteUrl = await resolveBaseUrl(pool)
-        const digest = await buildWeeklyDigest(pool, user, { baseUrl: siteUrl, limit: 8 })
+        const digest = await buildWeeklyDigest(pool, user, { baseUrl: siteUrl, limit: 10 })
         if (digest.items.length === 0) continue
         const queued = await enqueueWeeklyDigest(pool, {
           userId: user.id,

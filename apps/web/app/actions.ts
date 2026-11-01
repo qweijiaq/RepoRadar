@@ -8,6 +8,7 @@ import {
   buildDiscoveryQueries,
   buildFeedbackContext,
   chatCompletion,
+  clearIntegrationOutcome,
   clearMailConfig,
   clearOpsConfig,
   clearQuotaConfig,
@@ -684,7 +685,25 @@ export async function setIntegrationOutcomeAction(formData: FormData): Promise<v
 
   await setIntegrationOutcome(getPool(), Number(currentUser.id), project, repo, status)
   revalidatePath('/integrations')
-  redirect('/integrations')
+  revalidatePath('/library')
+  const requested = String(formData.get('returnTo') ?? '')
+  redirect(requested.startsWith('/integrations') ? requested : '/integrations')
+}
+
+export async function clearIntegrationOutcomeAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+
+  const project = String(formData.get('project') ?? '').trim()
+  const repo = String(formData.get('repo') ?? '').trim()
+  if (!project || !repo) redirect('/integrations')
+
+  await clearIntegrationOutcome(getPool(), Number(currentUser.id), project, repo)
+  revalidatePath('/integrations')
+  revalidatePath('/library')
+  const requested = String(formData.get('returnTo') ?? '')
+  redirect(requested.startsWith('/integrations') ? requested : '/integrations')
 }
 
 export async function markNotificationReadAction(formData: FormData): Promise<void> {

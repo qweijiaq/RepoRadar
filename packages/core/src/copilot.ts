@@ -39,6 +39,20 @@ export interface CopilotContext {
     intent: string
     matches: Array<{ repo: string; score: number; reason: string }>
   }>
+  library?: {
+    integration: {
+      totals: { items: number; pending: number; adopted: number; rejected: number }
+      pendingItems: Array<{ repo: string; total: number; projects: string[]; latestReason: string }>
+    }
+    watch: {
+      totals: { items: number; pending: number; adopted: number; rejected: number }
+      pendingItems: Array<{ repo: string; total: number; intents: string[]; latestReason: string }>
+    }
+    maintainer: {
+      totals: { items: number; pending: number; adopted: number; rejected: number }
+      pendingItems: Array<{ label: string; project: string; kind: string; total: number; latestDetail: string }>
+    }
+  }
   history: Array<{ kind: string; title: string; createdAt: string }>
 }
 

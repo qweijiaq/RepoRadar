@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import {
+  filterMaintainerReport,
   buildMaintainerBrief,
   findLatestMaintainerReport,
   findMaintainerReportById,
-  listFeedStatuses,
   listUserProjects,
+  loadHandledState,
   type MaintainerItem,
 } from '@repo-radar/core'
 import { auth } from '@/auth'
@@ -44,24 +45,26 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
 
   const pool = getPool()
   const requestedReport = Number(params.report)
-  const [projects, latestReport, access, statuses] = await Promise.all([
+  const [projects, latestReport, access, handled] = await Promise.all([
     listUserProjects(pool, Number(currentUser.id)),
     findLatestMaintainerReport(pool, Number(currentUser.id)),
     resolveRepoAccess(session, currentUser.login),
-    listFeedStatuses(pool, Number(currentUser.id)),
+    loadHandledState(pool, Number(currentUser.id)),
   ])
   const selectedReport =
     Number.isFinite(requestedReport) && requestedReport > 0
       ? await findMaintainerReportById(pool, Number(currentUser.id), requestedReport)
       : null
   const latest = selectedReport ?? latestReport
-  const statusKeys = new Set(statuses.map((status) => status.key))
+  const statusKeys = handled.done
   const returnTo = selectedReport ? `/maintain?report=${params.report}` : '/maintain'
   const activeProjects = projects.filter((project) => project.active)
   const briefMeta = latest
     ? { generatedAt: new Date(latest.generatedAt).toLocaleString('zh-CN'), warnings: latest.warnings }
     : null
-  const allBrief = latest && briefMeta ? buildMaintainerBrief(latest.report, briefMeta) : ''
+  const filteredReport = latest ? filterMaintainerReport(latest.report, handled) : null
+  const allBrief =
+    latest && briefMeta && filteredReport ? buildMaintainerBrief(filteredReport, briefMeta) : ''
 
   return (
     <div className="page">
@@ -133,7 +136,14 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
           </p>
 
           {latest.report.projects.map((project) => {
-            const projectBrief = buildMaintainerBrief({ projects: [project] }, briefMeta ?? {})
+            const filteredProject =
+              filteredReport?.projects.find((item) => item.repo === project.repo) ?? null
+            const projectBrief = filteredProject
+              ? buildMaintainerBrief({ projects: [filteredProject] }, briefMeta ?? {})
+              : ''
+            const pendingWork = filteredProject
+              ? filteredProject.items.length + filteredProject.dependencies.length
+              : 0
             return (
               <article className="integration-card maintain-card" key={project.repo}>
                 <header className="integration-head">
@@ -152,7 +162,14 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
                     >
                       健康分 {project.healthScore}
                     </span>
-                    <CopyIntegrationButton text={projectBrief} label="复制给 AI" />
+                    {projectBrief && pendingWork > 0 ? (
+                      <CopyIntegrationButton
+                        text={projectBrief}
+                        label={`复制给 AI（${pendingWork} 项待处理）`}
+                      />
+                    ) : (
+                      <span className="chip verified">没有待处理项</span>
+                    )}
                   </div>
                 </header>
                 <p className="muted">{project.summary}</p>
@@ -193,7 +210,14 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
 
                 {project.dependencies.length > 0 ? (
                   <section className="maintain-section">
-                    <h3 className="maintain-subhead">依赖升级</h3>
+                    <details
+                      className="collapsible-section"
+                      open={project.dependencies.length <= 3}
+                    >
+                      <summary className="collapsible-summary">
+                        <h3 className="maintain-subhead">依赖升级</h3>
+                        <span className="muted small">{project.dependencies.length} 项</span>
+                      </summary>
                     <ul className="dependency-list">
                       {project.dependencies.map((dependency) => (
                         <li key={dependency.name}>
@@ -209,11 +233,16 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
                               <span className="chip release">安全公告 {dependency.vulnerabilities.length}</span>
                             ) : null}
                             {statusKeys.has(
-                              `dependency:${project.repo}:${dependency.name}:${dependency.latest ?? 'unknown'}`,
+                              `dependency:${project.repo}:${dependency.name}:${dependency.latest ?? 'unknown'}`.toLowerCase(),
                             ) ? (
                               <span className="chip verified">已完成</span>
                             ) : (
                               <>
+                                {handled.dismissed.has(
+                                  `dependency:${project.repo}:${dependency.name}:${dependency.latest ?? 'unknown'}`.toLowerCase(),
+                                ) ? (
+                                  <span className="chip subtle">已忽略</span>
+                                ) : null}
                                 {dependency.latest ? (
                                   <form action={enqueueUpgradeAction} className="inline-form">
                                     <input type="hidden" name="repo" value={project.repo} />
@@ -256,12 +285,20 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
                         </li>
                       ))}
                     </ul>
+                    </details>
                   </section>
                 ) : null}
 
                 {project.items.length > 0 ? (
                   <section className="maintain-section">
-                    <h3 className="maintain-subhead">Issue / PR 待办</h3>
+                    <details
+                      className="collapsible-section"
+                      open={project.items.length <= 3}
+                    >
+                      <summary className="collapsible-summary">
+                        <h3 className="maintain-subhead">Issue / PR 待办</h3>
+                        <span className="muted small">{project.items.length} 项</span>
+                      </summary>
                     {PRIORITIES.map((priority) => {
                       const items = project.items.filter((item) => item.priority === priority.value)
                       if (items.length === 0) return null
@@ -290,10 +327,16 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
                                 ) : null}
                                 <div className="triage-actions">
                                   {statusKeys.has(
-                                    `maintainer:${project.repo}:${item.kind}:${item.number}`,
+                                    `maintainer:${project.repo}:${item.kind}:${item.number}`.toLowerCase(),
                                   ) ? (
                                     <span className="chip verified">已完成</span>
                                   ) : (
+                                    <>
+                                    {handled.dismissed.has(
+                                      `maintainer:${project.repo}:${item.kind}:${item.number}`.toLowerCase(),
+                                    ) ? (
+                                      <span className="chip subtle">已忽略</span>
+                                    ) : null}
                                     <form action={markFeedItemDoneAction} className="triage-action">
                                       <input
                                         type="hidden"
@@ -306,9 +349,10 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
                                         标记完成
                                       </button>
                                     </form>
+                                    </>
                                   )}
                                   {item.kind === 'issue' &&
-                                  !statusKeys.has(`maintainer:${project.repo}:${item.kind}:${item.number}`) ? (
+                                  !statusKeys.has(`maintainer:${project.repo}:${item.kind}:${item.number}`.toLowerCase()) ? (
                                     <form action={enqueueIssuePlanAction} className="triage-action">
                                       <input type="hidden" name="repo" value={project.repo} />
                                       <input type="hidden" name="number" value={item.number} />
@@ -324,6 +368,7 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
                         </div>
                       )
                     })}
+                    </details>
                   </section>
                 ) : null}
               </article>

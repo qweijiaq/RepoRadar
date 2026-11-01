@@ -7,6 +7,7 @@ import {
   fetchReadme,
   findDiscoverabilityReportById,
   findLatestDiscoverabilityReport,
+  markDiscoverabilityApplied,
   generateDiscoverabilityReport,
   loadConfig,
   loadStoredLlmConfig,
@@ -348,6 +349,12 @@ export async function applyDiscoverabilityAction(formData: FormData): Promise<vo
     if (latest.report.suggestedTopics.length > 0) {
       await updateRepositoryTopics(access.access.token, repo, latest.report.suggestedTopics)
     }
+    await markDiscoverabilityApplied(
+      pool,
+      Number(currentUser.id),
+      repo,
+      latest.id ?? (Number.isFinite(requestedReport) ? requestedReport : null),
+    )
   } catch (error) {
     console.error('[discoverability] 应用建议失败：', error)
     redirect(`/repos/${repo}/optimize?error=apply`)

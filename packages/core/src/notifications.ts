@@ -60,16 +60,92 @@ export async function addNotification(
   }
 }
 
-export async function listNotifications(pool: DbPool, userId: number, limit = 50): Promise<NotificationRecord[]> {
+export interface NotificationListOptions {
+  offset?: number
+  unreadOnly?: boolean
+  kinds?: string[]
+  prefixes?: string[]
+  excludeKinds?: string[]
+  excludePrefixes?: string[]
+}
+
+export async function listNotifications(
+  pool: DbPool,
+  userId: number,
+  limit = 50,
+  options: NotificationListOptions = {},
+): Promise<NotificationRecord[]> {
+  const params: unknown[] = [userId]
+  const where = ['user_id = $1']
+  if (options.unreadOnly) where.push('read_at IS NULL')
+  if (options.kinds?.length) {
+    params.push(options.kinds)
+    where.push(`kind = ANY($${params.length}::text[])`)
+  }
+  if (options.prefixes?.length) {
+    params.push(options.prefixes.map((prefix) => `${prefix}%`))
+    where.push(`kind LIKE ANY($${params.length}::text[])`)
+  }
+  if (options.excludeKinds?.length) {
+    params.push(options.excludeKinds)
+    where.push(`NOT (kind = ANY($${params.length}::text[]))`)
+  }
+  if (options.excludePrefixes?.length) {
+    params.push(options.excludePrefixes.map((prefix) => `${prefix}%`))
+    where.push(`NOT (kind LIKE ANY($${params.length}::text[]))`)
+  }
+  params.push(limit, Math.max(0, options.offset ?? 0))
   const { rows } = await pool.query<NotificationRow>(
     `SELECT id, kind, title, body, url, created_at, read_at
      FROM notifications
-     WHERE user_id = $1
+     WHERE ${where.join(' AND ')}
      ORDER BY created_at DESC
-     LIMIT $2`,
-    [userId, limit],
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params,
   )
   return rows.map(mapNotification)
+}
+
+export interface NotificationCounts {
+  total: number
+  unread: number
+  github: number
+  ai: number
+  release: number
+  system: number
+}
+
+export async function loadNotificationCounts(
+  pool: DbPool,
+  userId: number,
+  aiKinds: string[],
+): Promise<NotificationCounts> {
+  const { rows } = await pool.query<{
+    total: string
+    unread: string
+    github: string
+    ai: string
+    release: string
+    system: string
+  }>(
+    `SELECT count(*) AS total,
+       count(*) FILTER (WHERE read_at IS NULL) AS unread,
+       count(*) FILTER (WHERE kind LIKE 'github-%') AS github,
+       count(*) FILTER (WHERE kind = ANY($2::text[])) AS ai,
+       count(*) FILTER (WHERE kind = 'release') AS release,
+       count(*) FILTER (WHERE NOT (kind LIKE 'github-%' OR kind = ANY($2::text[]) OR kind = 'release')) AS system
+     FROM notifications WHERE user_id = $1`,
+    [userId, aiKinds],
+  )
+  const row = rows[0]
+  return {
+    total: Number(row?.total ?? 0),
+    unread: Number(row?.unread ?? 0),
+    github: Number(row?.github ?? 0),
+    ai: Number(row?.ai ?? 0),
+    release: Number(row?.release ?? 0),
+    system: Number(row?.system ?? 0),
+  }
 }
 
 export async function countUnreadNotifications(pool: DbPool, userId: number): Promise<number> {

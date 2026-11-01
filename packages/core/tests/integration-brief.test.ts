@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildIntegrationBrief, buildProjectIntegrationBrief } from '../src/integration-brief.js'
+import {
+  buildIntegrationBrief,
+  buildProjectIntegrationBrief,
+  removeHandledSuggestions,
+} from '../src/integration-brief.js'
 import type { IntegrationProject } from '../src/integrations.js'
 
 const project: IntegrationProject = {
@@ -72,5 +76,21 @@ describe('buildIntegrationBrief', () => {
 
   it('handles an empty report', () => {
     expect(buildIntegrationBrief([])).toContain('暂无可执行的项目建议')
+  })
+})
+
+
+describe('removeHandledSuggestions', () => {
+  it('removes adopted and rejected candidates from the AI brief', () => {
+    const projects = removeHandledSuggestions([project], ['ME/APP|lib/auth'])
+    expect(projects).toHaveLength(1)
+    expect(projects[0]?.suggestions.map((suggestion) => suggestion.repo)).toEqual(['lib/test'])
+    expect(buildIntegrationBrief(projects)).not.toContain('lib/auth')
+  })
+
+  it('drops projects that have no pending suggestions left', () => {
+    const projects = removeHandledSuggestions([project], ['me/app|lib/auth', 'me/app|lib/test'])
+    expect(projects).toEqual([])
+    expect(buildIntegrationBrief(projects)).toContain('暂无可执行的项目建议')
   })
 })

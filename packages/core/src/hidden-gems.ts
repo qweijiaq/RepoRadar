@@ -79,6 +79,8 @@ export interface HiddenGem {
   reasons: string[]
   stars7d: number | null
   source: 'search' | 'library'
+  /** 英文描述的简体中文译文（由页面按需生成） */
+  descriptionZh?: string | null
 }
 
 interface SearchCacheEntry {

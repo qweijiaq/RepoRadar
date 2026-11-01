@@ -49,8 +49,14 @@ function time(value: string): number {
 /**
  * 汇总所有 AI 生成内容。只读，用来确认旧版本仍然存在并回看。
  */
-export async function listHistory(pool: DbPool, userId: number, limit = 50): Promise<HistoryEntry[]> {
-  const perKind = Math.max(5, limit)
+export async function listHistory(
+  pool: DbPool,
+  userId: number,
+  limit = 50,
+  offset = 0,
+  kind?: HistoryKind,
+): Promise<HistoryEntry[]> {
+  const perKind = Math.max(5, Math.min(1000, limit + Math.max(0, offset)))
   const [integrations, maintainers, drafts, discoverability, comparisons, issuePlans, watchRuns, patches] =
     await Promise.all([
     pool.query<{ id: string; created_at: Date | string; payload: StoredIntegrationReport }>(
@@ -248,5 +254,183 @@ export async function listHistory(pool: DbPool, userId: number, limit = 50): Pro
     })
   }
 
-  return entries.sort((left, right) => time(right.createdAt) - time(left.createdAt)).slice(0, limit)
+  const scoped = kind ? entries.filter((entry) => entry.kind === kind) : entries
+  return scoped
+    .sort((left, right) => time(right.createdAt) - time(left.createdAt))
+    .slice(Math.max(0, offset), Math.max(0, offset) + limit)
+}
+
+
+export interface HistoryContentExport {
+  exportedAt: string
+  login: string | null
+  integration: Array<{ id: number; createdAt: string; payload: unknown }>
+  maintainer: Array<{ id: number; createdAt: string; payload: unknown }>
+  discoverability: Array<{ id: number; repo: string; createdAt: string; payload: unknown }>
+  comparison: Array<{ id: number; project: string; createdAt: string; payload: unknown }>
+  issuePlans: Array<{ id: number; repo: string; issueNumber: number; createdAt: string; payload: unknown }>
+  issueDrafts: Array<{
+    id: number
+    title: string
+    summary: string | null
+    html: string
+    markdown: string
+    model: string | null
+    providerId: string | null
+    createdAt: string
+  }>
+  watchRuns: Array<{
+    id: number
+    intent: string
+    matchCount: number
+    model: string | null
+    providerId: string | null
+    createdAt: string
+  }>
+  patches: Array<{
+    id: number
+    title: string
+    summary: string | null
+    patch: string
+    files: unknown
+    status: string
+    validation: unknown
+    createdAt: string
+  }>
+}
+
+/** 导出完整历史内容（报告正文、补丁、周报 HTML 等），用于迁移或离线归档。 */
+export async function exportHistoryContent(
+  pool: DbPool,
+  userId: number,
+  limit = 200,
+): Promise<Omit<HistoryContentExport, 'exportedAt' | 'login'>> {
+  const size = Math.max(1, Math.min(500, limit))
+  const [integration, maintainer, discoverability, comparison, issuePlans, issueDrafts, watchRuns, patches] =
+    await Promise.all([
+      pool.query<{ id: string; created_at: Date | string; payload: unknown }>(
+        `SELECT id, created_at, payload FROM integration_reports
+         WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [userId, size],
+      ),
+      pool.query<{ id: string; created_at: Date | string; payload: unknown }>(
+        `SELECT id, created_at, payload FROM maintainer_reports
+         WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [userId, size],
+      ),
+      pool.query<{ id: string; repo_full_name: string; created_at: Date | string; payload: unknown }>(
+        `SELECT id, repo_full_name, created_at, payload FROM discoverability_reports
+         WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [userId, size],
+      ),
+      pool.query<{ id: string; project_full_name: string; created_at: Date | string; payload: unknown }>(
+        `SELECT id, project_full_name, created_at, payload FROM comparison_reports
+         WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [userId, size],
+      ),
+      pool.query<{
+        id: string
+        repo_full_name: string
+        issue_number: number
+        created_at: Date | string
+        payload: unknown
+      }>(
+        `SELECT id, repo_full_name, issue_number, created_at, payload FROM issue_plans
+         WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [userId, size],
+      ),
+      pool.query<{
+        id: string
+        title: string
+        summary: string | null
+        html: string
+        markdown: string
+        model: string | null
+        provider_id: string | null
+        created_at: Date | string
+      }>(
+        `SELECT id, title, summary, html, markdown, model, provider_id, created_at FROM issue_drafts
+         WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [userId, size],
+      ),
+      pool.query<{
+        id: string
+        text: string
+        match_count: number
+        model: string | null
+        provider_id: string | null
+        created_at: Date | string
+      }>(
+        `SELECT r.id, i.text, r.match_count, r.model, r.provider_id, r.created_at
+         FROM watch_runs r JOIN watch_intents i ON i.id = r.intent_id
+         WHERE i.user_id = $1 ORDER BY r.created_at DESC LIMIT $2`,
+        [userId, size],
+      ),
+      pool.query<{
+        id: string
+        title: string
+        summary: string | null
+        patch: string
+        files: unknown
+        status: string
+        validation: unknown
+        created_at: Date | string
+      }>(
+        `SELECT id, title, summary, patch, files, status, validation, created_at FROM patch_drafts
+         WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [userId, size],
+      ),
+    ])
+
+  return {
+    integration: integration.rows.map((row) => ({ id: Number(row.id), createdAt: iso(row.created_at), payload: row.payload })),
+    maintainer: maintainer.rows.map((row) => ({ id: Number(row.id), createdAt: iso(row.created_at), payload: row.payload })),
+    discoverability: discoverability.rows.map((row) => ({
+      id: Number(row.id),
+      repo: row.repo_full_name,
+      createdAt: iso(row.created_at),
+      payload: row.payload,
+    })),
+    comparison: comparison.rows.map((row) => ({
+      id: Number(row.id),
+      project: row.project_full_name,
+      createdAt: iso(row.created_at),
+      payload: row.payload,
+    })),
+    issuePlans: issuePlans.rows.map((row) => ({
+      id: Number(row.id),
+      repo: row.repo_full_name,
+      issueNumber: Number(row.issue_number),
+      createdAt: iso(row.created_at),
+      payload: row.payload,
+    })),
+    issueDrafts: issueDrafts.rows.map((row) => ({
+      id: Number(row.id),
+      title: row.title,
+      summary: row.summary,
+      html: row.html,
+      markdown: row.markdown,
+      model: row.model,
+      providerId: row.provider_id,
+      createdAt: iso(row.created_at),
+    })),
+    watchRuns: watchRuns.rows.map((row) => ({
+      id: Number(row.id),
+      intent: row.text,
+      matchCount: Number(row.match_count),
+      model: row.model,
+      providerId: row.provider_id,
+      createdAt: iso(row.created_at),
+    })),
+    patches: patches.rows.map((row) => ({
+      id: Number(row.id),
+      title: row.title,
+      summary: row.summary,
+      patch: row.patch,
+      files: row.files,
+      status: row.status,
+      validation: row.validation,
+      createdAt: iso(row.created_at),
+    })),
+  }
 }

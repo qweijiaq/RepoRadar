@@ -101,6 +101,22 @@ function renderHeader(projects: IntegrationProject[], meta: IntegrationBriefMeta
   return lines
 }
 
+/** 从任务书中移除已接入或不感兴趣的建议；没有剩余建议的项目也会被移除。 */
+export function removeHandledSuggestions(
+  projects: IntegrationProject[],
+  handledPairs: Iterable<string>,
+): IntegrationProject[] {
+  const handled = new Set([...handledPairs].map((pair) => pair.toLowerCase()))
+  return projects
+    .map((project) => ({
+      ...project,
+      suggestions: project.suggestions.filter(
+        (suggestion) => !handled.has(`${project.repo}|${suggestion.repo}`.toLowerCase()),
+      ),
+    }))
+    .filter((project) => project.suggestions.length > 0)
+}
+
 /**
  * 把接入报告转成可直接交给代码 AI 执行的任务书。
  */

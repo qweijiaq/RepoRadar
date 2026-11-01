@@ -36,6 +36,12 @@ async function context(): Promise<{
   return { userId: Number(currentUser.id), login: currentUser.login, pool, llm }
 }
 
+
+function withQuery(path: string, key: string, value: string): string {
+  const separator = path.includes('?') ? '&' : '?'
+  return `${path}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`
+}
+
 async function enqueueAndGo(
   pool: ReturnType<typeof getPool>,
   userId: number,
@@ -120,14 +126,31 @@ export async function enqueueComparisonAction(formData: FormData): Promise<void>
   const { pool, userId } = await context()
 
   const project = String(formData.get('project') ?? '').trim()
-  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(project)) redirect('/integrations?error=compare')
+  const returnToRaw = String(formData.get('returnTo') ?? '')
+  const returnTo = returnToRaw.startsWith('/') ? returnToRaw : '/integrations'
+  const candidates = [
+    ...new Set(
+      formData
+        .getAll('repos')
+        .flatMap((value) => String(value).split(','))
+        .map((value) => value.trim())
+        .filter((value) => /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(value)),
+    ),
+  ].slice(0, 5)
+  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(project)) {
+    redirect(withQuery(returnTo, 'error', 'compare'))
+  }
+  if (candidates.length === 1) {
+    redirect(withQuery(returnTo, 'error', 'compare-candidates'))
+  }
   const access = await resolveRepoAccess(session, currentUser.login)
-  if (!access.access) redirect(repoScopeRedirect(access.reason, '/integrations?error=compare-token'))
+  if (!access.access) redirect(repoScopeRedirect(access.reason, withQuery(returnTo, 'error', 'compare-token')))
 
   await enqueueAndGo(pool, userId, 'comparison', `选型对比 · ${project}`, {
     project,
+    ...(candidates.length > 0 ? { candidates } : {}),
     token: encryptJobToken(access.access.token),
-    origin: '/integrations',
+    origin: returnTo,
   })
 }
 
