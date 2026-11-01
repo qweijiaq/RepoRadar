@@ -335,6 +335,7 @@ export async function saveLlmConfigAction(formData: FormData): Promise<void> {
   const providerId = String(formData.get('providerId') ?? '').trim()
   const model = String(formData.get('model') ?? '').trim()
   const baseUrl = String(formData.get('baseUrl') ?? '').trim()
+  const embeddingModel = String(formData.get('embeddingModel') ?? '').trim()
   const submittedKey = String(formData.get('apiKey') ?? '').trim()
 
   const provider = findLlmProvider(providerId)
@@ -354,6 +355,7 @@ export async function saveLlmConfigAction(formData: FormData): Promise<void> {
     model,
     apiKey,
     ...(baseUrl ? { baseUrl } : {}),
+    embeddingModel,
   })
   revalidatePath('/settings')
   redirect('/settings?llm=saved')
@@ -688,9 +690,12 @@ export async function setIntegrationOutcomeAction(formData: FormData): Promise<v
   const project = String(formData.get('project') ?? '').trim()
   const repo = String(formData.get('repo') ?? '').trim()
   const status = String(formData.get('status') ?? '') === 'rejected' ? 'rejected' : 'adopted'
+  const note = formData.has('note')
+    ? String(formData.get('note') ?? '').trim().slice(0, 300) || null
+    : undefined
   if (!project || !repo) redirect('/workbench/integrations')
 
-  await setIntegrationOutcome(getPool(), Number(currentUser.id), project, repo, status)
+  await setIntegrationOutcome(getPool(), Number(currentUser.id), project, repo, status, note)
   revalidatePath('/workbench/integrations')
   revalidatePath('/library')
   const requested = String(formData.get('returnTo') ?? '')

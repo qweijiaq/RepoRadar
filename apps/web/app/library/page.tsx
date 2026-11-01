@@ -218,6 +218,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           steps: occurrence.steps,
           alreadyUsed: occurrence.alreadyUsed,
           lastSeenAt: occurrence.generatedAt,
+          note: occurrence.note ?? null,
         }
         if (!existing || Date.parse(candidate.lastSeenAt) >= Date.parse(existing.lastSeenAt)) {
           repoMap.set(item.repo, candidate)

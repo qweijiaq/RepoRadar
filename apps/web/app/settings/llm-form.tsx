@@ -16,7 +16,7 @@ export interface LlmProviderOption {
 
 interface LlmConfigFormProps {
   providers: LlmProviderOption[]
-  current: { providerId: string; model: string; baseUrl: string } | null
+  current: { providerId: string; model: string; baseUrl: string; embeddingModel?: string } | null
   hasExistingKey: boolean
   keyHint?: string
 }
@@ -26,6 +26,7 @@ export function LlmConfigForm({ providers, current, hasExistingKey, keyHint }: L
   const [providerId, setProviderId] = useState(initialProvider?.id ?? '')
   const [model, setModel] = useState(current?.model ?? initialProvider?.defaultModel ?? '')
   const [baseUrl, setBaseUrl] = useState(current?.baseUrl ?? initialProvider?.baseUrl ?? '')
+  const [embeddingModel, setEmbeddingModel] = useState(current?.embeddingModel ?? '')
 
   const provider = providers.find((option) => option.id === providerId) ?? initialProvider
   if (!provider) return null
@@ -83,6 +84,17 @@ export function LlmConfigForm({ providers, current, hasExistingKey, keyHint }: L
       </div>
 
       <label className="field wide">
+        <span>Embedding 模型（可选）</span>
+        <input
+          name="embeddingModel"
+          value={embeddingModel}
+          onChange={(event) => setEmbeddingModel(event.target.value)}
+          placeholder="例如 text-embedding-3-small；留空关闭语义向量"
+          spellCheck={false}
+        />
+      </label>
+
+      <label className="field wide">
         <span>API Key</span>
         <input
           name="apiKey"
@@ -99,6 +111,7 @@ export function LlmConfigForm({ providers, current, hasExistingKey, keyHint }: L
         {needsKey
           ? '更换服务商后需要重新填写 Key。'
           : 'Key 已加密保存；同步画像、重新登录都不会清除它，留空保存即可保持原 Key。'}
+        Embedding 用于语义相似度、相似项目和推荐排序；服务商不支持时留空即可，文本和关键词匹配仍会工作。
         在{' '}
         <a href={provider.keyUrl} target="_blank" rel="noreferrer">
           {provider.name} 控制台

@@ -74,7 +74,7 @@ const SYSTEM_PROMPT = `你是开源项目的增长顾问。目标不是夸大宣
 - 差异化：与同类项目相比的可信理由。
 - 信任信号：安装/示例/截图/许可证/维护活跃度。
 
-建议要具体、可执行，不要空话。suggestedDescription 控制在 160 字以内，包含核心关键词，但不要堆砌。suggestedTopics 只使用 GitHub 允许的小写英文、数字和连字符，最多 10 个，覆盖问题域、技术栈和使用场景。README 建议聚焦首屏结构和缺失内容，不要重写整篇。
+建议要具体、可执行，不要空话。每个维度的 comment 控制在 100 字以内，直接指出问题；suggestedDescription 控制在 160 字以内，包含核心关键词，但不要堆砌。suggestedTopics 只使用 GitHub 允许的小写英文、数字和连字符，最多 10 个，覆盖问题域、技术栈和使用场景。README 建议聚焦首屏结构和缺失内容，不要重写整篇。
 
 只输出一个合法 JSON 对象，不要 Markdown 围栏或解释：
 {
@@ -109,6 +109,55 @@ export function buildDiscoverabilityPrompt(input: DiscoverabilityInput): string 
   return `请分析这个仓库的可发现性：\n\n${JSON.stringify(compact(input), null, 2)}`
 }
 
+function truncate(value: unknown, max: number): unknown {
+  return typeof value === 'string' ? value.slice(0, max) : value
+}
+
+function truncateList(value: unknown, maxItems: number, maxLength: number): unknown {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string').slice(0, maxItems).map((item) => item.slice(0, maxLength))
+    : value
+}
+
+function relaxDiscoverabilityReport(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null) return value
+  const record = value as Record<string, unknown>
+  return {
+    ...record,
+    summary: truncate(record.summary, 300),
+    dimensions: Array.isArray(record.dimensions)
+      ? record.dimensions.slice(0, 6).map((dimension) => {
+          if (typeof dimension !== 'object' || dimension === null) return dimension
+          const entry = dimension as Record<string, unknown>
+          return {
+            ...entry,
+            name: truncate(entry.name, 40),
+            comment: truncate(entry.comment, 160),
+          }
+        })
+      : record.dimensions,
+    strengths: truncateList(record.strengths, 5, 160),
+    problems: truncateList(record.problems, 6, 160),
+    suggestedDescription: truncate(record.suggestedDescription, 300),
+    suggestedTopics: Array.isArray(record.suggestedTopics)
+      ? record.suggestedTopics.slice(0, 12).map((topic) => truncate(topic, 50))
+      : record.suggestedTopics,
+    readmeSuggestions: truncateList(record.readmeSuggestions, 6, 200),
+    actions: Array.isArray(record.actions)
+      ? record.actions.slice(0, 6).map((action) => {
+          if (typeof action !== 'object' || action === null) return action
+          const entry = action as Record<string, unknown>
+          return {
+            ...entry,
+            title: truncate(entry.title, 80),
+            why: truncate(entry.why, 200),
+            how: truncate(entry.how, 240),
+          }
+        })
+      : record.actions,
+  }
+}
+
 function cleanReport(report: DiscoverabilityReport): DiscoverabilityReport {
   return {
     ...report,
@@ -133,7 +182,9 @@ export function parseDiscoverabilityReport(raw: string): DiscoverabilityReport {
 
     const result = discoverabilityReportSchema.safeParse(parsed)
     if (result.success) return cleanReport(result.data)
-    const issue = result.error.issues[0]
+    const relaxed = discoverabilityReportSchema.safeParse(relaxDiscoverabilityReport(parsed))
+    if (relaxed.success) return cleanReport(relaxed.data)
+    const issue = relaxed.error.issues[0]
     lastError = `${issue?.path.join('.') ?? 'unknown'} ${issue?.message ?? ''}`
   }
 

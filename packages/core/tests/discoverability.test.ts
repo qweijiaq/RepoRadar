@@ -37,6 +37,21 @@ describe('parseDiscoverabilityReport', () => {
     expect(parsed.suggestedTopics).toEqual(['ai-reader'])
   })
 
+  it('truncates overlong comments instead of failing the report', () => {
+    const parsed = parseDiscoverabilityReport(
+      JSON.stringify({
+        ...report,
+        summary: '长'.repeat(500),
+        dimensions: report.dimensions.map((dimension) => ({ ...dimension, comment: '细'.repeat(400) })),
+        strengths: Array.from({ length: 9 }, () => '优点'.repeat(120)),
+      }),
+    )
+    expect(parsed.summary).toHaveLength(300)
+    expect(parsed.dimensions[0]?.comment).toHaveLength(160)
+    expect(parsed.strengths).toHaveLength(5)
+    expect(parsed.strengths[0]).toHaveLength(160)
+  })
+
   it('rejects incomplete output', () => {
     expect(() => parseDiscoverabilityReport('{"score":80}')).toThrow()
   })

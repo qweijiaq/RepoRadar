@@ -11,12 +11,14 @@ export interface StoredLlmInput {
   model: string
   apiKey: string
   baseUrl?: string
+  embeddingModel?: string
 }
 
 export interface LlmConfigSummary {
   providerId: string
   model: string
   baseUrl: string
+  embeddingModel: string
   keyHint?: string
 }
 
@@ -31,6 +33,7 @@ interface StoredLlmConfig {
   providerId: string
   model: string
   baseUrl: string
+  embeddingModel?: string
   apiKey: EncryptedBox
 }
 
@@ -52,7 +55,10 @@ export function buildLlmConfig(input: StoredLlmInput): LlmConfig {
     apiKey: input.apiKey,
     baseUrl: normalizeBaseUrl(provider, input.baseUrl),
     model,
-    embeddingModel: process.env.EMBEDDING_MODEL?.trim() || 'text-embedding-3-small',
+    embeddingModel:
+      input.embeddingModel !== undefined
+        ? input.embeddingModel.trim()
+        : process.env.EMBEDDING_MODEL?.trim() || 'text-embedding-3-small',
     protocol: provider.protocol,
     providerId: provider.id,
   }
@@ -64,6 +70,7 @@ export async function saveStoredLlmConfig(pool: DbPool, input: StoredLlmInput): 
     providerId: input.providerId,
     model: config.model,
     baseUrl: config.baseUrl,
+    embeddingModel: config.embeddingModel,
     apiKey: encryptSecret(input.apiKey, passphrase()),
   }
   await pool.query(
@@ -86,6 +93,7 @@ export async function loadStoredLlmConfig(pool: DbPool): Promise<LlmConfig | nul
       providerId: stored.providerId,
       model: stored.model,
       baseUrl: stored.baseUrl,
+      embeddingModel: stored.embeddingModel,
       apiKey: decryptSecret(stored.apiKey, passphrase()),
     })
   } catch (error) {
@@ -125,6 +133,7 @@ export async function loadStoredLlmStatus(pool: DbPool): Promise<StoredLlmStatus
         providerId: provider.id,
         model: stored.model,
         baseUrl: stored.baseUrl,
+        embeddingModel: stored.embeddingModel ?? 'text-embedding-3-small',
         keyHint: apiKey.length >= 4 ? apiKey.slice(-4) : undefined,
       },
     }
@@ -146,5 +155,6 @@ export function envLlmSummary(env: NodeJS.ProcessEnv = process.env): LlmConfigSu
     providerId: provider?.id ?? 'openai',
     model: env.LLM_MODEL?.trim() || provider?.defaultModel || '',
     baseUrl: (env.LLM_BASE_URL?.trim() || provider?.baseUrl || '').replace(/\/+$/, ''),
+    embeddingModel: env.EMBEDDING_MODEL?.trim() || 'text-embedding-3-small',
   }
 }

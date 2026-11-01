@@ -56,7 +56,17 @@ describe('envLlmSummary', () => {
       providerId: 'deepseek',
       model: 'deepseek-flash',
       baseUrl: 'https://api.deepseek.com/v1',
+      embeddingModel: 'text-embedding-3-small',
     })
+  })
+
+  it('reads a custom embedding model from the environment', () => {
+    const summary = envLlmSummary({
+      LLM_API_KEY: 'key',
+      LLM_PROVIDER: 'openai',
+      EMBEDDING_MODEL: 'text-embedding-3-large',
+    } as NodeJS.ProcessEnv)
+    expect(summary?.embeddingModel).toBe('text-embedding-3-large')
   })
 })
 

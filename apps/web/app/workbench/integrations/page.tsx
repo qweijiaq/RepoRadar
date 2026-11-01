@@ -57,7 +57,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
   const outcomeMap = new Map(
     outcomes.map((outcome) => [
       `${outcome.projectFullName}|${outcome.suggestionRepo}`.toLowerCase(),
-      outcome.status,
+      outcome,
     ]),
   )
   const dismissedIntegrationKeys = new Set(
@@ -72,7 +72,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
   )
   function suggestionStatus(project: string, repo: string): 'adopted' | 'rejected' | null {
     const explicit = outcomeMap.get(`${project}|${repo}`.toLowerCase())
-    if (explicit) return explicit
+    if (explicit) return explicit.status
     const key = `integration:${project}:${repo}`.toLowerCase()
     if (dismissedIntegrationKeys.has(key)) return 'rejected'
     if (doneIntegrationKeys.has(key)) return 'adopted'
@@ -397,6 +397,14 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                             {status === 'adopted' ? <span className="chip verified">已接入</span> : null}
                             {status === 'rejected' ? <span className="chip subtle">已忽略</span> : null}
                             {status === null ? <span className="chip">待处理</span> : null}
+                            {explicitOutcome ? (
+                              <span className="muted small">
+                                {new Date(explicitOutcome.updatedAt).toLocaleDateString('zh-CN')}
+                              </span>
+                            ) : null}
+                            {explicitOutcome?.note ? (
+                              <p className="outcome-note-text">{explicitOutcome.note}</p>
+                            ) : null}
                             <form action={setIntegrationOutcomeAction}>
                               <input type="hidden" name="project" value={project.repo} />
                               <input type="hidden" name="repo" value={suggestion.repo} />
@@ -415,6 +423,29 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                                 不感兴趣
                               </button>
                             </form>
+                            {explicitOutcome ? (
+                              <details className="outcome-note">
+                                <summary>
+                                  执行记录{explicitOutcome.note ? ' · 已填写' : ''}
+                                </summary>
+                                <form action={setIntegrationOutcomeAction}>
+                                  <input type="hidden" name="project" value={project.repo} />
+                                  <input type="hidden" name="repo" value={suggestion.repo} />
+                                  <input type="hidden" name="status" value={explicitOutcome.status} />
+                                  <input type="hidden" name="returnTo" value={projectReturnTo} />
+                                  <input
+                                    className="input"
+                                    name="note"
+                                    defaultValue={explicitOutcome.note ?? ''}
+                                    maxLength={300}
+                                    placeholder="PR、commit、安装版本或备注"
+                                  />
+                                  <button className="btn quiet small" type="submit">
+                                    保存记录
+                                  </button>
+                                </form>
+                              </details>
+                            ) : null}
                             {explicitOutcome ? (
                               <form action={clearIntegrationOutcomeAction}>
                                 <input type="hidden" name="project" value={project.repo} />

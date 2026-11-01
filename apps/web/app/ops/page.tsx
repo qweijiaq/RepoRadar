@@ -6,6 +6,7 @@ import {
   loadOpsMetrics,
   loadRecentFailures,
   renderPrometheus,
+  runDoctor,
 } from '@repo-radar/core'
 import { resetOpsConfigAction } from '@/app/actions'
 import { requireAdmin } from '@/lib/admin'
@@ -31,12 +32,13 @@ export default async function OpsPage({ searchParams }: OpsPageProps) {
   await requireAdmin()
   const params = await searchParams
   const pool = getPool()
-  const [metrics, failures, config, alertLog, users] = await Promise.all([
+  const [metrics, failures, config, alertLog, users, doctor] = await Promise.all([
     loadOpsMetrics(pool),
     loadRecentFailures(pool),
     loadOpsConfig(pool),
     loadAlertLog(pool),
     listAdminUserOverview(pool),
+    runDoctor(pool),
   ])
 
   return (
@@ -84,6 +86,32 @@ export default async function OpsPage({ searchParams }: OpsPageProps) {
             : '尚未配置 METRICS_TOKEN，/api/metrics 会返回 404。请在环境变量中设置后重启 Web。'}
         </p>
         <pre className="log-block">{renderPrometheus(metrics)}</pre>
+      </section>
+
+      <section className="panel">
+        <h2>验收检查</h2>
+        <p className="muted small">
+          只读检查数据库、迁移、候选池、模型、GitHub 授权、邮件和任务队列；不会发送邮件或调用模型。
+        </p>
+        <ul className="maintain-list">
+          {doctor.map((item) => (
+            <li key={item.id}>
+              <span
+                className={
+                  item.level === 'ok'
+                    ? 'chip verified'
+                    : item.level === 'warn'
+                      ? 'chip release'
+                      : 'chip danger'
+                }
+              >
+                {item.level === 'ok' ? '通过' : item.level === 'warn' ? '注意' : '失败'}
+              </span>{' '}
+              <strong>{item.title}</strong>
+              <span className="muted small"> — {item.detail}</span>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="panel">

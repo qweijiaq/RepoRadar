@@ -20,6 +20,8 @@ export interface IntegrationLibraryOccurrence {
   steps: string[]
   alreadyUsed: boolean
   status: LibraryStatus
+  note?: string | null
+  outcomeUpdatedAt?: string
 }
 
 export interface IntegrationLibraryItem {
@@ -106,14 +108,14 @@ export interface WatchLibrary {
 }
 
 function statusOf(
-  outcomeMap: Map<string, 'adopted' | 'rejected'>,
+  outcomeMap: Map<string, IntegrationOutcome>,
   dismissed: Set<string>,
   done: Set<string>,
   project: string,
   repo: string,
 ): LibraryStatus {
   const outcome = outcomeMap.get(`${project}|${repo}`.toLowerCase())
-  if (outcome) return outcome
+  if (outcome) return outcome.status
   const feedKey = `integration:${project}:${repo}`.toLowerCase()
   if (dismissed.has(feedKey)) return 'rejected'
   if (done.has(feedKey)) return 'adopted'
@@ -138,10 +140,10 @@ export function aggregateIntegrationLibrary(
   dismissedKeys: Iterable<string>,
   doneKeys: Iterable<string>,
 ): IntegrationLibrary {
-  const outcomeMap = new Map<string, 'adopted' | 'rejected'>(
+  const outcomeMap = new Map<string, IntegrationOutcome>(
     outcomes.map((outcome) => [
       `${outcome.projectFullName}|${outcome.suggestionRepo}`.toLowerCase(),
-      outcome.status,
+      outcome,
     ]),
   )
   const dismissed = lowerSet(dismissedKeys)
@@ -166,6 +168,7 @@ export function aggregateIntegrationLibrary(
         if (!repo) continue
         const key = repo.toLowerCase()
         const status = statusOf(outcomeMap, dismissed, done, project.repo, repo)
+        const outcome = outcomeMap.get(`${project.repo}|${repo}`.toLowerCase())
         const item =
           items.get(key) ??
           ({
@@ -208,6 +211,8 @@ export function aggregateIntegrationLibrary(
           steps: suggestion.steps ?? [],
           alreadyUsed: suggestion.alreadyUsed ?? false,
           status,
+          note: outcome?.note ?? null,
+          outcomeUpdatedAt: outcome?.updatedAt,
         })
         items.set(key, item)
       }

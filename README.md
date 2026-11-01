@@ -54,12 +54,14 @@ pnpm radar pipeline --topics=llm --limit=20
 | `pnpm radar activity --user=<login>` | 轮询维护仓库的 star / fork / Issue / PR / release 动态 |
 | `pnpm radar mcp` | 以 MCP server（stdio）运行，供 agent 调用 |
 | `pnpm radar pipeline` | ingest → enrich → list |
+| `pnpm radar doctor` | 检查数据库、迁移、候选池、模型/Embedding、GitHub 授权、邮件、站点地址和任务队列 |
 
 常用参数：`--topics`、`--days`、`--pages`、`--delay-ms`、`--language`、`--limit`、`--format=md|json`、`--dry-run`。运行 `pnpm radar help` 查看完整说明。
 
 ## 可观测性与告警
 
-- 管理员打开 `/ops` 查看任务、投递、token 用量、数据库大小和最近失败记录；
+- 管理员打开 `/ops` 查看任务、投递、token 用量、数据库大小和最近失败记录，以及「验收检查」；
+- `pnpm radar doctor` 会在命令行跑同一组检查：数据库、pgvector、迁移、候选池、模型/Embedding 覆盖率、GitHub 授权、邮件、站点地址和任务队列；
 - 设置 `METRICS_TOKEN` 后，`GET /api/metrics` 输出 Prometheus 文本指标，需要 `Authorization: Bearer <token>`；
 - worker 每 5 分钟检查失败任务、失败投递、队列积压和心跳超时任务，按冷却时间发送告警邮件；
 - 告警阈值和收件邮箱可在 `/ops` 页面配置，留空时发给 `ADMIN_LOGINS` 对应用户的通知邮箱或 `ALERT_EMAILS`；
@@ -279,7 +281,7 @@ pnpm radar activity --user=你的登录名
 - 可以直接粘贴给 Claude Code、Cursor 等代码 AI，让它在目标项目里核实候选并执行接入；
 - 任务书会要求 AI 先读项目、核实许可证与 API、只改目标项目、补测试并运行现有检查，避免照着建议盲改。
 
-每条建议可以标记「已接入 / 不感兴趣」。下一次生成时，已拒绝的候选会被后端强制过滤，已采纳的方向会作为偏好参考。建议库的接入标签可以在「按库查看」和「按维护项目」之间切换；按项目查看时会汇总该项目的历史未处理建议，可以一键复制给 AI，也可以只重新生成这一个库的接入建议。
+每条建议可以标记「已接入 / 不感兴趣」。已处理建议可以继续填写执行记录（PR、commit、安装版本或备注），记录会显示在接入页和建议库的「按维护项目」视图里，方便之后回看当时是怎么落地的。下一次生成时，已拒绝的候选会被后端强制过滤，已采纳的方向会作为偏好参考。建议库的接入标签可以在「按库查看」和「按维护项目」之间切换；按项目查看时会汇总该项目的历史未处理建议，可以一键复制给 AI，也可以只重新生成这一个库的接入建议。
 
 ### 维护周报
 
@@ -333,6 +335,7 @@ GitHub 登录会请求 `repo` 与 `delete_repo` 授权。旧会话如果只授�
 Key 使用 AES-256-GCM 加密后存在数据库里。设置页会显示「Key 已保存（末四位）」；同步画像、重新登录都不会清除它。只有更换服务商或主动点击「清除模型配置」时才需要重新输入。如果 `AUTH_SECRET` 发生变化导致旧 Key 无法解密，页面会明确提示，重新填写一次即可。
 
 - 支持 8 家服务商、45 个预置模型：Anthropic、OpenAI、DeepSeek、阿里云百炼（Qwen）、Google Gemini、xAI（Grok）、智谱 GLM、Moonshot（Kimi）；模型字段也支持手动填写新模型。
+- 设置页可以单独配置 Embedding 模型（默认 `text-embedding-3-small`），留空则关闭语义向量，相似度和排序退化为文本/关键词匹配。
 - Anthropic 走原生 Messages API，其余使用 OpenAI 兼容接口。
 - API Key 用 AES-256-GCM 加密后存入 `app_settings`，不会写入文件。
 - 管理员仍可以用 `LLM_API_KEY` 等环境变量覆盖页面配置（环境变量优先），方便 CI 或托管部署。

@@ -16,16 +16,16 @@ export async function setIntegrationOutcome(
   projectFullName: string,
   suggestionRepo: string,
   status: IntegrationOutcomeStatus,
-  note: string | null = null,
+  note?: string | null,
 ): Promise<void> {
   await pool.query(
     `INSERT INTO integration_outcomes (user_id, project_full_name, suggestion_repo, status, note)
      VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (user_id, project_full_name, suggestion_repo) DO UPDATE SET
        status = EXCLUDED.status,
-       note = EXCLUDED.note,
+       note = CASE WHEN $6 THEN EXCLUDED.note ELSE integration_outcomes.note END,
        updated_at = now()`,
-    [userId, projectFullName, suggestionRepo, status, note],
+    [userId, projectFullName, suggestionRepo, status, note ?? null, note !== undefined],
   )
 }
 

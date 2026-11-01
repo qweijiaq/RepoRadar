@@ -134,7 +134,7 @@ async function anthropicChatCompletion(
 }
 
 export async function embedText(config: LlmConfig, input: string): Promise<number[] | null> {
-  if (config.protocol === 'anthropic') return null
+  if (config.protocol === 'anthropic' || !config.embeddingModel?.trim()) return null
   try {
     const response = await fetch(`${trimSlash(config.baseUrl)}/embeddings`, {
       method: 'POST',

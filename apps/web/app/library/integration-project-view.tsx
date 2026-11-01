@@ -12,6 +12,7 @@ export interface ProjectSuggestionView {
   steps: string[]
   alreadyUsed: boolean
   lastSeenAt: string
+  note: string | null
 }
 
 export interface IntegrationProjectGroup {
@@ -127,6 +128,9 @@ export function IntegrationProjectView({ groups }: { groups: IntegrationProjectG
                           </span>
                         </div>
                         <p className="muted small">{suggestion.reason}</p>
+                        {suggestion.note ? (
+                          <p className="muted small">执行记录：{suggestion.note}</p>
+                        ) : null}
                       </li>
                     ))}
                   </ul>

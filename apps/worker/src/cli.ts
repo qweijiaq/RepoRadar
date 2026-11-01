@@ -42,6 +42,7 @@ import {
   renderIssueMarkdown,
   repoEvidence,
   risingRepos,
+  runDoctor,
   runVerification,
   saveReleaseEvent,
   saveSnapshot,
@@ -100,6 +101,7 @@ const HELP = `RepoRadar CLI（M2）
   activity             轮询维护中仓库的 star/fork/Issue/PR/release 动态
   mcp                  以 MCP server（stdio）方式运行，供 agent 调用
   pipeline             依次执行 ingest → enrich → list
+  doctor               检查数据库、迁移、模型、GitHub 授权、邮件和任务队列
 
 选项：
   --topics=a,b         采集的 GitHub topics（默认来自 RADAR_TOPICS）；enrich 时用作过滤
@@ -749,6 +751,15 @@ async function main(): Promise<void> {
         await runEnrich(pool, effectiveConfig, enrichLimit)
         await runList(pool, listLimit, listFormat)
         break
+      case 'doctor': {
+        const checks = await runDoctor(pool, { llm: effectiveConfig.llm })
+        for (const item of checks) {
+          const icon = item.level === 'ok' ? '✓' : item.level === 'warn' ? '!' : '✗'
+          console.log(`${icon} ${item.title}：${item.detail}`)
+        }
+        if (checks.some((item) => item.level === 'error')) process.exitCode = 1
+        break
+      }
       default:
         console.error(`未知命令：${command}\n`)
         console.log(HELP)

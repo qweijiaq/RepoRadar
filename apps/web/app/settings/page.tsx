@@ -357,6 +357,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
                         providerId: storedLlm.providerId,
                         model: storedLlm.model,
                         baseUrl: storedLlm.baseUrl,
+                        embeddingModel: storedLlm.embeddingModel,
                       }
                     : null
                 }
