@@ -27,6 +27,7 @@ import {
   generateDiscoverabilityReport,
   generateIntegrationReport,
   generateIntegrationTrial,
+  generateSwapTrial,
   generateIssuePlan,
   generateMaintainerReport,
   generatePatch,
@@ -679,6 +680,73 @@ async function integrationTrialJob(
   }
 }
 
+async function swapTrialJob(
+  pool: DbPool,
+  userId: number,
+  job: JobRecord,
+  progress: Progress,
+): Promise<JobResult> {
+  const llm = await loadLlm(pool)
+  const token = requireToken(job)
+  const project = job.payload.project?.trim()
+  const fromPackage = job.payload.fromPackage?.trim()
+  const toPackage = job.payload.toPackage?.trim()
+  if (!project || !fromPackage || !toPackage) throw new Error('缺少项目或包名')
+
+  await progress('读取项目上下文…')
+  const projectContext = await loadProjectContext(project, token)
+  const targetPath = job.payload.file?.trim()
+  const targetFile = targetPath ? await fetchRepoFile(project, targetPath, token) : null
+  if (targetPath && !targetFile) await progress(`没有读到 ${targetPath}，改为只修改依赖清单`)
+
+  await progress(`模型生成换库补丁（${fromPackage} → ${toPackage}）…`)
+  const generated = await generateSwapTrial(
+    {
+      project,
+      projectContext,
+      fromPackage,
+      toPackage,
+      targetFile: targetFile ? { path: targetFile.path, content: targetFile.content } : null,
+    },
+    llm,
+  )
+
+  await progress('在 Docker 沙箱验证换库补丁…')
+  const validation = await validatePatch({
+    repoFullName: project,
+    patch: generated.patch,
+    token,
+    timeoutMs: 300_000,
+  })
+  const succeeded =
+    validation.applies &&
+    (validation.buildStatus === 'verified' || validation.buildStatus === 'skipped')
+
+  const patchId = await savePatchDraft(pool, userId, {
+    repo: project,
+    kind: 'swap',
+    issueNumber: null,
+    title: `换库预演：${project} ${fromPackage} → ${toPackage}`,
+    summary: generated.summary,
+    patch: generated.patch,
+    files: validation.changedFiles.length > 0 ? validation.changedFiles : generated.files,
+    validation,
+    status: succeeded ? 'validated' : 'failed',
+  })
+
+  await addNotification(pool, userId, {
+    kind: 'patch',
+    title: succeeded ? '换库预演通过' : '换库预演未通过',
+    body: `${project}：${fromPackage} → ${toPackage}`,
+    url: `/patch/${patchId}`,
+  })
+
+  return {
+    href: `/patch/${patchId}`,
+    label: succeeded ? '查看换库结果' : '查看补丁与验证日志',
+  }
+}
+
 async function upgradeJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
   const repo = job.payload.repo?.trim()
   const packageName = job.payload.packageName?.trim()
@@ -1048,6 +1116,8 @@ export async function runJobHandler(pool: DbPool, job: JobRecord, userId: number
       return activityJob(pool, userId, job, progress)
     case 'integration-trial':
       return integrationTrialJob(pool, userId, job, progress)
+    case 'swap-trial':
+      return swapTrialJob(pool, userId, job, progress)
     case 'patch':
       return patchJob(pool, userId, job, progress)
     case 'upgrade':

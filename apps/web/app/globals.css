@@ -4653,3 +4653,17 @@ details[open] > .advanced-summary::before {
 .capability-table tbody th {
   font-weight: 500;
 }
+
+
+.swap-form {
+  display: grid;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.swap-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-70);
+}

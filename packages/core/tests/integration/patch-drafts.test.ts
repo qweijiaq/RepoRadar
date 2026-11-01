@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { DbPool } from '../../src/db.js'
-import { findPatchDraft, savePatchDraft } from '../../src/patch.js'
+import { findPatchDraft, listPatchDrafts, savePatchDraft } from '../../src/patch.js'
 import { ensureUser } from '../../src/users.js'
 import { createTestPool, dropTestDatabase, hasTestDatabase, truncateAll } from './setup.js'
 
@@ -52,5 +52,14 @@ describe.skipIf(!hasTestDatabase)('patch drafts', () => {
     expect(trial?.kind).toBe('integration')
     expect(trial?.title).toBe('接入预演')
     expect(trial?.files).toEqual(['package.json'])
+
+    await savePatchDraft(pool, userId, {
+      ...base,
+      kind: 'swap',
+      title: '换库预演',
+    })
+    const swaps = await listPatchDrafts(pool, userId, { kind: 'swap' })
+    expect(swaps).toHaveLength(1)
+    expect(swaps[0]?.kind).toBe('swap')
   })
 })

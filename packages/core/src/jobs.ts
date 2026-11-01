@@ -16,6 +16,7 @@ export type JobKind =
   | 'enrich'
   | 'similar'
   | 'integration-trial'
+  | 'swap-trial'
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
@@ -35,6 +36,8 @@ export interface JobPayload {
   targetVersion?: string
   steps?: string[]
   file?: string
+  fromPackage?: string
+  toPackage?: string
   currentVersion?: string
   manifestPath?: string
 }

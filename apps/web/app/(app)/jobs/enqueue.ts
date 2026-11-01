@@ -307,6 +307,39 @@ export async function enqueueIntegrationTrialAction(formData: FormData): Promise
   })
 }
 
+export async function enqueueSwapTrialAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  const { pool, userId } = await context()
+
+  const project = String(formData.get('project') ?? '').trim()
+  const fromPackage = String(formData.get('from') ?? '').trim()
+  const toPackage = String(formData.get('to') ?? '').trim()
+  const repoPattern = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
+  const packagePattern = /^(@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/
+  if (!repoPattern.test(project) || !packagePattern.test(fromPackage) || !packagePattern.test(toPackage)) {
+    redirect('/workbench/swap?error=invalid')
+  }
+
+  const rawFile = String(formData.get('file') ?? '').trim()
+  const file = /^[A-Za-z0-9._/-]+$/.test(rawFile) && !rawFile.includes('..') && !rawFile.startsWith('/')
+    ? rawFile.slice(0, 200)
+    : ''
+
+  const access = await resolveRepoAccess(session, currentUser.login)
+  if (!access.access) redirect(repoScopeRedirect(access.reason, '/workbench/swap?error=need-token'))
+
+  await enqueueAndGo(pool, userId, 'swap-trial', `换库预演 · ${project} ${fromPackage} → ${toPackage}`, {
+    project,
+    fromPackage,
+    toPackage,
+    ...(file ? { file } : {}),
+    token: encryptJobToken(access.access.token),
+    origin: '/workbench/swap',
+  })
+}
+
 export async function enqueueWatchRunAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)

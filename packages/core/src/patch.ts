@@ -186,7 +186,7 @@ export interface PatchDraftRecord {
   id: number
   repo: string
   /** issue：修复补丁；integration：接入预演补丁 */
-  kind: 'issue' | 'integration'
+  kind: 'issue' | 'integration' | 'swap'
   issueNumber: number | null
   title: string
   summary: string | null
@@ -215,7 +215,7 @@ function mapPatch(row: PatchRow): PatchDraftRecord {
   return {
     id: Number(row.id),
     repo: row.repo_full_name,
-    kind: row.kind === 'integration' ? 'integration' : 'issue',
+    kind: row.kind === 'integration' || row.kind === 'swap' ? row.kind : 'issue',
     issueNumber: row.issue_number,
     title: row.title,
     summary: row.summary,
@@ -232,7 +232,7 @@ export async function savePatchDraft(
   userId: number,
   input: {
     repo: string
-    kind?: 'issue' | 'integration'
+    kind?: 'issue' | 'integration' | 'swap'
     issueNumber: number | null
     title: string
     summary: string | null
@@ -277,13 +277,17 @@ export async function findPatchDraft(
 export async function listPatchDrafts(
   pool: DbPool,
   userId: number,
-  options: { repo?: string; issueNumber?: number; limit?: number } = {},
+  options: { repo?: string; issueNumber?: number; kind?: string; limit?: number } = {},
 ): Promise<PatchDraftRecord[]> {
   const clauses = ['user_id = $1']
   const values: unknown[] = [userId]
   if (options.repo) {
     values.push(options.repo)
     clauses.push(`repo_full_name = $${values.length}`)
+  }
+  if (options.kind) {
+    values.push(options.kind)
+    clauses.push(`kind = $${values.length}`)
   }
   if (Number.isFinite(options.issueNumber)) {
     values.push(options.issueNumber)
