@@ -1,0 +1,13 @@
+node_modules
+.pnpm-store
+.next
+.next-e2e
+dist
+coverage
+playwright-report
+test-results
+.radar
+backups
+
+pnpm-lock.yaml
+apps/web/public/sw.js

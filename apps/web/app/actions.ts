@@ -133,7 +133,7 @@ export async function testLlmConnectionAction(): Promise<void> {
     console.error('[settings] LLM connection test failed:', failure)
   }
   if (failure) {
-    const status = /(4\d{2}|5\d{2})/.exec(failure)?.[1]
+    const status = /\b(4\d{2}|5\d{2})\b/.exec(failure)?.[1]
     redirect(`/settings?test=llm-fail${status ? `&code=${status}` : ''}#ai`)
   }
   redirect('/settings?test=llm-ok#ai')
@@ -699,7 +699,11 @@ export async function setIntegrationOutcomeAction(formData: FormData): Promise<v
   revalidatePath('/workbench/integrations')
   revalidatePath('/library')
   const requested = String(formData.get('returnTo') ?? '')
-  redirect(requested.startsWith('/workbench/integrations') ? requested : '/workbench/integrations')
+  redirect(
+    requested.startsWith('/workbench/integrations') || requested.startsWith('/library')
+      ? requested
+      : '/workbench/integrations',
+  )
 }
 
 export async function clearIntegrationOutcomeAction(formData: FormData): Promise<void> {
@@ -715,7 +719,11 @@ export async function clearIntegrationOutcomeAction(formData: FormData): Promise
   revalidatePath('/workbench/integrations')
   revalidatePath('/library')
   const requested = String(formData.get('returnTo') ?? '')
-  redirect(requested.startsWith('/workbench/integrations') ? requested : '/workbench/integrations')
+  redirect(
+    requested.startsWith('/workbench/integrations') || requested.startsWith('/library')
+      ? requested
+      : '/workbench/integrations',
+  )
 }
 
 export async function markNotificationReadAction(formData: FormData): Promise<void> {

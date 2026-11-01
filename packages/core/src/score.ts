@@ -1,4 +1,5 @@
 import { clamp01, round } from './utils.js'
+import { SCORING_VERSION } from './versions.js'
 
 export const SCORE_WEIGHTS = { quality: 0.5, newness: 0.25, momentum: 0.25 } as const
 
@@ -23,14 +24,42 @@ export interface ScoreInput {
   momentum: number
 }
 
-export function computeScore(input: ScoreInput): number {
+export interface ScoreBreakdown {
+  version: string
+  total: number
+  components: {
+    quality: number
+    newness: number
+    momentum: number
+  }
+  contributions: {
+    quality: number
+    newness: number
+    momentum: number
+  }
+}
+
+export function explainScore(input: ScoreInput): ScoreBreakdown {
   const quality = input.quality ?? 0
-  return round(
-    SCORE_WEIGHTS.quality * quality +
-      SCORE_WEIGHTS.newness * input.newness +
-      SCORE_WEIGHTS.momentum * input.momentum,
-    4,
-  )
+  const contributions = {
+    quality: SCORE_WEIGHTS.quality * quality,
+    newness: SCORE_WEIGHTS.newness * input.newness,
+    momentum: SCORE_WEIGHTS.momentum * input.momentum,
+  }
+  return {
+    version: SCORING_VERSION,
+    total: round(contributions.quality + contributions.newness + contributions.momentum, 4),
+    components: { quality, newness: input.newness, momentum: input.momentum },
+    contributions: {
+      quality: round(contributions.quality, 4),
+      newness: round(contributions.newness, 4),
+      momentum: round(contributions.momentum, 4),
+    },
+  }
+}
+
+export function computeScore(input: ScoreInput): number {
+  return explainScore(input).total
 }
 
 export interface RankableRepo {

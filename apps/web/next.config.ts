@@ -1,3 +1,4 @@
+import path from 'node:path'
 import type { NextConfig } from 'next'
 
 try {
@@ -10,6 +11,10 @@ try {
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR?.trim() || '.next',
   allowedDevOrigins: ['127.0.0.1'],
+  // Docker 镜像只在构建时开启 standalone，不影响本地 pnpm build / pnpm start。
+  output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
+  // monorepo 下必须把追踪根目录指到仓库根，standalone 才会带上 workspace 依赖。
+  outputFileTracingRoot: path.join(import.meta.dirname, '../../'),
   transpilePackages: ['@repo-radar/core'],
   serverExternalPackages: ['pg'],
   webpack: (config) => {

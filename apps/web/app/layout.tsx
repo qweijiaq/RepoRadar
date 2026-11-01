@@ -1,17 +1,6 @@
 import type { Metadata } from 'next'
-import { headers } from 'next/headers'
-import Link from 'next/link'
-import { countUnreadNotifications } from '@repo-radar/core'
-import { auth } from '@/auth'
-import { ActivityHeartbeat } from '@/components/ActivityHeartbeat'
-import { CommandPalette } from '@/components/CommandPalette'
-import { JobsIndicator } from '@/components/JobsIndicator'
-import { NavLink } from '@/components/NavLink'
+import Script from 'next/script'
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister'
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { getPool } from '@/lib/db'
-import { sessionUser } from '@/lib/session'
-import { signOutAction } from './actions'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -19,82 +8,19 @@ export const metadata: Metadata = {
   description: '从 GitHub 自动发现值得关注的开源项目，按你的 star 和兴趣个性化排序。',
 }
 
-const THEME_SCRIPT = `try{var t=localStorage.getItem('radar-theme');document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}`
-
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth()
-  const currentUser = sessionUser(session)
-  const unread = currentUser ? await countUnreadNotifications(getPool(), Number(currentUser.id)) : 0
-  const nonce = (await headers()).get('x-nonce') ?? undefined
-
+/**
+ * 根布局刻意不读取会话、也不调用 headers()：
+ * 这样 /privacy、/terms 这类公开页才能被静态预渲染。
+ * 主题脚本改成外链文件，CSP 的 'self' 就够用，不再需要 per-request nonce。
+ */
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <Script src="/theme.js" strategy="beforeInteractive" />
       </head>
       <body>
-        <header className="site-header">
-          <Link className="brand" href="/">
-            <span className="seal" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.4">
-                <circle cx="12" cy="12" r="9" opacity="0.35" />
-                <circle cx="12" cy="12" r="5.2" opacity="0.65" />
-                <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-                <path d="M12 2v3M12 19v3M2 12h3M19 12h3" opacity="0.5" />
-              </svg>
-            </span>
-            <span className="brand-text">
-              <span className="brand-title">REPORADAR</span>
-              <span className="brand-sub">OPEN SOURCE RADAR</span>
-            </span>
-          </Link>
-
-          <nav className="site-nav">
-            {currentUser ? (
-              <>
-                <NavLink href="/feed">雷达</NavLink>
-                <NavLink href="/workbench">工作台</NavLink>
-                <NavLink href="/library">建议库</NavLink>
-                <NavLink href="/repos">仓库</NavLink>
-                <NavLink href="/settings">设置</NavLink>
-                <div className="nav-utilities">
-                  <CommandPalette compact />
-                  <Link
-                    className="icon-button inbox-button"
-                    href="/inbox"
-                    aria-label={`动态${unread > 0 ? `，${unread} 条未读` : ''}`}
-                    title="动态"
-                  >
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6">
-                      <path d="M6 9a6 6 0 1 1 12 0v4.2l1.6 2.4a1 1 0 0 1-.8 1.6H5.2a1 1 0 0 1-.8-1.6L6 13.2Z" />
-                      <path d="M10 20h4" />
-                    </svg>
-                    {unread > 0 ? <span className="nav-badge">{unread}</span> : null}
-                  </Link>
-                  <Link className="icon-button" href="/workbench/copilot" aria-label="问雷达" title="问雷达">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6">
-                      <path d="M12 3.5 13.6 9l5.4 1.6-5.4 1.6L12 17.7l-1.6-5.5L5 10.6 10.4 9Z" />
-                      <path d="M18.5 16.5 19.2 19l2.3.8-2.3.8-.7 2.4-.7-2.4-2.3-.8 2.3-.8Z" />
-                    </svg>
-                  </Link>
-                  <JobsIndicator compact />
-                  <ActivityHeartbeat />
-                  <ThemeToggle compact />
-                  <span className="nav-user">{currentUser.login}</span>
-                  <form action={signOutAction}>
-                    <button className="link-button" type="submit">
-                      退出
-                    </button>
-                  </form>
-                </div>
-              </>
-            ) : (
-              <NavLink href="/login">登录</NavLink>
-            )}
-          </nav>
-        </header>
-
-        <main className="site-main">{children}</main>
+        {children}
         <ServiceWorkerRegister />
 
         <footer className="site-footer">

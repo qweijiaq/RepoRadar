@@ -165,7 +165,7 @@ export async function runVerification(options: RunVerificationOptions): Promise<
   const timeoutMs = options.timeoutMs ?? 600_000
   const workDir = options.fromPath ?? (await mkdtemp(join(tmpdir(), 'repo-radar-verify-')))
 
-  let status: VerifyStatus = 'error'
+  let status: VerifyStatus
   let stack: VerifyStack = 'unknown'
   let commands: string[] = []
   let exitCode: number | null = null
@@ -287,7 +287,7 @@ export async function validatePatch(options: ValidatePatchOptions): Promise<Patc
   let changedFiles: string[] = []
   const commands: string[] = []
   let buildStatus: VerifyStatus = 'skipped'
-  let logText = ''
+  let logText: string
   let error: string | undefined
 
   try {

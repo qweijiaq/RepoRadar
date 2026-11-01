@@ -27,7 +27,7 @@ export function JobsIndicator({ compact = false }: { compact?: boolean }) {
     }
 
     void load()
-    const timer = setInterval(load, 3000)
+    const timer = setInterval(() => void load(), 3000)
     return () => {
       cancelled = true
       clearInterval(timer)

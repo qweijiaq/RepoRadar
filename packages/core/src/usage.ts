@@ -7,6 +7,13 @@ export interface LlmUsageEntry {
   promptTokens: number
   completionTokens: number
   latencyMs: number
+  promptVersion?: string | null
+  scoreVersion?: string | null
+}
+
+export interface LlmUsageContext {
+  promptVersion?: string | null
+  scoreVersion?: string | null
 }
 
 export interface LlmUsageSummary {
@@ -16,10 +23,20 @@ export interface LlmUsageSummary {
   models: Array<{ model: string; providerId: string | null; calls: number; tokens: number }>
 }
 
-const storage = new AsyncLocalStorage<LlmUsageEntry[]>()
+interface LlmUsageStore {
+  entries: LlmUsageEntry[]
+  context: LlmUsageContext
+}
+
+const storage = new AsyncLocalStorage<LlmUsageStore>()
 
 export function recordLlmUsage(entry: LlmUsageEntry): void {
-  storage.getStore()?.push(entry)
+  const store = storage.getStore()
+  if (!store) return
+  const next: LlmUsageEntry = { ...entry }
+  if (store.context.promptVersion) next.promptVersion = store.context.promptVersion
+  if (store.context.scoreVersion) next.scoreVersion = store.context.scoreVersion
+  store.entries.push(next)
 }
 
 /**
@@ -28,13 +45,14 @@ export function recordLlmUsage(entry: LlmUsageEntry): void {
 export async function withLlmUsage<T>(
   fn: () => Promise<T>,
   onDone: (usage: LlmUsageEntry[]) => Promise<void>,
+  context: LlmUsageContext = {},
 ): Promise<T> {
-  const usage: LlmUsageEntry[] = []
-  return storage.run(usage, async () => {
+  const store: LlmUsageStore = { entries: [], context }
+  return storage.run(store, async () => {
     try {
       return await fn()
     } finally {
-      await onDone(usage).catch((error) => console.error('[usage] 写入失败：', error))
+      await onDone(store.entries).catch((error) => console.error('[usage] 写入失败：', error))
     }
   })
 }
@@ -48,8 +66,11 @@ export async function recordLlmUsageRows(
 ): Promise<void> {
   for (const entry of usage) {
     await pool.query(
-      `INSERT INTO llm_usage (user_id, job_id, kind, provider_id, model, prompt_tokens, completion_tokens, latency_ms)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO llm_usage (
+         user_id, job_id, kind, provider_id, model, prompt_tokens, completion_tokens, latency_ms,
+         prompt_version, score_version
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         userId,
         jobId,
@@ -59,6 +80,8 @@ export async function recordLlmUsageRows(
         entry.promptTokens,
         entry.completionTokens,
         entry.latencyMs,
+        entry.promptVersion ?? null,
+        entry.scoreVersion ?? null,
       ],
     )
   }

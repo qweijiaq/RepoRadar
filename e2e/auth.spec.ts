@@ -17,3 +17,15 @@ test('demo login reaches the feed', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   await expect(page.getByText('雷达', { exact: true }).first()).toBeVisible()
 })
+
+test('public legal page renders without a session', async ({ page }) => {
+  await page.goto('/privacy')
+  await expect(page.getByRole('heading', { name: '隐私说明' })).toBeVisible()
+  await expect(page.getByRole('link', { name: '登录' })).toBeVisible()
+})
+
+test('theme script runs before the app and sets the theme', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('radar-theme', 'dark'))
+  await page.goto('/privacy')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+})

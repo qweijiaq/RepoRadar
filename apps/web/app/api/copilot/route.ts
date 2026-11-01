@@ -13,6 +13,7 @@ import {
   loadStoredLlmConfig,
   recordLlmUsageRows,
   updateCopilotTitle,
+  PROMPT_VERSIONS,
   withLlmUsage,
 } from '@repo-radar/core'
 import { auth } from '@/auth'
@@ -74,6 +75,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           maxTokens: 2200,
         }),
       (usage) => recordLlmUsageRows(pool, userId, null, 'copilot', usage),
+      { promptVersion: PROMPT_VERSIONS.copilot },
     )
     await addCopilotMessage(pool, thread.id, {
       role: 'assistant',

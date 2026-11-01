@@ -28,6 +28,8 @@ export function UiSelect({ name, value, onChange, options, placeholder = '请选
     if (!open) return
     const index = options.findIndex((option) => option.value === value)
     setActive(index >= 0 ? index : 0)
+    // 只在打开时定位到当前值；依赖 options/value 会在父组件重渲染时打断键盘导航。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   useEffect(() => {

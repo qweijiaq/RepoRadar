@@ -65,7 +65,10 @@ export async function migrate(pool: DbPool): Promise<void> {
         console.log(`[migrate] 已应用 ${version}`)
       } catch (error) {
         await client.query('ROLLBACK').catch(() => undefined)
-        throw new Error(`迁移 ${version} 失败：${error instanceof Error ? error.message : String(error)}`)
+        throw new Error(
+          `迁移 ${version} 失败：${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        )
       }
     }
   } finally {
@@ -76,6 +79,7 @@ export async function migrate(pool: DbPool): Promise<void> {
 
 interface RepoRow {
   id: string
+  github_id: string | null
   full_name: string
   owner: string
   name: string
@@ -103,12 +107,15 @@ interface EnrichedRepoRow extends RepoRow {
   quality_score: number | null
   stars_7d: number | null
   embedding: string | null
+  semantic_score: number | null
   verify_status: string | null
   verified_at: Date | string | null
 }
 
-const REPO_COLUMNS = `id, full_name, owner, name, description, html_url, homepage, language, topics,
-  stars, forks, open_issues, license, archived, is_fork, pushed_at, created_at`
+const REPO_COLUMNS = `repos.id, repos.github_id, repos.full_name, repos.owner, repos.name,
+  repos.description, repos.html_url, repos.homepage, repos.language, repos.topics,
+  repos.stars, repos.forks, repos.open_issues, repos.license, repos.archived, repos.is_fork,
+  repos.pushed_at, repos.created_at`
 
 function toIso(value: Date | string | null): string | null {
   if (value === null) return null
@@ -118,6 +125,7 @@ function toIso(value: Date | string | null): string | null {
 function mapRepoRow(row: RepoRow): RepoRecord {
   return {
     id: Number(row.id),
+    githubId: row.github_id === null ? null : Number(row.github_id),
     fullName: row.full_name,
     owner: row.owner,
     name: row.name,
@@ -137,7 +145,7 @@ function mapRepoRow(row: RepoRow): RepoRecord {
   }
 }
 
-function mapEnrichedRow(row: EnrichedRepoRow): EnrichedRepoRecord {
+function mapEnrichedRow(row: EnrichedRepoRow, withSemantic = false): EnrichedRepoRecord {
   return {
     ...mapRepoRow(row),
     summary: row.summary,
@@ -148,32 +156,22 @@ function mapEnrichedRow(row: EnrichedRepoRow): EnrichedRepoRecord {
     qualityScore: row.quality_score,
     stars7d: row.stars_7d,
     embedding: parseVector(row.embedding),
+    ...(withSemantic ? { semanticScore: row.semantic_score } : {}),
     verifyStatus: row.verify_status,
     verifiedAt: toIso(row.verified_at),
   }
 }
 
-export async function upsertRepo(pool: DbPool, repo: RepoInput): Promise<{ id: number; inserted: boolean }> {
-  const { rows } = await pool.query<{ id: string; inserted: boolean }>(
-    `INSERT INTO repos (
-       full_name, owner, name, description, html_url, homepage, language, topics,
-       stars, forks, open_issues, license, archived, is_fork, pushed_at, created_at, updated_at
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, now())
-     ON CONFLICT (full_name) DO UPDATE SET
-       description = EXCLUDED.description,
-       homepage = EXCLUDED.homepage,
-       language = EXCLUDED.language,
-       topics = EXCLUDED.topics,
-       stars = EXCLUDED.stars,
-       forks = EXCLUDED.forks,
-       open_issues = EXCLUDED.open_issues,
-       license = EXCLUDED.license,
-       archived = EXCLUDED.archived,
-       is_fork = EXCLUDED.is_fork,
-       pushed_at = EXCLUDED.pushed_at,
+async function updateRepoById(pool: DbPool, id: number, repo: RepoInput): Promise<void> {
+  await pool.query(
+    `UPDATE repos SET
+       full_name = $2, owner = $3, name = $4, description = $5, html_url = $6, homepage = $7,
+       language = $8, topics = $9, stars = $10, forks = $11, open_issues = $12, license = $13,
+       archived = $14, is_fork = $15, pushed_at = $16, github_id = COALESCE($17, github_id),
        updated_at = now()
-     RETURNING id, (xmax = 0) AS inserted`,
+     WHERE id = $1`,
     [
+      id,
       repo.fullName,
       repo.owner,
       repo.name,
@@ -189,12 +187,88 @@ export async function upsertRepo(pool: DbPool, repo: RepoInput): Promise<{ id: n
       repo.archived,
       repo.isFork,
       repo.pushedAt,
-      repo.createdAt,
+      repo.githubId ?? null,
     ],
   )
-  const row = rows[0]
-  if (!row) throw new Error(`保存仓库失败：${repo.fullName}`)
-  return { id: Number(row.id), inserted: row.inserted }
+}
+
+export async function upsertRepo(pool: DbPool, repo: RepoInput): Promise<{ id: number; inserted: boolean }> {
+  const githubId = repo.githubId ?? null
+
+  // 优先按 GitHub 稳定 ID 找到同一仓库，这样改名/转移不会产生重复记录。
+  if (githubId !== null) {
+    const existing = await pool.query<{ id: string }>(
+      `SELECT id FROM repos WHERE github_id = $1 LIMIT 1`,
+      [githubId],
+    )
+    if (existing.rows[0]) {
+      const id = Number(existing.rows[0].id)
+      await updateRepoById(pool, id, repo)
+      return { id, inserted: false }
+    }
+  }
+
+  try {
+    const { rows } = await pool.query<{ id: string; inserted: boolean }>(
+      `INSERT INTO repos (
+         full_name, github_id, owner, name, description, html_url, homepage, language, topics,
+         stars, forks, open_issues, license, archived, is_fork, pushed_at, created_at, updated_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now())
+       ON CONFLICT (full_name) DO UPDATE SET
+         github_id = COALESCE(EXCLUDED.github_id, repos.github_id),
+         owner = EXCLUDED.owner,
+         name = EXCLUDED.name,
+         description = EXCLUDED.description,
+         homepage = EXCLUDED.homepage,
+         language = EXCLUDED.language,
+         topics = EXCLUDED.topics,
+         stars = EXCLUDED.stars,
+         forks = EXCLUDED.forks,
+         open_issues = EXCLUDED.open_issues,
+         license = EXCLUDED.license,
+         archived = EXCLUDED.archived,
+         is_fork = EXCLUDED.is_fork,
+         pushed_at = EXCLUDED.pushed_at,
+         updated_at = now()
+       RETURNING id, (xmax = 0) AS inserted`,
+      [
+        repo.fullName,
+        githubId,
+        repo.owner,
+        repo.name,
+        repo.description,
+        repo.htmlUrl,
+        repo.homepage,
+        repo.language,
+        repo.topics,
+        repo.stars,
+        repo.forks,
+        repo.openIssues,
+        repo.license,
+        repo.archived,
+        repo.isFork,
+        repo.pushedAt,
+        repo.createdAt,
+      ],
+    )
+    const row = rows[0]
+    if (!row) throw new Error(`保存仓库失败：${repo.fullName}`)
+    return { id: Number(row.id), inserted: row.inserted }
+  } catch (error) {
+    // 极少数情况下，同一 ID 的仓库被并发插入，或旧数据按 full_name 占位。
+    if (githubId !== null && (error as { code?: string }).code === '23505') {
+      const existing = await pool.query<{ id: string }>(
+        `SELECT id FROM repos WHERE github_id = $1 LIMIT 1`,
+        [githubId],
+      )
+      if (existing.rows[0]) {
+        const id = Number(existing.rows[0].id)
+        await updateRepoById(pool, id, repo)
+        return { id, inserted: false }
+      }
+    }
+    throw error
+  }
 }
 
 export async function saveSnapshot(pool: DbPool, repoId: number, stars: number): Promise<void> {
@@ -203,6 +277,26 @@ export async function saveSnapshot(pool: DbPool, repoId: number, stars: number):
      ON CONFLICT (repo_id, captured_on) DO UPDATE SET stars = EXCLUDED.stars`,
     [repoId, stars],
   )
+}
+
+export interface RepoIdentityRow {
+  id: number
+  fullName: string
+}
+
+export async function listReposMissingGithubId(pool: DbPool, limit = 50): Promise<RepoIdentityRow[]> {
+  const { rows } = await pool.query<{ id: string; full_name: string }>(
+    `SELECT id, full_name FROM repos
+     WHERE github_id IS NULL
+     ORDER BY updated_at DESC
+     LIMIT $1`,
+    [Math.max(1, Math.min(500, limit))],
+  )
+  return rows.map((row) => ({ id: Number(row.id), fullName: row.full_name }))
+}
+
+export async function setRepoGithubId(pool: DbPool, id: number, githubId: number): Promise<void> {
+  await pool.query(`UPDATE repos SET github_id = $2, updated_at = now() WHERE id = $1`, [id, githubId])
 }
 
 export async function findPendingRepos(
@@ -252,21 +346,79 @@ export async function findReposForMatching(
   return rows.map(mapRepoRow)
 }
 
-export async function findEnrichedRepos(pool: DbPool, limit: number): Promise<EnrichedRepoRecord[]> {
+export interface EnrichedQueryOptions {
+  /**
+   * 传入画像向量时，相似度直接由 pgvector 在库里计算，结果放在 semanticScore，
+   * 调用方就不需要把 1536 维向量搬到应用层。
+   */
+  profileEmbedding?: number[] | null
+  /** 明确不需要向量时设为 false。默认在传了画像向量后自动关闭。 */
+  includeEmbedding?: boolean
+  /** 在 SQL 层先按语言过滤，避免「先取前 500 再筛选」把小语种筛空。 */
+  language?: string | null
+  /** 只保留已通过沙箱验证的仓库。 */
+  verifiedOnly?: boolean
+}
+
+/** 与 0001_initial.sql 里 repos.embedding 的维度保持一致。 */
+const EMBEDDING_DIMENSIONS = 1536
+
+function vectorLiteral(values: number[] | null | undefined): string | null {
+  if (!values || values.length !== EMBEDDING_DIMENSIONS) return null
+  return JSON.stringify(values)
+}
+
+export async function findEnrichedRepos(
+  pool: DbPool,
+  limit: number,
+  options: EnrichedQueryOptions = {},
+): Promise<EnrichedRepoRecord[]> {
+  const profileEmbedding = vectorLiteral(options.profileEmbedding)
+  const withSemantic = profileEmbedding !== null
+  const withEmbedding = options.includeEmbedding ?? !withSemantic
+
+  const conditions = ['repos.enriched_at IS NOT NULL']
+  const values: unknown[] = [limit]
+  const language = options.language?.trim()
+  if (language) {
+    values.push(language)
+    conditions.push(`repos.language = $${values.length}`)
+  }
+  if (options.verifiedOnly) conditions.push(`repos.verify_status = 'verified'`)
+  let semanticExpression = 'NULL::double precision'
+  if (withSemantic) {
+    values.push(profileEmbedding)
+    semanticExpression = `CASE WHEN repos.embedding IS NULL THEN NULL ELSE 1 - (repos.embedding <=> $${values.length}::vector) END`
+  }
+
   const { rows } = await pool.query<EnrichedRepoRow>(
-    `SELECT ${REPO_COLUMNS}, summary, problem, audience, verdict, reason, quality_score,
-       (SELECT s.stars FROM star_snapshots s
-          WHERE s.repo_id = repos.id AND s.captured_on <= CURRENT_DATE - INTERVAL '7 days'
-          ORDER BY s.captured_on DESC LIMIT 1) AS stars_7d,
-       embedding::text AS embedding,
-       verify_status, verified_at
-     FROM repos
-     WHERE enriched_at IS NOT NULL
-     ORDER BY quality_score DESC NULLS LAST
-     LIMIT $1`,
-    [limit],
+    `WITH candidates AS (
+       SELECT repos.id, repos.quality_score
+       FROM repos
+       WHERE ${conditions.join('\n         AND ')}
+       ORDER BY repos.quality_score DESC NULLS LAST
+       LIMIT $1
+     ),
+     recent_stars AS (
+       SELECT DISTINCT ON (repo_id) repo_id, stars
+       FROM star_snapshots
+       WHERE repo_id IN (SELECT id FROM candidates)
+         AND captured_on <= CURRENT_DATE - INTERVAL '7 days'
+       ORDER BY repo_id, captured_on DESC
+     )
+     SELECT ${REPO_COLUMNS}, repos.summary, repos.problem, repos.audience, repos.verdict,
+       repos.reason, repos.quality_score,
+       recent_stars.stars AS stars_7d,
+       ${withEmbedding ? 'repos.embedding::text' : 'NULL::text'} AS embedding,
+       ${semanticExpression} AS semantic_score,
+       repos.verify_status, repos.verified_at
+     FROM candidates
+     JOIN repos ON repos.id = candidates.id
+     LEFT JOIN recent_stars ON recent_stars.repo_id = repos.id
+     ORDER BY candidates.quality_score DESC NULLS LAST`,
+    values,
   )
-  return rows.map(mapEnrichedRow)
+  return rows.map((row) => mapEnrichedRow(row, withSemantic))
 }
 
 export async function findRepoByFullName(pool: DbPool, fullName: string): Promise<EnrichedRepoRecord | null> {
@@ -314,7 +466,7 @@ export async function searchEnrichedRepos(
      LIMIT $4`,
     [pattern, options.topic ?? null, options.language ?? null, options.limit ?? 20],
   )
-  return rows.map(mapEnrichedRow)
+  return rows.map((row) => mapEnrichedRow(row))
 }
 
 export interface EnrichmentUpdate {

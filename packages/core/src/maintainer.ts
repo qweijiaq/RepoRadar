@@ -94,6 +94,7 @@ export interface StoredMaintainerReport {
   generatedAt: string
   model?: string | null
   providerId?: string | null
+  promptVersion?: string | null
 }
 
 const DAY_MS = 86_400_000

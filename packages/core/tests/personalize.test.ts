@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildFeedbackContext,
   buildTasteProfile,
   cosineSimilarity,
   isExcluded,
+  explainPersonalizedScore,
   personalizedScore,
   rankForUser,
   topicAffinity,
@@ -139,6 +141,40 @@ describe('personalizedScore', () => {
     const highQuality = personalizedScore(null, makeRepo({ qualityScore: 0.9 }), NOW)
     const lowQuality = personalizedScore(null, makeRepo({ qualityScore: 0.2 }), NOW)
     expect(highQuality).toBeGreaterThan(lowQuality)
+  })
+})
+
+describe('explainPersonalizedScore', () => {
+  it('returns a breakdown whose total matches personalizedScore', () => {
+    const profile = buildTasteProfile({
+      starred: [{ topics: ['cli'], language: 'TypeScript', embedding: null }],
+    })
+    const repo = makeRepo({ topics: ['cli'], qualityScore: 0.8 })
+    const breakdown = explainPersonalizedScore(profile, repo, NOW)
+    expect(breakdown.total).toBe(personalizedScore(profile, repo, NOW))
+    expect(breakdown.global.contributions.quality).toBeGreaterThan(0)
+    expect(breakdown.affinity?.topic).toBeGreaterThan(0)
+    expect(breakdown.version).toBe('score@1')
+  })
+
+  it('reports adjustments separately', () => {
+    const profile = buildTasteProfile({
+      starred: [{ topics: ['cli'], language: 'TypeScript', embedding: null }],
+    })
+    const feedback = buildFeedbackContext(new Map([['acme/tool', 'save']]), [])
+    const breakdown = explainPersonalizedScore(profile, makeRepo(), NOW, feedback)
+    expect(breakdown.adjustments.feedback).toBeGreaterThan(0)
+  })
+
+  it('prefers a semantic score precomputed by pgvector over local embeddings', () => {
+    const profile = buildTasteProfile({
+      starred: [{ topics: ['cli'], language: 'TypeScript', embedding: [1, 0] }],
+    })
+    const close = explainPersonalizedScore(profile, makeRepo({ embedding: null, semanticScore: 0.9 }), NOW)
+    const far = explainPersonalizedScore(profile, makeRepo({ embedding: null, semanticScore: 0 }), NOW)
+    expect(close.affinity?.semantic).toBeCloseTo(0.9, 4)
+    expect(far.affinity?.semantic).toBe(0)
+    expect(close.total).toBeGreaterThan(far.total)
   })
 })
 

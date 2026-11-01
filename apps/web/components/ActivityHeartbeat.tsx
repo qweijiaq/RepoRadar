@@ -18,8 +18,8 @@ export function ActivityHeartbeat() {
       }
     }
 
-    const first = setTimeout(tick, 3000)
-    const timer = setInterval(tick, 5 * 60 * 1000)
+    const first = setTimeout(() => void tick(), 3000)
+    const timer = setInterval(() => void tick(), 5 * 60 * 1000)
     return () => {
       cancelled = true
       clearTimeout(first)

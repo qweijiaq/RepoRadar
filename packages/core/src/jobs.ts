@@ -188,25 +188,28 @@ export async function retryJob(pool: DbPool, id: number): Promise<void> {
 }
 
 export async function recoverStaleJobs(pool: DbPool): Promise<number> {
+  // 阈值要比 runner 的 10 分钟执行超时更长，否则还在跑的任务会被误判为心跳超时。
   const { rowCount } = await pool.query(
     `UPDATE ai_jobs SET status = 'failed', error = '任务心跳超时，可能服务已重启', finished_at = now()
-     WHERE status = 'running' AND heartbeat_at < now() - INTERVAL '10 minutes'`,
+     WHERE status = 'running' AND heartbeat_at < now() - INTERVAL '15 minutes'`,
   )
   return rowCount ?? 0
 }
 
 export async function finishJob(pool: DbPool, id: number, result: JobResult): Promise<void> {
+  // 只有仍在运行的任务才能完成；已被回收/取消/重试的任务不能被迟到的结果覆盖。
   await pool.query(
     `UPDATE ai_jobs SET status = 'succeeded', result = $2, progress = NULL, finished_at = now()
-     WHERE id = $1`,
+     WHERE id = $1 AND status = 'running'`,
     [id, JSON.stringify(result)],
   )
 }
 
 export async function failJob(pool: DbPool, id: number, error: string): Promise<void> {
+  // 配额检查失败时任务还是 queued，所以这里同时接受 queued 和 running。
   await pool.query(
     `UPDATE ai_jobs SET status = 'failed', error = $2, progress = NULL, finished_at = now()
-     WHERE id = $1`,
+     WHERE id = $1 AND status IN ('queued', 'running')`,
     [id, error.slice(0, 500)],
   )
 }

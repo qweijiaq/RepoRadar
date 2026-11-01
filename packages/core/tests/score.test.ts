@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeMomentum, computeNewness, computeScore, rankRepos } from '../src/score.js'
+import { computeMomentum, computeNewness, computeScore, explainScore, rankRepos } from '../src/score.js'
 
 const NOW = Date.parse('2026-10-30T00:00:00Z')
 
@@ -39,6 +39,19 @@ describe('computeScore', () => {
 
   it('treats a missing quality score as 0', () => {
     expect(computeScore({ quality: null, newness: 0, momentum: 0 })).toBe(0)
+  })
+})
+
+describe('explainScore', () => {
+  it('exposes the component contributions behind the total', () => {
+    const breakdown = explainScore({ quality: 1, newness: 1, momentum: 1 })
+    expect(breakdown.total).toBe(1)
+    expect(breakdown.contributions).toEqual({ quality: 0.5, newness: 0.25, momentum: 0.25 })
+    expect(breakdown.version).toBe('score@1')
+  })
+
+  it('keeps missing quality at zero', () => {
+    expect(explainScore({ quality: null, newness: 0.4, momentum: 0.5 }).contributions.quality).toBe(0)
   })
 })
 

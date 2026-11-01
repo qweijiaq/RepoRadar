@@ -5,5 +5,8 @@ packages:
 allowBuilds:
   esbuild: true
 
+minimumReleaseAgeExclude:
+  - globals@17.14.0
+
 overrides:
   postcss: 8.5.32

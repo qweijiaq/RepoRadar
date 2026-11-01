@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { handleGitHubWebhook, type GitHubWebhookPayload } from '@repo-radar/core'
+import { handleGitHubWebhook, parseGitHubWebhookPayload } from '@repo-radar/core'
 import { getPool } from '@/lib/db'
 import { resolveGithubWebhookSecret } from '@/lib/webhook-config'
 
@@ -28,12 +28,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   const deliveryId = request.headers.get('x-github-delivery') ?? ''
   if (!eventName || !deliveryId) return NextResponse.json({ error: 'missing-event' }, { status: 400 })
 
-  let payload: GitHubWebhookPayload
+  let raw: unknown
   try {
-    payload = JSON.parse(body) as GitHubWebhookPayload
+    raw = JSON.parse(body)
   } catch {
     return NextResponse.json({ error: 'invalid-json' }, { status: 400 })
   }
+  const payload = parseGitHubWebhookPayload(raw)
+  if (!payload) return NextResponse.json({ error: 'invalid-payload' }, { status: 400 })
 
   try {
     const notified = await handleGitHubWebhook(getPool(), eventName, deliveryId, payload)

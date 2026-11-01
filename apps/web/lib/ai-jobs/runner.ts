@@ -12,7 +12,9 @@ import {
   markJobCancelled,
   markJobRunning,
   requeueJob,
+  promptVersionForJob,
   recordLlmUsageRows,
+  SCORING_VERSION,
   withLlmUsage,
   type DbPool,
   type JobKind,
@@ -90,6 +92,7 @@ async function executeJob(pool: DbPool, userId: number, jobId: number): Promise<
         withLlmUsage(
           () => runJobHandler(pool, job, userId),
           (usage) => recordLlmUsageRows(pool, userId, jobId, job.kind, usage),
+          { promptVersion: promptVersionForJob(job.kind), scoreVersion: SCORING_VERSION },
         ),
       )
       if (await isJobCancelled(pool, jobId)) {

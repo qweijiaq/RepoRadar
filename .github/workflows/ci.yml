@@ -5,9 +5,17 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -24,10 +32,12 @@ jobs:
           --health-retries 20
     env:
       DATABASE_URL: postgres://radar:radar@localhost:5433/radar
+      TEST_DATABASE_URL: postgres://radar:radar@localhost:5433/radar
       AUTH_SECRET: ci-only-not-a-production-secret
       ADMIN_LOGINS: ci-admin
       SETUP_TOKEN: ci-setup-token
       AUTH_DEV_MODE: "0"
+      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -39,9 +49,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --prod --audit-level=high
+      - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm db:migrate
+      - name: Migrations
+        run: pnpm db:migrate
+      - name: Database integration tests
+        run: pnpm test:db
       - run: pnpm build
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
@@ -54,3 +68,10 @@ jobs:
           NEXT_DIST_DIR: .next-e2e
           METRICS_TOKEN: ""
           RADAR_INLINE_JOBS: "0"
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

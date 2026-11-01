@@ -16,16 +16,33 @@
     "build": "pnpm --filter @repo-radar/web build",
     "start": "pnpm --filter @repo-radar/web start",
     "test": "vitest run",
+    "test:db": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "typecheck": "tsc --noEmit && pnpm --filter @repo-radar/web run typecheck",
-    "worker": "pnpm --filter @repo-radar/web exec tsx scripts/job-worker.ts"
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit && tsc -p e2e --noEmit && pnpm --filter @repo-radar/web run typecheck",
+    "worker": "pnpm --filter @repo-radar/web exec tsx scripts/job-worker.ts",
+    "eval:llm": "tsx packages/core/eval/run.ts"
+  },
+  "dependencies": {
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "^16.4.3",
     "@playwright/test": "^1.64.1",
     "@types/node": "^22.0.0",
-    "tsx": "^4.21.0",
-    "typescript": "^7.0.2",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-eslint": "^8.72.1",
     "vitest": "^5.0.5"
   }
 }

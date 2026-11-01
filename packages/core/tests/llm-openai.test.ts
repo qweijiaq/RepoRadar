@@ -1,4 +1,5 @@
 import { createServer } from 'node:http'
+import type { ServerResponse } from 'node:http'
 import { describe, expect, it } from 'vitest'
 import { chatCompletion } from '../src/llm.js'
 import { withLlmUsage } from '../src/usage.js'
@@ -12,7 +13,7 @@ const config = {
 }
 
 async function withServer(
-  handler: (body: Record<string, unknown>, response: import('node:http').ServerResponse) => void,
+  handler: (body: Record<string, unknown>, response: ServerResponse) => void,
   run: (baseUrl: string) => Promise<void>,
 ): Promise<void> {
   const server = createServer((request, response) => {
@@ -32,7 +33,7 @@ async function withServer(
   }
 }
 
-function sendJson(response: import('node:http').ServerResponse, status: number, body: unknown): void {
+function sendJson(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, { 'content-type': 'application/json' })
   response.end(JSON.stringify(body))
 }

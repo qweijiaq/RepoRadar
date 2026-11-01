@@ -65,6 +65,7 @@ export interface StoredIntegrationReport {
   generatedAt: string
   model?: string | null
   providerId?: string | null
+  promptVersion?: string | null
   candidateCount?: number
   candidateRepos?: string[]
 }

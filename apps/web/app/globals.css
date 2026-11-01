@@ -1244,6 +1244,43 @@ h3 {
   white-space: nowrap;
 }
 
+.score-detail {
+  margin-top: 2px;
+  color: var(--text-45);
+  font-size: 11.5px;
+}
+
+.score-detail summary {
+  cursor: pointer;
+  color: var(--accent-2);
+  font-size: 11.5px;
+}
+
+.score-detail ul {
+  margin: 6px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  list-style: none;
+}
+
+.score-detail li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.score-detail li span:last-child {
+  color: var(--text-70);
+  font-family: var(--mono);
+}
+
+.score-detail p {
+  margin: 2px 0 0;
+}
+
 .repo-actions {
   display: flex;
   flex-wrap: wrap;

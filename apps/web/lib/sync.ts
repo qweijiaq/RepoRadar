@@ -1,12 +1,12 @@
 import {
   buildTasteProfile,
   mapGitHubRepo,
+  parseGitHubRepoPayload,
   parseVector,
   saveSnapshot,
   sleep,
   upsertRepo,
   upsertUserProject,
-  type GitHubRepoPayload,
   type RepoInput,
   type StarredSignal,
   type TasteProfile,
@@ -46,13 +46,18 @@ async function fetchStarredRepos(token: string): Promise<StarredItem[]> {
     })
     if (!response.ok) throw new Error(`GitHub starred API 返回 ${response.status}`)
 
-    const data = (await response.json()) as Array<GitHubRepoPayload | { starred_at?: string; repo: GitHubRepoPayload }>
+    const data: unknown = await response.json()
     if (!Array.isArray(data) || data.length === 0) break
 
     for (const entry of data) {
       if (items.length >= MAX_STARS) break
-      const wrapped = 'repo' in entry ? entry : { starred_at: undefined, repo: entry }
-      items.push({ repo: mapGitHubRepo(wrapped.repo), starredAt: wrapped.starred_at ?? null })
+      const wrapped =
+        typeof entry === 'object' && entry !== null && 'repo' in entry
+          ? (entry as { repo: unknown; starred_at?: string })
+          : { repo: entry, starred_at: undefined }
+      const payload = parseGitHubRepoPayload(wrapped.repo)
+      if (!payload) continue
+      items.push({ repo: mapGitHubRepo(payload), starredAt: wrapped.starred_at ?? null })
     }
     if (data.length < 100) break
   }
@@ -66,9 +71,14 @@ async function fetchOwnedRepos(login: string, token: string): Promise<RepoInput[
     { headers: githubHeaders(token), cache: 'no-store' },
   )
   if (!response.ok) return []
-  const data = (await response.json()) as GitHubRepoPayload[]
+  const data: unknown = await response.json()
   if (!Array.isArray(data)) return []
-  return data.filter((repo) => !repo.fork && !repo.archived).map(mapGitHubRepo)
+  const repos: RepoInput[] = []
+  for (const item of data) {
+    const payload = parseGitHubRepoPayload(item)
+    if (payload && !payload.fork && !payload.archived) repos.push(mapGitHubRepo(payload))
+  }
+  return repos
 }
 
 interface PublicEvent {
@@ -103,7 +113,8 @@ async function fetchRepoMetadata(fullName: string, token: string): Promise<RepoI
     cache: 'no-store',
   })
   if (!response.ok) return null
-  return mapGitHubRepo((await response.json()) as GitHubRepoPayload)
+  const payload = parseGitHubRepoPayload(await response.json())
+  return payload ? mapGitHubRepo(payload) : null
 }
 
 function starWeight(starredAt: string | null, now: number): number {
@@ -244,7 +255,7 @@ export async function rebuildProfile(userId: number): Promise<TasteProfile> {
   )
 
   let signals: StarredSignal[]
-  let prefs: { excludedTopics?: string[]; excludedLanguages?: string[] } = {}
+  let prefs: { excludedTopics?: string[]; excludedLanguages?: string[] }
 
   if (rows.length > 0) {
     signals = rows.map((row) => ({

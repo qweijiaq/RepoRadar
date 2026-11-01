@@ -4,8 +4,9 @@ import type { LlmConfig } from './config.js'
 import { chatCompletion, embedText } from './llm.js'
 import type { RepoInput, Verdict } from './types.js'
 import { round } from './utils.js'
+import { PROMPT_VERSIONS, SCORING_VERSION } from './versions.js'
 
-const SYSTEM_PROMPT =
+export const ENRICH_SYSTEM_PROMPT =
   '你是一名资深开源项目评审员。根据给定的仓库信息与 README，判断它是否值得开发者关注。只输出一个 JSON 对象，不要输出任何其他文字。'
 
 export const enrichmentSchema = z.object({
@@ -121,7 +122,7 @@ function fallbackReason(repo: RepoInput, detail: QualityDetail): string {
   return parts.length > 0 ? parts.join('，') : '需人工复核'
 }
 
-function buildUserPrompt(repo: RepoInput, readme: string | null): string {
+export function buildEnrichmentPrompt(repo: RepoInput, readme: string | null): string {
   return [
     `仓库：${repo.fullName}`,
     `描述：${repo.description ?? '（无）'}`,
@@ -142,8 +143,8 @@ export async function enrichRepo(repo: RepoInput, options: EnrichOptions): Promi
   if (options.llm) {
     try {
       const raw = await chatCompletion(options.llm, [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(repo, options.readme) },
+        { role: 'system', content: ENRICH_SYSTEM_PROMPT },
+        { role: 'user', content: buildEnrichmentPrompt(repo, options.readme) },
       ])
       payload = parseEnrichment(raw)
     } catch {
@@ -169,7 +170,12 @@ export async function enrichRepo(repo: RepoInput, options: EnrichOptions): Promi
     verdict,
     reason,
     qualityScore,
-    qualityDetail: { ...heuristic.detail, llm: payload?.quality ?? null },
+    qualityDetail: {
+      ...heuristic.detail,
+      llm: payload?.quality ?? null,
+      promptVersion: PROMPT_VERSIONS.enrich,
+      scoreVersion: SCORING_VERSION,
+    },
     embedding,
   }
 }

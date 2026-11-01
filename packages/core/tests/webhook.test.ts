@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { webhookToActivity } from '../src/webhook.js'
+import { parseGitHubWebhookPayload, webhookToActivity } from '../src/webhook.js'
+
+describe('parseGitHubWebhookPayload', () => {
+  it('accepts a valid webhook and rejects malformed payloads', () => {
+    const payload = parseGitHubWebhookPayload({
+      action: 'opened',
+      repository: { full_name: 'me/app', id: 1 },
+      sender: { login: 'alice' },
+      issue: { number: 7, title: '登录失败', html_url: 'https://github.com/me/app/issues/7' },
+    })
+    expect(payload?.repository?.full_name).toBe('me/app')
+    expect(payload?.issue?.number).toBe(7)
+    expect(parseGitHubWebhookPayload(null)).toBeNull()
+    expect(parseGitHubWebhookPayload('not-json')).toBeNull()
+  })
+})
 
 describe('webhookToActivity', () => {
   it('maps watch and fork events', () => {

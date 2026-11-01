@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'radar-v2'
+const CACHE_VERSION = 'radar-v3'
 const STATIC_CACHE = `${CACHE_VERSION}-static`
 const OFFLINE_URL = '/offline.html'
 const PRECACHE = [OFFLINE_URL, '/offline.css', '/icon.svg']
@@ -42,7 +42,23 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  if (url.pathname.startsWith('/_next/static/') || /\.(?:css|js|svg|png|webp|woff2?)$/.test(url.pathname)) {
+  if (url.pathname.startsWith('/_next/static/')) {
+    // 构建产物必须优先走网络，否则开发重启或部署后可能拿到旧 JS，导致 hydration 失败。
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone()
+            void caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy))
+          }
+          return response
+        })
+        .catch(async () => (await caches.match(request)) || Response.error()),
+    )
+    return
+  }
+
+  if (/\.(?:css|js|svg|png|webp|woff2?)$/.test(url.pathname)) {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached

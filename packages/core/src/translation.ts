@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { LlmConfig } from './config.js'
+import type { DbPool } from './db.js'
 import { chatCompletion } from './llm.js'
 
 const CACHE_TTL = 7 * 86_400_000
@@ -15,9 +16,12 @@ export function isLikelyEnglishDescription(text: string): boolean {
   return letters / value.length >= 0.4
 }
 
-function cacheKey(text: string): string {
+/** 翻译缓存的稳定键，落库和进程内缓存共用。 */
+export function translationKey(text: string): string {
   return createHash('sha256').update(text).digest('hex').slice(0, 32)
 }
+
+const cacheKey = translationKey
 
 function readCache(text: string, now: number): string | null {
   const entry = cache.get(cacheKey(text))
@@ -96,4 +100,79 @@ export async function translateRepoDescriptions(
     // 翻译失败不影响推荐内容
   }
   return result
+}
+
+/**
+ * 只读翻译缓存：先看进程内，再查 repo_translations。不会调用模型，
+ * 页面渲染可以放心使用。
+ */
+export async function loadRepoTranslations(
+  pool: DbPool,
+  texts: string[],
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>()
+  const now = Date.now()
+  const missing: string[] = []
+  for (const text of new Set(texts)) {
+    if (!isLikelyEnglishDescription(text)) continue
+    const cached = readCache(text, now)
+    if (cached) result.set(text, cached)
+    else missing.push(text)
+  }
+  if (missing.length === 0) return result
+
+  const byHash = new Map(missing.map((text) => [cacheKey(text), text]))
+  const { rows } = await pool.query<{ source_hash: string; translated: string }>(
+    `SELECT source_hash, translated FROM repo_translations WHERE source_hash = ANY($1)`,
+    [[...byHash.keys()]],
+  )
+  for (const row of rows) {
+    const source = byHash.get(row.source_hash)
+    if (!source) continue
+    writeCache(source, row.translated, now)
+    result.set(source, row.translated)
+  }
+  return result
+}
+
+const inFlight = new Set<string>()
+
+/**
+ * 在响应结束后调用：翻译缺失的描述并落库。返回本次写入的条数。
+ * 同一段文本只允许一个并发请求去调用模型。
+ */
+export async function warmRepoTranslations(
+  pool: DbPool,
+  llm: LlmConfig | null | undefined,
+  texts: string[],
+): Promise<number> {
+  if (!llm) return 0
+  const pending = [...new Set(texts)].filter(
+    (text) => isLikelyEnglishDescription(text) && !inFlight.has(cacheKey(text)),
+  )
+  if (pending.length === 0) return 0
+  for (const text of pending) inFlight.add(cacheKey(text))
+  try {
+    const translated = await translateRepoDescriptions(pending.slice(0, 10), llm)
+    await saveRepoTranslations(pool, translated)
+    return translated.size
+  } finally {
+    for (const text of pending) inFlight.delete(cacheKey(text))
+  }
+}
+
+async function saveRepoTranslations(pool: DbPool, translated: Map<string, string>): Promise<void> {
+  if (translated.size === 0) return
+  const entries = [...translated.entries()]
+  await pool.query(
+    `INSERT INTO repo_translations (source_hash, source, translated)
+     SELECT * FROM unnest($1::text[], $2::text[], $3::text[])
+     ON CONFLICT (source_hash) DO UPDATE SET
+       translated = EXCLUDED.translated, updated_at = now()`,
+    [
+      entries.map(([source]) => cacheKey(source)),
+      entries.map(([source]) => source),
+      entries.map(([, value]) => value),
+    ],
+  )
 }

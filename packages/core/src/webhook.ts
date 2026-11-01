@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import type { DbPool } from './db.js'
 import { addNotification } from './notifications.js'
 import { toActivity, type ActivityItem, type RepoEvent } from './activity.js'
@@ -11,6 +12,59 @@ export interface GitHubWebhookPayload {
   issue?: { number?: number; title?: string; html_url?: string }
   pull_request?: { number?: number; title?: string; html_url?: string }
   release?: { tag_name?: string; name?: string; html_url?: string }
+}
+
+export const githubWebhookPayloadSchema = z
+  .object({
+    action: z.string().optional(),
+    repository: z
+      .object({ full_name: z.string().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
+    sender: z
+      .object({ login: z.string().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
+    forkee: z
+      .object({ full_name: z.string().optional(), html_url: z.string().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
+    issue: z
+      .object({
+        number: z.number().optional(),
+        title: z.string().optional(),
+        html_url: z.string().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    pull_request: z
+      .object({
+        number: z.number().optional(),
+        title: z.string().optional(),
+        html_url: z.string().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+    release: z
+      .object({
+        tag_name: z.string().optional(),
+        name: z.string().optional(),
+        html_url: z.string().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+  })
+  .passthrough()
+
+export function parseGitHubWebhookPayload(value: unknown): GitHubWebhookPayload | null {
+  const result = githubWebhookPayloadSchema.safeParse(value)
+  return result.success ? (result.data as GitHubWebhookPayload) : null
 }
 
 export function webhookToActivity(

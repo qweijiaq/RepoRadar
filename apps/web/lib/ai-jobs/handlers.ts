@@ -44,6 +44,7 @@ import {
   loadFeedback,
   loadStoredLlmConfig,
   loadSubscriptions,
+  PROMPT_VERSIONS,
   rankForUser,
   saveComparisonReport,
   saveDiscoverabilityReport,
@@ -199,6 +200,7 @@ async function integrationJob(pool: DbPool, userId: number, job: JobRecord, prog
     generatedAt: new Date().toISOString(),
     model: llm.model,
     providerId: llm.providerId ?? null,
+    promptVersion: PROMPT_VERSIONS.integration,
     candidateCount: candidates.length,
     candidateRepos: candidates.map((candidate) => candidate.repo),
   })
@@ -302,6 +304,7 @@ async function maintainerJob(pool: DbPool, userId: number, job: JobRecord, progr
     generatedAt: new Date().toISOString(),
     model: llm.model,
     providerId: llm.providerId ?? null,
+    promptVersion: PROMPT_VERSIONS.maintainer,
   })
   await addNotification(pool, userId, {
     kind: 'maintainer',
@@ -321,6 +324,7 @@ async function issueJob(pool: DbPool, userId: number, job: JobRecord, progress: 
     ...generated,
     model: llm.model,
     providerId: llm.providerId ?? null,
+    promptVersion: PROMPT_VERSIONS.issue,
   })
   await addNotification(pool, userId, {
     kind: 'issue',
@@ -365,6 +369,7 @@ async function discoverabilityJob(pool: DbPool, userId: number, job: JobRecord, 
     generatedAt: new Date().toISOString(),
     model: llm.model,
     providerId: llm.providerId ?? null,
+    promptVersion: PROMPT_VERSIONS.discoverability,
   })
   await addNotification(pool, userId, {
     kind: 'discoverability',
@@ -447,6 +452,7 @@ async function comparisonJob(pool: DbPool, userId: number, job: JobRecord, progr
     generatedAt: new Date().toISOString(),
     model: llm.model,
     providerId: llm.providerId ?? null,
+    promptVersion: PROMPT_VERSIONS.comparison,
     candidateRepos: candidates.map((candidate) => candidate.repo),
   })
   await addNotification(pool, userId, {
@@ -478,6 +484,7 @@ async function issuePlanJob(pool: DbPool, userId: number, job: JobRecord, progre
     generatedAt: new Date().toISOString(),
     model: llm.model,
     providerId: llm.providerId ?? null,
+    promptVersion: PROMPT_VERSIONS['issue-plan'],
   })
   await addNotification(pool, userId, {
     kind: 'issue-plan',
@@ -716,6 +723,7 @@ async function watchJob(pool: DbPool, userId: number, job: JobRecord, progress: 
   await saveWatchRun(pool, intent.id, {
     model: llm.model,
     providerId: llm.providerId ?? null,
+    promptVersion: PROMPT_VERSIONS.watch,
     matchCount: activeMatches.length,
   })
   if (activeMatches.length > 0) {
@@ -920,6 +928,7 @@ async function similarJob(pool: DbPool, userId: number, job: JobRecord, progress
     generatedAt: new Date().toISOString(),
     model: llm.model,
     providerId: llm.providerId ?? null,
+    promptVersion: PROMPT_VERSIONS.similar,
     candidateRepos: candidates.map((candidate) => candidate.repo),
   })
   const href = `/workbench/maintain/similar?repo=${encodeURIComponent(targetProject.repoFullName)}&report=${reportId}`

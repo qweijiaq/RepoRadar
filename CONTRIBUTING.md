@@ -31,17 +31,21 @@ pnpm worker
 ## Checks
 
 ```bash
+pnpm lint
 pnpm typecheck
 pnpm test
+TEST_DATABASE_URL=postgres://radar:radar@localhost:5433/radar pnpm test:db
 pnpm build
 pnpm test:e2e
 ```
+
+`pnpm lint` must pass with zero warnings; `pnpm test:db` runs real SQL against a temporary `radar_integration` schema and cleans it up afterwards. `pnpm format` is available but not enforced in CI yet — avoid mixing large formatting-only diffs into feature pull requests.
 
 E2E tests use Playwright with the local Google Chrome channel; CI installs Chromium. The Playwright server runs in development mode on an isolated `.next-e2e` dist directory, so it can run alongside `pnpm dev:web`.
 
 Next.js 16 runs with the webpack mode (`next dev --webpack` / `next build --webpack`) because `packages/core` uses NodeNext `.js` import specifiers and `next.config.ts` supplies a webpack extension alias. Keep those flags unless the core package is migrated to a Turbopack-compatible resolution strategy.
 
-Please run all three before opening a pull request. Tests and builds must pass without relying on local secrets.
+Please run all of them before opening a pull request. Tests and builds must pass without relying on local secrets.
 
 ## Code guidelines
 

@@ -75,4 +75,5 @@ worker 每 30 分钟检查一次，实际清理最多每 24 小时执行一次�
 - 页面和 API 通过 `apps/web/proxy.ts` 设置 nonce CSP、HSTS（HTTPS）、nosniff、frame 拒绝、Referrer/Permissions Policy；
 - Compose 默认只把 Web 绑定到 `127.0.0.1`，公网通过 Caddy/Nginx 终止 TLS；
 - patch / 依赖升级 / 仓库验证会在 Docker 中执行不可信代码：沙箱使用非 root UID（worker 为 root 时切到 1000）、`--cap-drop ALL`、只读根文件系统、tmpfs、资源和进程限制；worker 主机仍应按高信任边界隔离，不要和数据库或内部服务共用；
+- GitHub 仓库响应和 Webhook payload 会先经过 zod 运行时校验：搜索结果中的异常条目会被跳过，Webhook 结构异常会返回 400；模型返回的 JSON 也由各模块 schema 校验。
 - 漏洞报告方式见 [SECURITY.md](../SECURITY.md)。

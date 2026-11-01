@@ -4,6 +4,7 @@ import {
   isValidGithubClientId,
   isValidGithubClientSecret,
   mapGitHubRepo,
+  parseGitHubRepoPayload,
   searchRepos,
   type GitHubRepoPayload,
 } from '../src/github.js'
@@ -81,6 +82,7 @@ describe('searchRepos', () => {
 describe('mapGitHubRepo', () => {
   it('normalises a GitHub search payload', () => {
     const payload: GitHubRepoPayload = {
+      id: 101,
       full_name: 'acme/tool',
       name: 'tool',
       owner: { login: 'acme' },
@@ -99,12 +101,45 @@ describe('mapGitHubRepo', () => {
       created_at: null,
     }
     expect(mapGitHubRepo(payload)).toMatchObject({
+      githubId: 101,
       fullName: 'acme/tool',
       owner: 'acme',
       topics: ['cli'],
       license: null,
       description: null,
     })
+  })
+})
+
+describe('parseGitHubRepoPayload', () => {
+  const payload = {
+    id: 101,
+    full_name: 'acme/tool',
+    name: 'tool',
+    owner: { login: 'acme', id: 1 },
+    description: null,
+    html_url: 'https://github.com/acme/tool',
+    homepage: null,
+    language: 'TypeScript',
+    topics: ['cli'],
+    stargazers_count: 12,
+    forks_count: 3,
+    open_issues_count: 1,
+    license: { spdx_id: 'MIT', name: 'MIT License' },
+    archived: false,
+    fork: false,
+    pushed_at: null,
+    created_at: null,
+    extra: 'ignored',
+  }
+
+  it('accepts a realistic payload and ignores extra fields', () => {
+    expect(parseGitHubRepoPayload(payload)).toMatchObject({ id: 101, full_name: 'acme/tool' })
+  })
+
+  it('rejects payloads missing required fields', () => {
+    expect(parseGitHubRepoPayload({ full_name: 'acme/tool' })).toBeNull()
+    expect(parseGitHubRepoPayload(null)).toBeNull()
   })
 })
 

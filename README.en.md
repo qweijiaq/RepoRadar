@@ -71,6 +71,7 @@ Detailed setup, commands and environment variables are in [docs/DEVELOPMENT.md](
 | Document | Contents |
 | --- | --- |
 | [Features](docs/FEATURES.md) | Radar, integrations, comparisons, maintainer reports, library, MCP |
+| [Scoring](docs/SCORING.md) | Score components, default weights, versions and evaluation |
 | [Deployment](docs/DEPLOYMENT.md) | Docker Compose, Caddy/Nginx, TLS, backups |
 | [Operations](docs/OPERATIONS.md) | Observability, GitHub scopes, notifications, quotas |
 | [Development](docs/DEVELOPMENT.md) | CLI, environment variables, structure, tests, sandbox |

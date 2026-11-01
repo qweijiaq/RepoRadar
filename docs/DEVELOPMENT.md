@@ -57,8 +57,10 @@ pnpm radar pipeline --topics=llm --limit=20
 | `pnpm radar mcp` | 以 MCP server（stdio）运行，供 agent 调用 |
 | `pnpm radar pipeline` | ingest → enrich → list |
 | `pnpm radar doctor` | 检查数据库、迁移、候选池、模型/Embedding、GitHub 授权、邮件、站点地址和任务队列 |
+| `pnpm radar backfill-identities` | 为已有仓库回填 GitHub 稳定 ID，支持 `--limit` 和 `--delay-ms` |
+| `pnpm eval:llm` | 用 6 个固定 README 样本回归评测富化提示词，通过率低于 80% 时失败 |
 
-常用参数：`--topics`、`--days`、`--pages`、`--delay-ms`、`--language`、`--limit`、`--format=md|json`、`--dry-run`。运行 `pnpm radar help` 查看完整说明。
+常用参数：`--topics`、`--days`、`--pages`、`--delay-ms`、`--language`、`--limit`、`--format=md|json`、`--dry-run`。`backfill-identities` 需要 `GITHUB_TOKEN` 或已登录用户 token。运行 `pnpm radar help` 查看完整说明。
 
 ## 模型配置
 
@@ -98,6 +100,22 @@ pnpm radar pipeline --topics=llm --limit=20
 | `RADAR_DAYS` | 否 | 默认 30 |
 | `RADAR_DELAY_MS` | 否 | 默认 2200（GitHub Search API 限 30 次/分钟） |
 
+## 评测与版本
+
+固定样本评测：
+
+```bash
+pnpm eval:llm
+```
+
+默认读取环境变量里的模型配置；没有环境变量时回退到本机设置页保存的模型。评测会检查 6 个固定 README 样本的 verdict 和质量分区间，通过率低于 80% 时退出 1。CI 不调用真实模型，只运行提示词/解析契约测试。
+
+评分和提示词版本在 `packages/core/src/versions.ts`：
+
+- `SCORING_VERSION`：当前评分公式版本；
+- `PROMPT_VERSIONS`：各任务提示词版本；
+- 报告 payload、`quality_detail` 和 `llm_usage` 会记录版本，便于对比换模型前后的结果。
+
 ## 项目结构
 
 ```text
@@ -112,11 +130,35 @@ docs/             功能、部署、运维、路线图和样刊
 ## 测试与检查
 
 ```bash
-pnpm typecheck   # 全仓类型检查
-pnpm test        # 单元测试（vitest）
+pnpm lint        # ESLint（含 typescript-eslint 类型感知规则、react-hooks）
+pnpm format      # Prettier 格式化（首次运行会重排较多历史文件）
+pnpm typecheck   # 全仓类型检查（core / worker / e2e / web）
+pnpm test        # 单元测试（vitest，全部使用 mock，不需要数据库）
+pnpm test:db     # 数据库集成测试（真实 Postgres，需要 TEST_DATABASE_URL）
 pnpm test:e2e    # Playwright E2E；本地使用已安装的 Chrome，CI 使用 Chromium
 pnpm build       # 生产构建
 ```
+
+数据库集成测试覆盖迁移、`upsertRepo`、向量写入、搜索过滤和任务队列抢占。它会在 `TEST_DATABASE_URL` 指向的库里创建一个临时 schema（`radar_integration`），跑完自动删除，不会碰开发数据：
+
+```bash
+TEST_DATABASE_URL=postgres://radar:radar@localhost:5433/radar pnpm test:db
+```
+
+> TypeScript 7 的稳定 `typescript` 入口不带 Compiler API，`package.json` 用官方推荐的别名的并行配置：`typescript` 指向 `@typescript/typescript6` 给 ESLint 用，`@typescript/native` 指向 `typescript@7` 提供 `tsc`。不要把它们改回同一个包，否则 ESLint 会在启动时直接报错。
+
+## 渲染与缓存
+
+路由按「是否需要登录态」分成两个路由组：
+
+- `app/(app)/`：雷达、工作台、设置等全部业务页。`(app)/layout.tsx` 读取会话并渲染带用户信息的导航，因此这些页面是按请求动态渲染（`ƒ`）。
+- `app/(public)/`：隐私、条款。`(public)/layout.tsx` 不读会话，只渲染品牌、「登录」和主题切换，构建时预渲染成静态页（`○`）。
+
+关键是 **根布局 `app/layout.tsx` 不能读会话，也不能调用 `headers()`**，否则整个站点都会变成动态。主题脚本因此从内联改成 `public/theme.js`，用 `next/script` 的 `beforeInteractive` 加载——同源脚本靠 CSP 的 `'self'` 就能跑，不需要 per-request nonce（`proxy.ts` 仍然给 Next 自己的脚本下发 nonce）。
+
+取舍：公开页的导航是「未登录版本」，登录用户访问 `/privacy` 会看到「登录」而不是完整的雷达导航。要让公开页也带个性化导航，就需要 Cache Components（静态壳 + 动态洞），那是一次全站迁移，目前没做。
+
+`(app)` 里的未读数查询拆到了 `<Suspense>` 包裹的 `UnreadBadge`，不会阻塞页面首字节。
 
 ## 沙箱验证
 

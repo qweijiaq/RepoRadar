@@ -3,6 +3,7 @@ import {
   findRepoByFullName,
   githubApiBase,
   mapGitHubRepo,
+  parseGitHubRepoPayload,
   type IntegrationProjectInput,
   type RepoInput,
 } from '@repo-radar/core'
@@ -34,7 +35,8 @@ export async function fetchGitHubRepo(fullName: string, token: string): Promise<
     cache: 'no-store',
   })
   if (!response.ok) return null
-  return mapGitHubRepo((await response.json()) as Parameters<typeof mapGitHubRepo>[0])
+  const payload = parseGitHubRepoPayload(await response.json())
+  return payload ? mapGitHubRepo(payload) : null
 }
 
 export async function loadProjectContext(fullName: string, token: string | null): Promise<IntegrationProjectInput> {

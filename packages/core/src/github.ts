@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import type { RepoInput } from './types.js'
 
 export function githubApiBase(): string {
@@ -28,6 +29,7 @@ export interface SearchOptions {
 }
 
 export interface GitHubRepoPayload {
+  id?: number
   full_name: string
   name: string
   owner: { login: string }
@@ -44,6 +46,37 @@ export interface GitHubRepoPayload {
   fork: boolean
   pushed_at: string | null
   created_at: string | null
+}
+
+export const githubRepoPayloadSchema = z
+  .object({
+    id: z.number().int().optional(),
+    full_name: z.string().min(1),
+    name: z.string().min(1),
+    owner: z.object({ login: z.string().min(1) }).passthrough(),
+    description: z.string().nullable().optional(),
+    html_url: z.string().url(),
+    homepage: z.string().nullable().optional(),
+    language: z.string().nullable().optional(),
+    topics: z.array(z.string()).optional(),
+    stargazers_count: z.number().int().nonnegative(),
+    forks_count: z.number().int().nonnegative(),
+    open_issues_count: z.number().int().nonnegative(),
+    license: z
+      .object({ spdx_id: z.string().nullable().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
+    archived: z.boolean(),
+    fork: z.boolean(),
+    pushed_at: z.string().nullable().optional(),
+    created_at: z.string().nullable().optional(),
+  })
+  .passthrough()
+
+export function parseGitHubRepoPayload(value: unknown): GitHubRepoPayload | null {
+  const result = githubRepoPayloadSchema.safeParse(value)
+  return result.success ? (result.data as GitHubRepoPayload) : null
 }
 
 export function buildSearchQueries(options: QueryOptions): string[] {
@@ -85,6 +118,7 @@ export function buildSearchQueries(options: QueryOptions): string[] {
 
 export function mapGitHubRepo(raw: GitHubRepoPayload): RepoInput {
   return {
+    githubId: raw.id ?? null,
     fullName: raw.full_name,
     owner: raw.owner.login,
     name: raw.name,
@@ -148,8 +182,31 @@ export async function searchRepos(query: string, options: SearchOptions): Promis
     signal: AbortSignal.timeout(8000),
   })
   if (!response.ok) throw new GitHubApiError(response.status, await describeGitHubError(response))
-  const data = (await response.json()) as { items?: GitHubRepoPayload[] }
-  return (data.items ?? []).map(mapGitHubRepo)
+  const data = (await response.json()) as { items?: unknown }
+  const repos: RepoInput[] = []
+  let invalid = 0
+  for (const item of Array.isArray(data.items) ? data.items : []) {
+    const payload = parseGitHubRepoPayload(item)
+    if (!payload) {
+      invalid += 1
+      continue
+    }
+    repos.push(mapGitHubRepo(payload))
+  }
+  if (invalid > 0) console.warn(`[github] 跳过 ${invalid} 个结构异常的搜索结果`)
+  return repos
+}
+
+export async function fetchRepo(fullName: string, token?: string): Promise<RepoInput | null> {
+  const response = await fetch(`${githubApiBase()}/repos/${fullName}`, {
+    headers: githubHeaders(token),
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (response.status === 404) return null
+  if (!response.ok) throw new GitHubApiError(response.status, await describeGitHubError(response))
+  const payload = parseGitHubRepoPayload(await response.json())
+  if (!payload) throw new GitHubApiError(502, 'GitHub 返回的仓库结构不符合预期')
+  return mapGitHubRepo(payload)
 }
 
 export async function fetchReadme(fullName: string, token: string): Promise<string | null> {

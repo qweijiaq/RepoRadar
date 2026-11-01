@@ -2,6 +2,7 @@ node_modules/
 dist/
 .next/
 *.tsbuildinfo
+.pnpm-store/
 
 .env
 .env.*
@@ -16,6 +17,7 @@ dist/
 coverage/
 .claude/
 .radar/
+.docker/
 
 playwright-report/
 

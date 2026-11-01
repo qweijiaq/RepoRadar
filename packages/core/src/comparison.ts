@@ -52,6 +52,7 @@ export interface StoredComparisonReport {
   generatedAt: string
   model?: string | null
   providerId?: string | null
+  promptVersion?: string | null
   candidateRepos?: string[]
 }
 

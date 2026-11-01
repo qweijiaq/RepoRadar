@@ -11,6 +11,7 @@ import {
   escapeMarkdownCell,
   fetchLatestRelease,
   fetchReadme,
+  fetchRepo,
   findEnrichedRepos,
   findPendingRepos,
   findReposForVerification,
@@ -21,6 +22,8 @@ import {
   hashReadme,
   listFeedbackSignals,
   listReleaseWatchRepos,
+  listReposMissingGithubId,
+  listUserGithubTokens,
   listUsersWithProfiles,
   loadConfig,
   loadFeedback,
@@ -47,6 +50,7 @@ import {
   saveReleaseEvent,
   saveSnapshot,
   saveVerification,
+  setRepoGithubId,
   searchRepos,
   sleep,
   syncRepoActivity,
@@ -102,6 +106,7 @@ const HELP = `RepoRadar CLI（M2）
   mcp                  以 MCP server（stdio）方式运行，供 agent 调用
   pipeline             依次执行 ingest → enrich → list
   doctor               检查数据库、迁移、模型、GitHub 授权、邮件和任务队列
+  backfill-identities  为已有仓库回填 GitHub 稳定 ID（用于改名/转移去重）
 
 选项：
   --topics=a,b         采集的 GitHub topics（默认来自 RADAR_TOPICS）；enrich 时用作过滤
@@ -110,7 +115,7 @@ const HELP = `RepoRadar CLI（M2）
   --per-page=50        每页数量
   --delay-ms=2200      GitHub 请求间隔（Search API 限制 30 次/分钟）
   --language=ts        按语言筛选
-  --limit=20           enrich 默认 100；list 默认 20；digest 默认 10；verify 默认 3；issue 默认 12
+  --limit=20           enrich 默认 100；list 默认 20；digest 默认 10；verify 默认 3；issue 默认 12；backfill-identities 默认 50
   --format=md|json|html  list：md/json；digest：md/html；issue：md/json，--draft 后支持 html
   --dry-run            只打印采集查询（或 verify 的目标列表），不执行
 
@@ -358,7 +363,7 @@ async function sendDigestEmail(
 }
 
 async function runDigest(pool: DbPool, options: DigestCliOptions): Promise<void> {
-  let users: UserRecord[] = []
+  let users: UserRecord[]
   if (options.all) {
     users = await listUsersWithProfiles(pool)
   } else if (options.user) {
@@ -758,6 +763,29 @@ async function main(): Promise<void> {
           console.log(`${icon} ${item.title}：${item.detail}`)
         }
         if (checks.some((item) => item.level === 'error')) process.exitCode = 1
+        break
+      }
+      case 'backfill-identities': {
+        const storedTokens = await listUserGithubTokens(pool)
+        const token = effectiveConfig.githubToken ?? storedTokens[0]?.token
+        if (!token) throw new Error('回填 GitHub ID 需要 GITHUB_TOKEN 或已登录用户 token')
+        const limit = Math.max(1, Math.min(500, intArg(values.limit, 50)))
+        const delayMs = Math.max(200, intArg(values['delay-ms'], 1000))
+        const repos = await listReposMissingGithubId(pool, limit)
+        let updated = 0
+        let missing = 0
+        for (const repo of repos) {
+          const remote = await fetchRepo(repo.fullName, token)
+          if (!remote?.githubId) {
+            missing += 1
+          } else {
+            await setRepoGithubId(pool, repo.id, remote.githubId)
+            updated += 1
+          }
+          await sleep(delayMs)
+        }
+        console.log(`检查 ${repos.length} 个仓库，回填 ${updated} 个，未找到 ${missing} 个`)
+        if (repos.length < limit) console.log('没有更多待回填仓库。')
         break
       }
       default:

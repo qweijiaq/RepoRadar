@@ -4,8 +4,10 @@
 
 ## Verification
 
+- [ ] `pnpm lint`
 - [ ] `pnpm typecheck`
 - [ ] `pnpm test`
+- [ ] `pnpm test:db`（改了 SQL / 迁移时）
 - [ ] `pnpm build`
 - [ ] UI change has a screenshot
 

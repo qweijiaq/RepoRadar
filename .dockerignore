@@ -7,14 +7,16 @@
 !.env.local.example
 node_modules
 **/node_modules
+.next
 **/.next
+**/.next-e2e
 **/*.tsbuildinfo
 .radar
 coverage
 docs
 README.md
-
-.next-e2e
+.docker
+pnpm-store
 
 playwright-report
 

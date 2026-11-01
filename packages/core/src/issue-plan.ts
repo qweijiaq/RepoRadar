@@ -43,6 +43,7 @@ export interface StoredIssuePlan {
   generatedAt: string
   model?: string | null
   providerId?: string | null
+  promptVersion?: string | null
 }
 
 const SYSTEM_PROMPT = `你是资深工程师，擅长把一个 Issue 拆成可执行的修复方案。用户会给出 Issue、项目上下文和仓库文件列表。

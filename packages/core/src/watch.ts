@@ -134,7 +134,7 @@ export async function deriveWatchSearchQueries(intent: string, llm: LlmConfig): 
         if (!Array.isArray(parsed.queries)) continue
         const queries = parsed.queries
           .filter((query): query is string => typeof query === 'string')
-          .map((query) => query.replace(/[\"\r\n]/g, ' ').trim())
+          .map((query) => query.replace(/["\r\n]/g, ' ').trim())
           .filter((query) => query.length >= 2 && query.length <= 80)
           .slice(0, 3)
         if (queries.length > 0) return queries
@@ -367,12 +367,12 @@ export async function listWatchMatches(
 export async function saveWatchRun(
   pool: DbPool,
   intentId: number,
-  input: { model: string; providerId: string | null; matchCount: number },
+  input: { model: string; providerId: string | null; promptVersion?: string | null; matchCount: number },
 ): Promise<number> {
   const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO watch_runs (intent_id, model, provider_id, match_count)
-     VALUES ($1, $2, $3, $4) RETURNING id`,
-    [intentId, input.model, input.providerId, input.matchCount],
+    `INSERT INTO watch_runs (intent_id, model, provider_id, prompt_version, match_count)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [intentId, input.model, input.providerId, input.promptVersion ?? null, input.matchCount],
   )
   return Number(rows[0]?.id ?? 0)
 }

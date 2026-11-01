@@ -1,5 +1,6 @@
 import type { FeedbackKind, FeedbackSignal } from './feedback.js'
-import { computeMomentum, computeNewness, computeScore } from './score.js'
+import { explainScore, computeMomentum, computeNewness, type ScoreBreakdown } from './score.js'
+import { SCORING_VERSION } from './versions.js'
 import { computeSubscriptionBonus, type Subscription } from './subscriptions.js'
 import type { EnrichedRepoRecord } from './types.js'
 import { clamp01, round } from './utils.js'
@@ -159,6 +160,119 @@ function feedbackAdjustment(context: FeedbackContext, repo: EnrichedRepoRecord):
   return round(adjustment, 4)
 }
 
+export interface PersonalizedScoreBreakdown {
+  version: string
+  total: number
+  global: ScoreBreakdown
+  affinity: {
+    semantic: number | null
+    topic: number
+    language: number
+    total: number
+    weight: number
+    contribution: number
+  } | null
+  adjustments: {
+    feedback: number
+    subscription: number
+    total: number
+  }
+  weights: {
+    affinity: number
+    global: number
+  }
+}
+
+/**
+ * 语义相似度优先用 SQL 预计算的结果；只有在没预计算时才回退到本地余弦，
+ * 这样 feed 不需要把每个仓库的 1536 维向量传上来。
+ */
+function repoSemantic(profile: TasteProfile, repo: EnrichedRepoRecord): number | null {
+  if (repo.semanticScore !== undefined) {
+    return repo.semanticScore === null ? null : clamp01(repo.semanticScore)
+  }
+  return profile.embedding && repo.embedding
+    ? clamp01(cosineSimilarity(profile.embedding, repo.embedding))
+    : null
+}
+
+export function explainPersonalizedScore(
+  profile: TasteProfile | null,
+  repo: EnrichedRepoRecord,
+  now = Date.now(),
+  feedback: FeedbackContext | null = null,
+  subscriptions: Subscription[] = [],
+): PersonalizedScoreBreakdown {
+  const newness = computeNewness(repo.pushedAt, now)
+  const momentum = computeMomentum(repo.stars, repo.stars7d)
+  const global = explainScore({ quality: repo.qualityScore, newness, momentum })
+  const feedbackScore = feedback ? feedbackAdjustment(feedback, repo) : 0
+  const subscriptionScore = computeSubscriptionBonus(repo, subscriptions)
+  const adjustments = {
+    feedback: round(feedbackScore, 4),
+    subscription: round(subscriptionScore, 4),
+    total: round(feedbackScore + subscriptionScore, 4),
+  }
+  const base = {
+    version: SCORING_VERSION,
+    global,
+    adjustments,
+  }
+
+  if (feedback?.hidden.has(repo.fullName)) {
+    return {
+      ...base,
+      total: -1,
+      affinity: null,
+      weights: { affinity: 0, global: 1 },
+    }
+  }
+
+  const globalTotal = clamp01(global.total + adjustments.total)
+  if (!profile || profile.starredCount === 0) {
+    return {
+      ...base,
+      total: globalTotal,
+      affinity: null,
+      weights: { affinity: 0, global: 1 },
+    }
+  }
+
+  if (isExcluded(profile, repo)) {
+    return {
+      ...base,
+      total: -1,
+      affinity: null,
+      weights: { affinity: 0.55, global: 0.45 },
+    }
+  }
+
+  const semantic = repoSemantic(profile, repo)
+  const topic = topicAffinity(profile, repo.topics)
+  const language = repo.language ? (profile.languageWeights[repo.language] ?? 0) : 0
+  const affinity =
+    semantic !== null ? 0.5 * semantic + 0.35 * topic + 0.15 * language : 0.7 * topic + 0.3 * language
+  const affinityWeight = 0.55
+  const globalWeight = 0.45
+  const total = clamp01(
+    round(affinityWeight * affinity + globalWeight * global.total + adjustments.total, 4),
+  )
+
+  return {
+    ...base,
+    total,
+    affinity: {
+      semantic: semantic === null ? null : round(semantic, 4),
+      topic: round(topic, 4),
+      language: round(language, 4),
+      total: round(affinity, 4),
+      weight: affinityWeight,
+      contribution: round(affinityWeight * affinity, 4),
+    },
+    weights: { affinity: affinityWeight, global: globalWeight },
+  }
+}
+
 export function personalizedScore(
   profile: TasteProfile | null,
   repo: EnrichedRepoRecord,
@@ -166,25 +280,7 @@ export function personalizedScore(
   feedback: FeedbackContext | null = null,
   subscriptions: Subscription[] = [],
 ): number {
-  if (feedback?.hidden.has(repo.fullName)) return -1
-
-  const newness = computeNewness(repo.pushedAt, now)
-  const momentum = computeMomentum(repo.stars, repo.stars7d)
-  const globalScore = computeScore({ quality: repo.qualityScore, newness, momentum })
-  const adjustment =
-    (feedback ? feedbackAdjustment(feedback, repo) : 0) + computeSubscriptionBonus(repo, subscriptions)
-
-  if (!profile || profile.starredCount === 0) return clamp01(globalScore + adjustment)
-  if (isExcluded(profile, repo)) return -1
-
-  const semantic =
-    profile.embedding && repo.embedding ? clamp01(cosineSimilarity(profile.embedding, repo.embedding)) : null
-  const topic = topicAffinity(profile, repo.topics)
-  const language = repo.language ? (profile.languageWeights[repo.language] ?? 0) : 0
-  const affinity =
-    semantic !== null ? 0.5 * semantic + 0.35 * topic + 0.15 * language : 0.7 * topic + 0.3 * language
-
-  return clamp01(round(0.55 * affinity + 0.45 * globalScore + adjustment, 4))
+  return explainPersonalizedScore(profile, repo, now, feedback, subscriptions).total
 }
 
 export function rankForUser(
@@ -193,10 +289,13 @@ export function rankForUser(
   now = Date.now(),
   feedback: FeedbackContext | null = null,
   subscriptions: Subscription[] = [],
-): Array<EnrichedRepoRecord & { score: number }> {
+): Array<EnrichedRepoRecord & { score: number; scoreBreakdown: PersonalizedScoreBreakdown }> {
   return repos
     .filter((repo) => repo.verdict !== 'skip')
-    .map((repo) => ({ ...repo, score: personalizedScore(profile, repo, now, feedback, subscriptions) }))
+    .map((repo) => {
+      const scoreBreakdown = explainPersonalizedScore(profile, repo, now, feedback, subscriptions)
+      return { ...repo, score: scoreBreakdown.total, scoreBreakdown }
+    })
     .filter((repo) => repo.score >= 0)
     .sort((a, b) => b.score - a.score)
 }

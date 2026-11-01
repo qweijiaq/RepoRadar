@@ -1,15 +1,25 @@
 import Link from 'next/link'
-import type { EnrichedRepoRecord } from '@repo-radar/core'
+import type { EnrichedRepoRecord, PersonalizedScoreBreakdown } from '@repo-radar/core'
 import { submitFeedbackAction } from '@/app/actions'
 
 interface RepoCardProps {
   repo: EnrichedRepoRecord & { score?: number }
   showScore?: boolean
+  breakdown?: PersonalizedScoreBreakdown
   feedback?: 'save' | 'hide'
   starred?: boolean
 }
 
-export function RepoCard({ repo, showScore = false, feedback, starred = false }: RepoCardProps) {
+function percent(value: number): string {
+  return `${Math.round(value * 100)}%`
+}
+
+function signedPercent(value: number): string {
+  const points = Math.round(value * 100)
+  return points > 0 ? `+${points}%` : `${points}%`
+}
+
+export function RepoCard({ repo, showScore = false, breakdown, feedback, starred = false }: RepoCardProps) {
   const summary = repo.summary || repo.description || '暂无简介'
 
   return (
@@ -39,6 +49,39 @@ export function RepoCard({ repo, showScore = false, feedback, starred = false }:
           <span className="score">{Math.round(repo.score * 100)} 分</span>
         ) : null}
       </footer>
+
+      {showScore && breakdown ? (
+        <details className="score-detail">
+          <summary>为什么是这个分数</summary>
+          <ul>
+            <li>
+              <span>质量</span>
+              <span>{percent(breakdown.global.contributions.quality * breakdown.weights.global)}</span>
+            </li>
+            <li>
+              <span>新鲜度</span>
+              <span>{percent(breakdown.global.contributions.newness * breakdown.weights.global)}</span>
+            </li>
+            <li>
+              <span>增速</span>
+              <span>{percent(breakdown.global.contributions.momentum * breakdown.weights.global)}</span>
+            </li>
+            {breakdown.affinity ? (
+              <li>
+                <span>个人匹配</span>
+                <span>{percent(breakdown.affinity.contribution)}</span>
+              </li>
+            ) : null}
+            {breakdown.adjustments.total !== 0 ? (
+              <li>
+                <span>反馈与订阅</span>
+                <span>{signedPercent(breakdown.adjustments.total)}</span>
+              </li>
+            ) : null}
+          </ul>
+          <p className="muted small">评分版本 {breakdown.version}；总分 {percent(breakdown.total)}</p>
+        </details>
+      ) : null}
 
       <div className="repo-actions">
         <form action={submitFeedbackAction}>

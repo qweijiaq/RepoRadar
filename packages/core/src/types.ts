@@ -1,6 +1,8 @@
 export type Verdict = 'recommend' | 'neutral' | 'skip'
 
 export interface RepoInput {
+  /** GitHub 的稳定数字 ID；改名/转移后仍能识别同一个仓库。 */
+  githubId?: number | null
   fullName: string
   owner: string
   name: string
@@ -32,6 +34,8 @@ export interface EnrichedRepoRecord extends RepoRecord {
   qualityScore: number | null
   stars7d: number | null
   embedding: number[] | null
+  /** 由 SQL 用 pgvector 预计算的余弦相似度（0–1）；存在时优先于本地 embedding 计算。 */
+  semanticScore?: number | null
   verifyStatus: string | null
   verifiedAt: string | null
 }

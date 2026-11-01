@@ -45,6 +45,7 @@ export interface StoredSimilarReport {
   generatedAt: string
   model?: string | null
   providerId?: string | null
+  promptVersion?: string | null
   candidateRepos?: string[]
 }
 
@@ -197,7 +198,7 @@ function parseKeywords(raw: string): string[] {
       if (!Array.isArray(parsed.keywords)) continue
       return parsed.keywords
         .filter((item): item is string => typeof item === 'string')
-        .map((item) => item.replace(/[\"\r\n]/g, ' ').trim().toLowerCase())
+        .map((item) => item.replace(/["\r\n]/g, ' ').trim().toLowerCase())
         .filter((item) => item.length >= 3 && item.length <= 60)
         .slice(0, 8)
     } catch {

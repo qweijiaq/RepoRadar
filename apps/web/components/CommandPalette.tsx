@@ -73,7 +73,11 @@ export function CommandPalette({ compact = false }: { compact?: boolean }) {
 
     const controller = new AbortController()
     setLoading(true)
-    const timer = window.setTimeout(async () => {
+    const timer = window.setTimeout(() => {
+      void runSearch()
+    }, 160)
+
+    async function runSearch(): Promise<void> {
       try {
         const response = await fetch(`/api/search?q=${encodeURIComponent(value)}`, { signal: controller.signal })
         if (!response.ok) {
@@ -87,7 +91,7 @@ export function CommandPalette({ compact = false }: { compact?: boolean }) {
       } finally {
         setLoading(false)
       }
-    }, 160)
+    }
 
     return () => {
       controller.abort()

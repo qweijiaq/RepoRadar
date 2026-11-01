@@ -32,6 +32,26 @@ describe('withLlmUsage', () => {
     ])
   })
 
+  it('attaches prompt and score versions from the surrounding context', async () => {
+    let flushed: unknown = null
+    await withLlmUsage(
+      async () => {
+        recordLlmUsage({
+          providerId: null,
+          model: 'x',
+          promptTokens: 1,
+          completionTokens: 2,
+          latencyMs: 3,
+        })
+      },
+      async (usage) => {
+        flushed = usage
+      },
+      { promptVersion: 'enrich@1', scoreVersion: 'score@1' },
+    )
+    expect(flushed).toEqual([expect.objectContaining({ promptVersion: 'enrich@1', scoreVersion: 'score@1' })])
+  })
+
   it('flushes usage even when the callback throws', async () => {
     let flushed: unknown = null
     await expect(

@@ -25,7 +25,6 @@ import {
   markDeliveryFailed,
   markDeliverySent,
   notifyReleaseSubscribers,
-  recordLlmUsageRows,
   recoverStaleJobs,
   resolveBaseUrl,
   resolveMailConfig,
@@ -34,7 +33,6 @@ import {
   runRetentionIfDue,
   saveReleaseEvent,
   syncRepoActivity,
-  withLlmUsage,
 } from '@repo-radar/core'
 import { executeJob } from '../lib/ai-jobs/runner'
 import { sendMail } from '../lib/mailer'
@@ -119,7 +117,7 @@ async function scheduledActivity(): Promise<void> {
 async function scheduledReleases(): Promise<void> {
   if (Date.now() - lastReleaseSync < RELEASE_INTERVAL) return
   lastReleaseSync = Date.now()
-  let watched: string[] = []
+  let watched: string[]
   try {
     watched = await listReleaseWatchRepos(pool)
   } catch (error) {

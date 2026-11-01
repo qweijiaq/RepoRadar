@@ -54,6 +54,7 @@ export interface StoredDiscoverabilityReport {
   generatedAt: string
   model?: string | null
   providerId?: string | null
+  promptVersion?: string | null
   appliedAt?: string | null
 }
 

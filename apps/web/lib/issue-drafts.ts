@@ -9,6 +9,7 @@ export interface IssueDraftRecord {
   createdAt: string
   model: string | null
   providerId: string | null
+  promptVersion: string | null
 }
 
 interface IssueDraftRow {
@@ -20,6 +21,7 @@ interface IssueDraftRow {
   created_at: Date | string
   model: string | null
   provider_id: string | null
+  prompt_version: string | null
 }
 
 function mapRow(row: IssueDraftRow): IssueDraftRecord {
@@ -32,6 +34,7 @@ function mapRow(row: IssueDraftRow): IssueDraftRecord {
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     model: row.model ?? null,
     providerId: row.provider_id ?? null,
+    promptVersion: row.prompt_version ?? null,
   }
 }
 
@@ -45,11 +48,12 @@ export async function saveIssueDraft(
     markdown: string
     model?: string | null
     providerId?: string | null
+    promptVersion?: string | null
   },
 ): Promise<number> {
   const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO issue_drafts (user_id, title, summary, html, markdown, model, provider_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    `INSERT INTO issue_drafts (user_id, title, summary, html, markdown, model, provider_id, prompt_version)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
     [
       input.userId,
       input.title,
@@ -58,6 +62,7 @@ export async function saveIssueDraft(
       input.markdown,
       input.model ?? null,
       input.providerId ?? null,
+      input.promptVersion ?? null,
     ],
   )
   return Number(rows[0]?.id ?? 0)
@@ -65,7 +70,7 @@ export async function saveIssueDraft(
 
 export async function listIssueDrafts(pool: DbPool, userId: number, limit = 20): Promise<IssueDraftRecord[]> {
   const { rows } = await pool.query<IssueDraftRow>(
-    `SELECT id, title, summary, html, markdown, created_at, model, provider_id
+    `SELECT id, title, summary, html, markdown, created_at, model, provider_id, prompt_version
      FROM issue_drafts
      WHERE user_id = $1
      ORDER BY created_at DESC
@@ -77,7 +82,7 @@ export async function listIssueDrafts(pool: DbPool, userId: number, limit = 20):
 
 export async function findLatestIssueDraft(pool: DbPool, userId: number): Promise<IssueDraftRecord | null> {
   const { rows } = await pool.query<IssueDraftRow>(
-    `SELECT id, title, summary, html, markdown, created_at, model, provider_id
+    `SELECT id, title, summary, html, markdown, created_at, model, provider_id, prompt_version
      FROM issue_drafts
      WHERE user_id = $1
      ORDER BY created_at DESC
@@ -94,7 +99,7 @@ export async function findIssueDraft(
   id: number,
 ): Promise<IssueDraftRecord | null> {
   const { rows } = await pool.query<IssueDraftRow>(
-    `SELECT id, title, summary, html, markdown, created_at, model, provider_id
+    `SELECT id, title, summary, html, markdown, created_at, model, provider_id, prompt_version
      FROM issue_drafts
      WHERE user_id = $1 AND id = $2
      LIMIT 1`,
