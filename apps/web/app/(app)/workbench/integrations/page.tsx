@@ -7,6 +7,7 @@ import {
   findLatestIntegrationReport,
   listFeedDismissals,
   listFeedStatuses,
+  listIntegrationImpacts,
   listIntegrationOutcomes,
   listUserProjects,
   removeHandledSuggestions,
@@ -44,7 +45,8 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
 
   const pool = getPool()
   const requestedReport = Number(params.report)
-  const [projects, latestReport, outcomes, selectedReport, dismissals, statuses] = await Promise.all([
+  const [projects, latestReport, outcomes, selectedReport, dismissals, statuses, impacts] =
+    await Promise.all([
     listUserProjects(pool, Number(currentUser.id)),
     findLatestIntegrationReport(pool, Number(currentUser.id)),
     listIntegrationOutcomes(pool, Number(currentUser.id)),
@@ -52,8 +54,9 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
       ? findIntegrationReportById(pool, Number(currentUser.id), requestedReport)
       : Promise.resolve(null),
     listFeedDismissals(pool, Number(currentUser.id)),
-    listFeedStatuses(pool, Number(currentUser.id)),
-  ])
+      listFeedStatuses(pool, Number(currentUser.id)),
+      listIntegrationImpacts(pool, Number(currentUser.id), 5),
+    ])
   const latest = selectedReport ?? latestReport
   const outcomeMap = new Map(
     outcomes.map((outcome) => [
@@ -182,6 +185,28 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
         <div className="notice">
           对比生成失败{params.error === 'compare-format' ? '：模型返回格式异常，已自动重试' : ''}，请稍后再试。
         </div>
+      ) : null}
+
+      {impacts.length > 0 ? (
+        <section className="panel" id="impact-radar">
+          <h2>接入回访</h2>
+          <p className="muted small">标记「已接入」的库发布新版本时，这里会记录一条回访。</p>
+          <ul className="maintain-list">
+            {impacts.map((impact) => (
+              <li key={impact.id}>
+                <Link href={`/r/${impact.suggestionRepo}`}>{impact.suggestionRepo}</Link>{' '}
+                <span className="chip subtle">{impact.version}</span>{' '}
+                <span className="muted small">· {impact.projectFullName}</span>
+                {impact.url ? (
+                  <a href={impact.url} target="_blank" rel="noreferrer">
+                    {' '}
+                    release
+                  </a>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       <section className="panel" id="projects">

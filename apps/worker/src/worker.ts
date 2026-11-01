@@ -2,6 +2,7 @@ import { hostname } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import {
   alertRecipients,
+  checkIntegrationImpacts,
   buildWeeklyDigest,
   claimAlert,
   createPool,
@@ -274,6 +275,24 @@ async function scheduledFeedSnapshots(): Promise<void> {
   }
 }
 
+const IMPACT_INTERVAL = 6 * 60 * 60 * 1000
+let lastImpactCheckAt = 0
+
+/** 已接入的库发新版本时，写一条回访并通知用户。 */
+async function scheduledIntegrationImpacts(): Promise<void> {
+  if (Date.now() - lastImpactCheckAt < IMPACT_INTERVAL) return
+  lastImpactCheckAt = Date.now()
+  try {
+    const created = await checkIntegrationImpacts(pool, {
+      token: loadConfig().githubToken ?? undefined,
+      limit: 25,
+    })
+    if (created > 0) console.log(`[worker] integration impacts: ${created}`)
+  } catch (error) {
+    console.error('[worker] integration impact check failed:', error)
+  }
+}
+
 async function scheduledAlerts(): Promise<void> {
   if (Date.now() - lastAlertCheck < ALERT_CHECK_INTERVAL) return
   lastAlertCheck = Date.now()
@@ -381,6 +400,7 @@ async function loop(): Promise<void> {
       await scheduledDiscovery()
       await scheduledRetention()
       await scheduledFeedSnapshots()
+      await scheduledIntegrationImpacts()
       await scheduledAlerts()
     } catch (error) {
       console.error('[worker] loop error:', error)
