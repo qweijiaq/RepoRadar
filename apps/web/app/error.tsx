@@ -11,8 +11,19 @@ function errorDigest(error: unknown): string | null {
 
 export default function AppError({ error, retry }: { error: unknown; retry: () => void }) {
   useEffect(() => {
-    // 暂时只打到浏览器控制台；接入错误上报后改成上报。
     console.error('[app] 页面渲染失败', error)
+    const payload = {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? (error.stack ?? null) : null,
+      path: window.location.pathname,
+      digest: errorDigest(error),
+    }
+    void fetch('/api/client-errors', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => undefined)
   }, [error])
 
   const digest = errorDigest(error)

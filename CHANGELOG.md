@@ -16,6 +16,11 @@
 - CI 增加 `lint` 和 `test:db` 步骤、最小化 `permissions`、并发取消、任务超时，并在 E2E 失败时
   上传 Playwright 报告。
 - 独立的 `e2e/tsconfig.json`，E2E 测试纳入类型检查。
+- 错误上报：`instrumentation.ts` 的 `onRequestError` 和浏览器错误边界统一走 `reportError`，
+  写结构化日志；配置 `ERROR_WEBHOOK_URL` 后额外转发 JSON，浏览器错误经 `/api/client-errors`
+  （10 次/分钟限流）上报。
+- SEO 与分享：`/sitemap.xml`、`/robots.txt`、站点和项目页的 OpenGraph 分享卡（`next/og`），
+  以及各页面的 `openGraph` / `twitter` 元数据。
 
 ### Changed
 
@@ -56,3 +61,5 @@
   `queued`/`running` 任务，迟到结果不会再覆盖已回收/已完成的任务；心跳回收阈值从 10 分钟
   调整为 15 分钟，避免和 10 分钟执行超时互相打架。
 - 根布局不再在返回 HTML 前等待未读数查询，`UnreadBadge` 改为 Suspense 流式渲染。
+- GitHub 管理接口、README 和 latest release 请求补上 10 秒超时；此前 GitHub 变慢时 `/repos`
+  的 SSR 可能一直挂到平台超时。E2E 在导航用例前预热 `/repos`，避免开发模式首次编译导致误报。

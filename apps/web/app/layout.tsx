@@ -3,9 +3,35 @@ import Script from 'next/script'
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister'
 import './globals.css'
 
+function metadataBase(): URL | undefined {
+  const raw = process.env.RADAR_BASE_URL?.trim()
+  if (!raw) return undefined
+  try {
+    return new URL(raw)
+  } catch {
+    return undefined
+  }
+}
+
+const TITLE = 'RepoRadar — 懂你口味的开源项目雷达'
+const DESCRIPTION = '从 GitHub 自动发现值得关注的开源项目，按你的 star 和兴趣个性化排序。'
+
 export const metadata: Metadata = {
-  title: 'RepoRadar — 懂你口味的开源项目雷达',
-  description: '从 GitHub 自动发现值得关注的开源项目，按你的 star 和兴趣个性化排序。',
+  metadataBase: metadataBase(),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    siteName: 'RepoRadar',
+    title: TITLE,
+    description: DESCRIPTION,
+    locale: 'zh_CN',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 }
 
 /**

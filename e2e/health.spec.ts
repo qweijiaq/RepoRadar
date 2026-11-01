@@ -27,3 +27,29 @@ test('security headers are present', async ({ request }) => {
   expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin')
   expect(headers['permissions-policy']).toContain('camera=()')
 })
+
+test('sitemap and robots are served', async ({ request }) => {
+  const sitemap = await request.get('/sitemap.xml')
+  expect(sitemap.status()).toBe(200)
+  expect(await sitemap.text()).toContain('/privacy')
+
+  const robots = await request.get('/robots.txt')
+  expect(robots.status()).toBe(200)
+  expect(await robots.text()).toContain('Sitemap:')
+})
+
+test('site opengraph image renders as PNG', async ({ request }) => {
+  const site = await request.get('/opengraph-image')
+  expect(site.status()).toBe(200)
+  expect(site.headers()['content-type']).toContain('image/png')
+})
+
+test('client error endpoint validates payloads', async ({ request }) => {
+  const invalid = await request.post('/api/client-errors', { data: {} })
+  expect(invalid.status()).toBe(400)
+
+  const ok = await request.post('/api/client-errors', {
+    data: { message: 'e2e client error', path: '/feed' },
+  })
+  expect(ok.status()).toBe(200)
+})

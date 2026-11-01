@@ -1,6 +1,13 @@
 import { expect, test } from '@playwright/test'
 import { loginAsDemo } from './helpers'
 
+test.beforeAll(async ({ browser }) => {
+  // 开发服务器首次访问路由时要现编译，先给重型页面一次更长的预热，避免断言超时。
+  const page = await browser.newPage()
+  await page.goto('/repos', { waitUntil: 'domcontentloaded', timeout: 180_000 }).catch(() => {})
+  await page.close()
+})
+
 test.beforeEach(async ({ page }) => {
   await loginAsDemo(page)
 })
@@ -41,7 +48,7 @@ test('ops dashboard renders admin metrics and alerts', async ({ page }) => {
 })
 
 test('repo page explains the elevated permission flow', async ({ page }) => {
-  await page.goto('/repos')
+  await page.goto('/repos', { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('GitHub 仓库管理')).toBeVisible()
 })
 

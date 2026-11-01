@@ -12,6 +12,19 @@
 - `/api/health` 返回数据库健康状态，可用于容器和负载均衡探针；
 - worker 每 6 小时自动刷新候选池（可用 `DISCOVERY_AUTO=off` 关闭），管理员也可以在设置页手动刷新。
 
+## 错误上报
+
+服务端错误通过 Next 的 `instrumentation.ts` 钩子收集，浏览器错误边界会把错误 POST 到
+`/api/client-errors`（按用户/IP 限流 10 次/分钟）。两者都走 `@repo-radar/core` 的
+`reportError`：先写一条结构化日志（`{"event":"error.request",...}`），再按需转发。
+
+配置 `ERROR_WEBHOOK_URL` 后，错误会以 JSON POST 到该地址（5 秒超时，失败只记一条 warn），
+可以直接接 Slack 代理、自建收集器或 Sentry 兼容端点；不配置时只留在容器日志里。
+
+```bash
+docker compose logs web | grep '"level":"error"'
+```
+
 ## GitHub 权限
 
 默认登录只申请 `read:user user:email`，用于读取公开资料和 star 画像。仓库管理、维护周报、Issue 修复方案和补丁生成需要额外的 `repo` 权限；删除仓库是不可恢复操作，才会单独申请 `delete_repo`：

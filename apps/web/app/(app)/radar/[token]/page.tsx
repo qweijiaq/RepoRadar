@@ -13,9 +13,12 @@ export async function generateMetadata({ params }: SharedRadarPageProps) {
   const { token } = await params
   const snapshot = await findRadarSnapshot(getPool(), token)
   if (!snapshot) return { title: 'RepoRadar 分享雷达' }
+  const description = `${snapshot.persona.name}：${snapshot.persona.detail}`
   return {
     title: `${snapshot.login} 的雷达 · RepoRadar`,
-    description: `${snapshot.persona.name}：${snapshot.persona.detail}`,
+    description,
+    openGraph: { type: 'article', title: `${snapshot.login} 的雷达`, description },
+    twitter: { card: 'summary_large_image', title: `${snapshot.login} 的雷达`, description },
   }
 }
 

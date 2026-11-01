@@ -28,7 +28,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: `http://127.0.0.1:${port}`,
-    navigationTimeout: 45_000,
+    navigationTimeout: 60_000,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -42,7 +42,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm --filter @repo-radar/web exec next dev --webpack -p ${port}`,
+    // 上一次异常退出可能留下 dev lock，先清掉再启动，避免误报「已有 dev server」。
+    command: `rm -f apps/web/.next-e2e/dev/lock && pnpm --filter @repo-radar/web exec next dev --webpack -p ${port}`,
     url: `http://127.0.0.1:${port}/login`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

@@ -142,6 +142,7 @@ curl -k -I https://localhost:8443/login
 - 设置页「站点地址」填 `https://radar.example.com`；
 - GitHub Webhook 填 `https://radar.example.com/api/github/webhook`；
 - 如果使用环境变量 `RADAR_BASE_URL`，它会覆盖页面设置。
+- `RADAR_BASE_URL` 也会用于 `sitemap.xml`、`robots.txt` 和 OpenGraph 分享卡里的绝对地址；公开部署时请设为最终域名。
 
 不要把 PostgreSQL 的 `5433` 端口暴露到公网。Compose 默认只绑定 `127.0.0.1`。
 

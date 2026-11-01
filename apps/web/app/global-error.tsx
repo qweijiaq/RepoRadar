@@ -12,6 +12,21 @@ export default function GlobalError({ error, retry }: { error: unknown; retry: (
     } catch {
       // localStorage 不可用时保持默认配色
     }
+    const payload = {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? (error.stack ?? null) : null,
+      path: window.location.pathname,
+      digest:
+        error && typeof error === 'object' && 'digest' in error
+          ? String((error as { digest?: unknown }).digest ?? '')
+          : null,
+    }
+    void fetch('/api/client-errors', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => undefined)
   }, [error])
 
   return (

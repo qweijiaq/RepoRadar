@@ -36,9 +36,16 @@ export async function generateMetadata({ params }: RepoPageProps) {
   const { owner, name } = await params
   const repo = await findRepoByFullName(getPool(), `${owner}/${name}`)
   if (!repo) return { title: '未找到项目 — RepoRadar' }
+  const description = repo.summary ?? repo.description ?? undefined
   return {
     title: `${repo.fullName} — RepoRadar`,
-    description: repo.summary ?? repo.description ?? undefined,
+    description,
+    openGraph: {
+      type: 'article',
+      title: `${repo.fullName} — RepoRadar`,
+      description,
+    },
+    twitter: { card: 'summary_large_image', title: repo.fullName, description },
   }
 }
 

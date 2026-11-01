@@ -212,6 +212,7 @@ export async function fetchRepo(fullName: string, token?: string): Promise<RepoI
 export async function fetchReadme(fullName: string, token: string): Promise<string | null> {
   const response = await fetch(`${githubApiBase()}/repos/${fullName}/readme`, {
     headers: githubHeaders(token, 'application/vnd.github.raw'),
+    signal: AbortSignal.timeout(10_000),
   })
   if (response.status === 404) return null
   if (!response.ok) throw new GitHubApiError(response.status, await describeGitHubError(response))
@@ -230,6 +231,7 @@ export interface LatestRelease {
 export async function fetchLatestRelease(fullName: string, token?: string): Promise<LatestRelease | null> {
   const response = await fetch(`${githubApiBase()}/repos/${fullName}/releases/latest`, {
     headers: githubHeaders(token),
+    signal: AbortSignal.timeout(10_000),
   })
   if (response.status === 404) return null
   if (!response.ok) throw new GitHubApiError(response.status, await describeGitHubError(response))

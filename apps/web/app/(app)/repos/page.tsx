@@ -27,11 +27,8 @@ export default async function ReposPage() {
   let canDelete = false
 
   if (access) {
-    const actualScopes = await fetchTokenScopes(access.token).catch(() => null)
-    canDelete =
-      actualScopes !== null
-        ? hasDeleteRepoScope(actualScopes.join(' '))
-        : hasDeleteRepoScope(sessionGithubScope(session))
+    // scope 查询和仓库列表互不依赖，并行跑，少等一个 GitHub 往返。
+    const scopesPromise = fetchTokenScopes(access.token).catch(() => null)
     try {
       repos = await listOwnedRepos(access.token)
     } catch (error) {
@@ -42,6 +39,11 @@ export default async function ReposPage() {
         errorMessage = error instanceof Error ? error.message : '读取仓库失败'
       }
     }
+    const actualScopes = await scopesPromise
+    canDelete =
+      actualScopes !== null
+        ? hasDeleteRepoScope(actualScopes.join(' '))
+        : hasDeleteRepoScope(sessionGithubScope(session))
   }
 
   return (

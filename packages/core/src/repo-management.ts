@@ -110,6 +110,7 @@ async function githubRequest<T>(token: string, path: string, init: RequestInit =
     ...init,
     headers: headers(token, Boolean(init.body)),
     cache: 'no-store',
+    signal: init.signal ?? AbortSignal.timeout(10_000),
   } as RequestInit & { cache: 'no-store' })
 
   if (!response.ok) {
