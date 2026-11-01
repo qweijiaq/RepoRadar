@@ -9,6 +9,7 @@ import {
   loadHandledState,
   watchMatchHandled,
   fetchIssueContext,
+  fetchRepo,
   fetchMaintainerSnapshot,
   enrichPendingRepos,
   fetchReadme,
@@ -25,6 +26,7 @@ import {
   generateComparisonReport,
   generateDiscoverabilityReport,
   generateIntegrationReport,
+  generateIntegrationTrial,
   generateIssuePlan,
   generateMaintainerReport,
   generatePatch,
@@ -63,6 +65,7 @@ import {
   upsertRepo,
   validatePatch,
   type DbPool,
+  type IntegrationTrialCandidate,
   type JobRecord,
   type JobResult,
   type LlmConfig,
@@ -596,6 +599,74 @@ async function patchJob(pool: DbPool, userId: number, job: JobRecord, progress: 
   }
 }
 
+async function integrationTrialJob(
+  pool: DbPool,
+  userId: number,
+  job: JobRecord,
+  progress: Progress,
+): Promise<JobResult> {
+  const llm = await loadLlm(pool)
+  const token = requireToken(job)
+  const project = job.payload.project?.trim()
+  const candidateName = job.payload.repo?.trim()
+  if (!project || !candidateName) throw new Error('缺少项目或候选仓库')
+
+  await progress('读取项目上下文…')
+  const projectContext = await loadProjectContext(project, token)
+  const enriched = await findRepoByFullName(pool, candidateName)
+  const basic = enriched ? null : await fetchRepo(candidateName, token)
+  if (!enriched && !basic) throw new Error('没有找到候选仓库')
+
+  const candidate: IntegrationTrialCandidate = {
+    repo: candidateName,
+    summary: enriched?.summary ?? enriched?.description ?? basic?.description ?? '',
+    language: enriched?.language ?? basic?.language ?? null,
+    topics: enriched?.topics ?? basic?.topics ?? [],
+    stars: enriched?.stars ?? basic?.stars ?? 0,
+  }
+
+  await progress('模型生成试接入补丁…')
+  const generated = await generateIntegrationTrial(
+    { project, candidate, projectContext, steps: job.payload.steps ?? [], targetFile: null },
+    llm,
+  )
+
+  await progress('在 Docker 沙箱验证接入补丁…')
+  const validation = await validatePatch({
+    repoFullName: project,
+    patch: generated.patch,
+    token,
+    timeoutMs: 300_000,
+  })
+  const succeeded =
+    validation.applies &&
+    (validation.buildStatus === 'verified' || validation.buildStatus === 'skipped')
+
+  const patchId = await savePatchDraft(pool, userId, {
+    repo: project,
+    kind: 'integration',
+    issueNumber: null,
+    title: `接入预演：${project} ← ${candidateName}`,
+    summary: generated.summary,
+    patch: generated.patch,
+    files: validation.changedFiles.length > 0 ? validation.changedFiles : generated.files,
+    validation,
+    status: succeeded ? 'validated' : 'failed',
+  })
+
+  await addNotification(pool, userId, {
+    kind: 'patch',
+    title: succeeded ? '接入预演通过' : '接入预演未通过',
+    body: `${project} ← ${candidateName}：${generated.summary.slice(0, 120)}`,
+    url: `/patch/${patchId}`,
+  })
+
+  return {
+    href: `/patch/${patchId}`,
+    label: succeeded ? '查看试接入结果' : '查看补丁与验证日志',
+  }
+}
+
 async function upgradeJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
   const repo = job.payload.repo?.trim()
   const packageName = job.payload.packageName?.trim()
@@ -963,6 +1034,8 @@ export async function runJobHandler(pool: DbPool, job: JobRecord, userId: number
       return watchJob(pool, userId, job, progress)
     case 'activity':
       return activityJob(pool, userId, job, progress)
+    case 'integration-trial':
+      return integrationTrialJob(pool, userId, job, progress)
     case 'patch':
       return patchJob(pool, userId, job, progress)
     case 'upgrade':

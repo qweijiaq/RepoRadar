@@ -18,6 +18,8 @@
 - 独立的 `e2e/tsconfig.json`，E2E 测试纳入类型检查。
 - 覆盖率门槛：`pnpm test:coverage` 统计 `packages/core` 的行/语句/函数/分支覆盖率，CI 用它替代
   `pnpm test`，低于基线（45/44/42/34）会失败。
+- **接入预演（Integration Dry-Run）**：接入建议上的「试接入」会在 Docker 沙箱里真的加一次依赖并构建，
+  生成带 diff、命令和日志的补丁记录（`patch_drafts.kind = 'integration'`），不会改动远端仓库。
 - 分享雷达的 OpenGraph 卡片：`/radar/[token]` 会用快照里的登录名、模式和前三个项目生成 1200×630
   的 PNG；快照不存在或数据库不可用时退回通用卡片。
 - 错误上报：`instrumentation.ts` 的 `onRequestError` 和浏览器错误边界统一走 `reportError`，

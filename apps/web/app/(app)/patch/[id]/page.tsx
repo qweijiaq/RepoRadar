@@ -36,18 +36,22 @@ export default async function PatchPage({ params }: PatchPageProps) {
   if (!patch) notFound()
   const brief = buildPatchBrief(patch)
   const pullRequestBrief = buildPullRequestBrief(patch)
-  const issueHref = patch.issueNumber
-    ? `/issue-plan?repo=${encodeURIComponent(patch.repo)}&number=${patch.issueNumber}`
-    : '/workbench/maintain'
+  const isTrial = patch.kind === 'integration'
+  const backHref = isTrial
+    ? '/workbench/integrations'
+    : patch.issueNumber
+      ? `/issue-plan?repo=${encodeURIComponent(patch.repo)}&number=${patch.issueNumber}`
+      : '/workbench/maintain'
+  const backLabel = isTrial ? '← 返回接入建议' : '← 返回 Issue 修复方案'
 
   return (
     <div className="page narrow">
       <p className="muted small">
-        <Link href={issueHref}>← 返回 Issue 修复方案</Link>
+        <Link href={backHref}>{backLabel}</Link>
       </p>
       <section className="feed-head">
         <div>
-          <p className="eyebrow">修复补丁</p>
+          <p className="eyebrow">{isTrial ? '接入预演' : '修复补丁'}</p>
           <h1>
             {patch.repo}
             {patch.issueNumber ? ` #${patch.issueNumber}` : ''}

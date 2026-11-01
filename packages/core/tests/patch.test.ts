@@ -69,6 +69,7 @@ describe('buildPullRequestBrief', () => {
     const brief = buildPullRequestBrief({
       id: 1,
       repo: 'acme/widget',
+      kind: 'issue',
       issueNumber: 7,
       title: 'Crash when parsing empty config',
       summary: 'Treat empty input as an empty config object.\nAdds a regression test.',

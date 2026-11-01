@@ -266,6 +266,41 @@ export async function enqueuePatchAction(formData: FormData): Promise<void> {
   })
 }
 
+export async function enqueueIntegrationTrialAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  const { pool, userId } = await context()
+
+  const project = String(formData.get('project') ?? '').trim()
+  const candidate = String(formData.get('repo') ?? '').trim()
+  const repoPattern = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
+  if (!repoPattern.test(project) || !repoPattern.test(candidate)) {
+    redirect('/workbench/integrations?error=trial-invalid')
+  }
+
+  let steps: string[] = []
+  try {
+    const parsed = JSON.parse(String(formData.get('steps') ?? '[]')) as unknown
+    if (Array.isArray(parsed)) {
+      steps = parsed.filter((item): item is string => typeof item === 'string').slice(0, 6)
+    }
+  } catch {
+    steps = []
+  }
+
+  const access = await resolveRepoAccess(session, currentUser.login)
+  if (!access.access) redirect(repoScopeRedirect(access.reason, '/workbench/integrations?error=need-token'))
+
+  await enqueueAndGo(pool, userId, 'integration-trial', `接入预演 · ${project} ← ${candidate}`, {
+    project,
+    repo: candidate,
+    steps,
+    token: encryptJobToken(access.access.token),
+    origin: '/workbench/integrations',
+  })
+}
+
 export async function enqueueWatchRunAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)

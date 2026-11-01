@@ -113,6 +113,7 @@ const AI_JOB_KINDS = new Set<JobKind>([
   'discover',
   'enrich',
   'similar',
+  'integration-trial',
 ])
 
 export function jobUsesAi(kind: JobKind): boolean {

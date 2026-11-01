@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { LlmConfig } from './config.js'
 import type { DbPool } from './db.js'
 import { chatCompletion } from './llm.js'
+import { parseGeneratedPatch } from './patch.js'
 
 export interface IntegrationProjectInput {
   repo: string
@@ -451,4 +452,103 @@ export async function findIntegrationReportById(
   )
   const payload = rows[0]?.payload
   return payload ? normalizeStoredIntegrationReport(payload) : null
+}
+
+export interface IntegrationTrialCandidate {
+  repo: string
+  summary: string
+  language: string | null
+  topics: string[]
+  stars: number
+}
+
+export interface IntegrationTrialInput {
+  project: string
+  candidate: IntegrationTrialCandidate
+  projectContext: IntegrationProjectInput
+  steps: string[]
+  targetFile?: { path: string; content: string } | null
+}
+
+export interface GeneratedIntegrationTrial {
+  summary: string
+  files: string[]
+  patch: string
+}
+
+const TRIAL_SYSTEM_PROMPT = `你是一名接入工程师。任务是在用户自己的项目里做一次「试接入」补丁：
+1. 在项目清单（package.json / pyproject.toml 等）里加上候选库的依赖，版本用与项目现有风格一致的兼容写法；
+2. 如果给了目标文件，就在该文件里加最小可用的导入和调用；没有给目标文件时只改清单；
+3. 只修改清单或给定的目标文件，不要删除现有代码，不要改锁文件；
+4. 输出标准 unified diff（git apply 可直接应用），路径使用 a/ 和 b/ 前缀；
+5. 必须严格输出 JSON，不要 Markdown 围栏或解释文字。
+
+只输出一个合法 JSON 对象：
+{
+  "summary": "改了什么、为什么、假设是什么",
+  "files": ["package.json"],
+  "patch": "diff --git a/package.json b/package.json\\n--- a/package.json\\n+++ b/package.json\\n@@ ... @@\\n..."
+}`
+
+function buildTrialPrompt(input: IntegrationTrialInput): string {
+  const context = input.projectContext
+  return JSON.stringify(
+    {
+      project: input.project,
+      project_language: context.language,
+      project_dependencies: context.dependencies.slice(0, 40),
+      manifest_file: context.manifestName,
+      manifest: context.manifest?.slice(0, 6000) ?? null,
+      readme_excerpt: context.readme?.slice(0, 2500) ?? null,
+      candidate: {
+        repo: input.candidate.repo,
+        summary: input.candidate.summary,
+        language: input.candidate.language,
+        topics: input.candidate.topics,
+        stars: input.candidate.stars,
+      },
+      suggested_steps: input.steps,
+      target_file: input.targetFile
+        ? { path: input.targetFile.path, content: input.targetFile.content.slice(0, 8000) }
+        : null,
+    },
+    null,
+    2,
+  )
+}
+
+/**
+ * 生成一份「试接入」补丁：加依赖，必要时在目标文件里接一个最小调用。
+ * 返回的 patch 交给 validatePatch 在沙箱里验证能否应用并构建。
+ */
+export async function generateIntegrationTrial(
+  input: IntegrationTrialInput,
+  llm: LlmConfig,
+): Promise<GeneratedIntegrationTrial> {
+  const prompt = buildTrialPrompt(input)
+  const messages = [
+    { role: 'system' as const, content: TRIAL_SYSTEM_PROMPT },
+    { role: 'user' as const, content: prompt },
+  ]
+  let raw = await chatCompletion(llm, messages, { temperature: 0.2, maxTokens: 6000, jsonMode: true })
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return parseGeneratedPatch(raw)
+    } catch (error) {
+      console.error(`[integration-trial] 第 ${attempt + 1} 次输出解析失败：`, error, '\n', raw.slice(0, 900))
+      if (attempt === 1) break
+      raw = await chatCompletion(
+        llm,
+        [
+          { role: 'system', content: TRIAL_SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: `${prompt}\n\n上一次输出不是可应用的 unified diff JSON。请严格输出 JSON，patch 字段是 git apply 可用的 diff。`,
+          },
+        ],
+        { temperature: 0.1, maxTokens: 7000, jsonMode: true },
+      )
+    }
+  }
+  throw new Error('模型没有返回可应用的接入补丁（已自动重试）')
 }

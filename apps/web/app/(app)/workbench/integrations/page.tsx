@@ -23,6 +23,7 @@ import {
   enqueueComparisonAction,
   enqueueIntegrationAction,
   enqueueIntegrationProjectAction,
+  enqueueIntegrationTrialAction,
 } from '@/app/(app)/jobs/enqueue'
 import { auth } from '@/auth'
 import { sessionUser } from '@/lib/session'
@@ -421,6 +422,22 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
                               <input type="hidden" name="returnTo" value={projectReturnTo} />
                               <button className="btn quiet small" type="submit">
                                 不感兴趣
+                              </button>
+                            </form>
+                            <form action={enqueueIntegrationTrialAction}>
+                              <input type="hidden" name="project" value={project.repo} />
+                              <input type="hidden" name="repo" value={suggestion.repo} />
+                              <input
+                                type="hidden"
+                                name="steps"
+                                value={JSON.stringify(suggestion.steps)}
+                              />
+                              <button
+                                className="btn small"
+                                type="submit"
+                                title="在 Docker 沙箱里真的装一次依赖并构建，不改动远端仓库"
+                              >
+                                试接入（沙箱预演）
                               </button>
                             </form>
                             {explicitOutcome ? (

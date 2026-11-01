@@ -22,6 +22,7 @@ const KIND_LABEL: Record<JobKind, string> = {
   discover: '候选池刷新',
   enrich: '候选池富化',
   similar: '相似项目对比',
+  'integration-trial': '接入预演',
 }
 
 const STATUS_LABEL: Record<JobStatus, string> = {

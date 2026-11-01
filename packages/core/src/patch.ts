@@ -185,6 +185,8 @@ export async function generatePatch(
 export interface PatchDraftRecord {
   id: number
   repo: string
+  /** issue：修复补丁；integration：接入预演补丁 */
+  kind: 'issue' | 'integration'
   issueNumber: number | null
   title: string
   summary: string | null
@@ -198,6 +200,7 @@ export interface PatchDraftRecord {
 interface PatchRow {
   id: string
   repo_full_name: string
+  kind: string
   issue_number: number | null
   title: string
   summary: string | null
@@ -212,6 +215,7 @@ function mapPatch(row: PatchRow): PatchDraftRecord {
   return {
     id: Number(row.id),
     repo: row.repo_full_name,
+    kind: row.kind === 'integration' ? 'integration' : 'issue',
     issueNumber: row.issue_number,
     title: row.title,
     summary: row.summary,
@@ -228,6 +232,7 @@ export async function savePatchDraft(
   userId: number,
   input: {
     repo: string
+    kind?: 'issue' | 'integration'
     issueNumber: number | null
     title: string
     summary: string | null
@@ -238,11 +243,12 @@ export async function savePatchDraft(
   },
 ): Promise<number> {
   const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO patch_drafts (user_id, repo_full_name, issue_number, title, summary, patch, files, validation, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+    `INSERT INTO patch_drafts (user_id, repo_full_name, kind, issue_number, title, summary, patch, files, validation, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
     [
       userId,
       input.repo,
+      input.kind ?? 'issue',
       input.issueNumber,
       input.title,
       input.summary,
@@ -261,7 +267,7 @@ export async function findPatchDraft(
   id: number,
 ): Promise<PatchDraftRecord | null> {
   const { rows } = await pool.query<PatchRow>(
-    `SELECT id, repo_full_name, issue_number, title, summary, patch, files, validation, status, created_at
+    `SELECT id, repo_full_name, kind, issue_number, title, summary, patch, files, validation, status, created_at
      FROM patch_drafts WHERE user_id = $1 AND id = $2 LIMIT 1`,
     [userId, id],
   )
@@ -285,7 +291,7 @@ export async function listPatchDrafts(
   }
   values.push(Math.max(1, Math.min(50, options.limit ?? 10)))
   const { rows } = await pool.query<PatchRow>(
-    `SELECT id, repo_full_name, issue_number, title, summary, patch, files, validation, status, created_at
+    `SELECT id, repo_full_name, kind, issue_number, title, summary, patch, files, validation, status, created_at
      FROM patch_drafts WHERE ${clauses.join(' AND ')}
      ORDER BY created_at DESC LIMIT $${values.length}`,
     values,

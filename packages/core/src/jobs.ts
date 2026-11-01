@@ -15,6 +15,7 @@ export type JobKind =
   | 'discover'
   | 'enrich'
   | 'similar'
+  | 'integration-trial'
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
@@ -32,6 +33,7 @@ export interface JobPayload {
   topics?: string[]
   enrichLimit?: number
   targetVersion?: string
+  steps?: string[]
   currentVersion?: string
   manifestPath?: string
 }
