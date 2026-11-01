@@ -26,7 +26,10 @@ import {
   generateComparisonReport,
   generateDiscoverabilityReport,
   generateIntegrationReport,
+  countCodeChunks,
   generateIntegrationTrial,
+  indexRepoCode,
+  searchCodeChunks,
   generateSwapTrial,
   generateIssuePlan,
   generateMaintainerReport,
@@ -632,6 +635,18 @@ async function integrationTrialJob(
     await progress(`没有读到 ${targetPath}，改为只修改依赖清单`)
   }
 
+  let codeEvidence: Array<{ path: string; content: string }> = []
+  try {
+    if ((await countCodeChunks(pool, candidateName)) === 0) {
+      await progress('索引候选仓库的入口代码…')
+      await indexRepoCode(pool, candidateName, { token, llm, maxFiles: 5 })
+    }
+    const query = [candidate.summary, ...(job.payload.steps ?? []), project].join(' ')
+    codeEvidence = await searchCodeChunks(pool, candidateName, query, { llm, limit: 3 })
+  } catch (error) {
+    console.error('[integration-trial] code evidence failed:', error)
+  }
+
   await progress('模型生成试接入补丁…')
   const generated = await generateIntegrationTrial(
     {
@@ -640,6 +655,7 @@ async function integrationTrialJob(
       projectContext,
       steps: job.payload.steps ?? [],
       targetFile: targetFile ? { path: targetFile.path, content: targetFile.content } : null,
+      codeEvidence,
     },
     llm,
   )

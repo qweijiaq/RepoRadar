@@ -360,3 +360,17 @@ export async function listOpenIssues(
       updatedAt: item.updated_at ?? null,
     }))
 }
+
+/** 列出仓库 HEAD 的全部文件路径（用于代码索引挑选入口文件）。 */
+export async function listRepoTree(fullName: string, token?: string): Promise<string[]> {
+  const response = await fetch(`${githubApiBase()}/repos/${fullName}/git/trees/HEAD?recursive=1`, {
+    headers: githubHeaders(token),
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) throw new GitHubApiError(response.status, await describeGitHubError(response))
+  const data = (await response.json()) as { tree?: Array<{ path?: string; type?: string }> }
+  if (!Array.isArray(data.tree)) return []
+  return data.tree
+    .filter((entry) => entry.type === 'blob' && typeof entry.path === 'string')
+    .map((entry) => entry.path as string)
+}

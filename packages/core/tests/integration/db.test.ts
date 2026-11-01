@@ -47,6 +47,7 @@ describe.skipIf(!hasTestDatabase)('database integration', () => {
       '0007_feed_snapshots',
       '0008_patch_kind',
       '0009_integration_impacts',
+      '0010_code_chunks',
     ])
   })
 

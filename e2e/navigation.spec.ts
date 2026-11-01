@@ -58,3 +58,11 @@ test('settings has no horizontal overflow on mobile', async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
   expect(overflow).toBeLessThanOrEqual(1)
 })
+
+test('swap lab and contribution radar render', async ({ page }) => {
+  await page.goto('/workbench/swap', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '把一个库换个实现，先在沙箱里试一遍' })).toBeVisible()
+
+  await page.goto('/workbench/contribute', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '用你熟悉的栈，给相似项目补一块' })).toBeVisible()
+})
