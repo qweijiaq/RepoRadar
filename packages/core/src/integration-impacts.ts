@@ -1,9 +1,12 @@
 import type { DbPool } from './db.js'
 import { fetchLatestRelease } from './github.js'
 import { logEvent } from './logger.js'
-import { queryOsvPackage } from './osv.js'
+import { queryOsv, queryOsvPackage } from './osv.js'
 import { addNotification } from './notifications.js'
 import { findRepoByFullName } from './db.js'
+import type { IntegrationProjectInput } from './integrations.js'
+import { parseLockfileVersions } from './lockfiles.js'
+import { loadProjectContext } from './project-context.js'
 
 export interface AdoptedIntegration {
   userId: number
@@ -132,6 +135,23 @@ export async function listIntegrationImpacts(
  * 检查已接入的库是否发布了新版本。
  * 只回访「接入之后」发布的版本，避免刚标记接入就收到历史版本通知。
  */
+/**
+ * 从项目的 lockfile 里解析出某个包的真实安装版本。
+ * 解析不到时返回 null，调用方回退到「按包查全部公告」。
+ */
+export function resolveInstalledVersion(
+  context: IntegrationProjectInput | null,
+  packageName: string,
+): string | null {
+  if (!context?.lockfileName || !context.lockfile) return null
+  const versions = parseLockfileVersions(context.lockfileName, context.lockfile)
+  for (const candidate of [packageName, packageName.replace(/^@[^/]+\//, '')]) {
+    const version = versions.get(candidate)
+    if (version) return version
+  }
+  return null
+}
+
 function guessEcosystem(language: string | null): 'npm' | 'pypi' | 'go' | 'cargo' {
   const value = (language ?? '').toLowerCase()
   if (value.includes('python')) return 'pypi'
@@ -140,16 +160,41 @@ function guessEcosystem(language: string | null): 'npm' | 'pypi' | 'go' | 'cargo
   return 'npm'
 }
 
-/** 包名用仓库名近似；查不到公告时静默跳过。 */
+const versionCache = new Map<string, { expires: number; value: string | null }>()
+const VERSION_CACHE_TTL = 6 * 60 * 60 * 1000
+
+async function installedVersionFor(
+  project: string,
+  packageName: string,
+  token: string | null | undefined,
+): Promise<string | null> {
+  const key = `${project.toLowerCase()}:${packageName}`
+  const cached = versionCache.get(key)
+  if (cached && cached.expires > Date.now()) return cached.value
+  try {
+    const context = await loadProjectContext(project, token ?? null)
+    const value = resolveInstalledVersion(context, packageName)
+    versionCache.set(key, { expires: Date.now() + VERSION_CACHE_TTL, value })
+    return value
+  } catch {
+    return null
+  }
+}
+
+/** 包名用仓库名近似；能解析到安装版本时按精确版本查，否则查全部公告。 */
 async function checkAdvisories(
   pool: DbPool,
   item: AdoptedIntegration,
+  token?: string | null,
 ): Promise<number> {
   const [owner, repoName] = item.suggestionRepo.split('/')
   if (!owner || !repoName) return 0
   const record = await findRepoByFullName(pool, item.suggestionRepo)
   const ecosystem = guessEcosystem(record?.language ?? null)
-  const vulnerabilities = await queryOsvPackage(repoName, ecosystem)
+  const installedVersion = await installedVersionFor(item.projectFullName, repoName, token)
+  const vulnerabilities = installedVersion
+    ? await queryOsv(repoName, installedVersion, ecosystem)
+    : await queryOsvPackage(repoName, ecosystem)
   if (vulnerabilities.length === 0) return 0
 
   let created = 0
@@ -169,7 +214,7 @@ async function checkAdvisories(
     await addNotification(pool, item.userId, {
       kind: 'security',
       title: `接入的库有安全公告：${item.suggestionRepo}`,
-      body: `${vulnerability.id}${vulnerability.severity ? ` · ${vulnerability.severity}` : ''}${vulnerability.summary ? `：${vulnerability.summary}` : ''}`,
+      body: `${vulnerability.id}${installedVersion ? ` · 已安装 ${installedVersion}` : ''}${vulnerability.severity ? ` · ${vulnerability.severity}` : ''}${vulnerability.summary ? `：${vulnerability.summary}` : ''}`,
       url: '/workbench/integrations',
     })
   }
@@ -217,7 +262,7 @@ export async function checkIntegrationImpacts(
       }
 
       // 安全公告和 release 相互独立：没有 release 的仓库也要查。
-      created += await checkAdvisories(pool, item)
+      created += await checkAdvisories(pool, item, options.token)
     } catch (error) {
       logEvent('warn', 'integration_impact.check_failed', {
         repo: item.suggestionRepo,
