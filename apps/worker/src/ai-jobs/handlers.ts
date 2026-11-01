@@ -67,10 +67,13 @@ import {
   type JobResult,
   type LlmConfig,
 } from '@repo-radar/core'
-import { decryptJobToken } from '@/lib/job-secret'
-import { generateIssueForUser } from '@/lib/issue-generation'
-import { saveIssueDraft } from '@/lib/issue-drafts'
-import { fetchGitHubRepo, loadProjectContext } from '@/lib/project-context'
+import {
+  decryptJobToken,
+  fetchGitHubRepo,
+  generateIssueForUser,
+  loadProjectContext,
+  saveIssueDraft,
+} from '@repo-radar/core'
 
 type Progress = (message: string) => Promise<void>
 

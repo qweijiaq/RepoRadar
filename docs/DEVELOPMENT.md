@@ -119,11 +119,13 @@ pnpm eval:llm
 ## 项目结构
 
 ```text
-packages/core/    可复用核心库：配置、数据库、GitHub 客户端、LLM、富化、评分、个性化
-apps/worker/      CLI（tsx 运行）：ingest / enrich / list / pipeline / worker / MCP
+packages/core/    可复用核心库：配置、数据库、GitHub 客户端、LLM、富化、评分、个性化、邮件/推送
+apps/worker/      后台任务执行器 + CLI（tsx 运行）：任务队列、定时同步、ingest / enrich / MCP
 apps/web/         Web 应用（Next.js + Auth.js）：登录、口味画像、feed、公开项目页
 docs/             功能、部署、运维、路线图和样刊
 ```
+
+后台任务的执行代码（`runner` / `handlers` / worker 入口）在 `apps/worker/src`，Web 通过 `@repo-radar/worker` 复用 `enqueueJob`，因此 worker 镜像不需要携带 Next.js。共享的业务模块（任务凭据、Issue 草稿、项目上下文、邮件、推送）放在 `packages/core`，`apps/web/lib` 下只保留同名 re-export，避免两边各写一份。
 
 数据库 schema 位于 `packages/core/src/db/migrations/`，按文件名顺序执行；已应用版本和 checksum 记录在 `schema_migrations` 表，由 `pnpm db:migrate` 应用。新增变更时请添加新的迁移文件，不要修改已应用的历史文件。
 

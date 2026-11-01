@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
   output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
   // monorepo 下必须把追踪根目录指到仓库根，standalone 才会带上 workspace 依赖。
   outputFileTracingRoot: path.join(import.meta.dirname, '../../'),
-  transpilePackages: ['@repo-radar/core'],
+  transpilePackages: ['@repo-radar/core', '@repo-radar/worker'],
   serverExternalPackages: ['pg'],
   webpack: (config) => {
     // core 是 NodeNext 源码包，内部 import 使用 .js 后缀；让 webpack 也能解析到 .ts

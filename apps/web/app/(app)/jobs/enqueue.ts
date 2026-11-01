@@ -14,7 +14,7 @@ import { getPool } from '@/lib/db'
 import { encryptJobToken } from '@/lib/job-secret'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 import { requireAdmin } from '@/lib/admin'
-import { enqueueJob } from '@/lib/ai-jobs/runner'
+import { enqueueJob } from '@repo-radar/worker'
 
 function repoScopeRedirect(reason: string, fallback: string): string {
   return reason === 'need-repo-scope' ? '/repos?error=repo-scope' : fallback

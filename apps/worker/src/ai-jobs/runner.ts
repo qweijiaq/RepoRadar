@@ -21,7 +21,7 @@ import {
   type JobPayload,
   type NewJob,
 } from '@repo-radar/core'
-import { runJobHandler } from './handlers'
+import { runJobHandler } from './handlers.js'
 
 const JOB_TIMEOUT_MS = 10 * 60 * 1000
 const MAX_CONCURRENT_PER_USER = 2

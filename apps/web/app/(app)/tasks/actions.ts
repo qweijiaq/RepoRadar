@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
-import { resumeJob } from '@/lib/ai-jobs/runner'
+import { resumeJob } from '@repo-radar/worker'
 import { sessionUser } from '@/lib/session'
 
 async function jobContext(formData: FormData): Promise<{ userId: number; jobId: number } | null> {

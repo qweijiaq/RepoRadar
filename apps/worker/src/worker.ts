@@ -34,9 +34,8 @@ import {
   saveReleaseEvent,
   syncRepoActivity,
 } from '@repo-radar/core'
-import { executeJob } from '../lib/ai-jobs/runner'
-import { sendMail } from '../lib/mailer'
-import { sendPushToUser } from '../lib/push'
+import { sendMail, sendPushToUser } from '@repo-radar/core'
+import { executeJob } from './ai-jobs/runner.js'
 
 try {
   process.loadEnvFile(fileURLToPath(new URL('../../../.env', import.meta.url)))

@@ -63,7 +63,7 @@ services:
     build:
       context: .
       target: worker
-    working_dir: /app/apps/web
+    working_dir: /app/apps/worker
     env_file: .env
     environment:
       NODE_ENV: production

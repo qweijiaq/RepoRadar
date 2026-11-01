@@ -30,13 +30,17 @@
 - 新增迁移 `0005_repo_translations`（翻译缓存）和 `0006_repos_enriched_quality`
   （`repos (quality_score DESC NULLS LAST) WHERE enriched_at IS NOT NULL` 部分索引）。
 - **Web 镜像改用 Next.js `standalone` 输出**：实测 1.53 GB → 236 MB，只保留运行产物；
-  worker 镜像改为只装生产依赖并排除 Next 构建产物（896 MB → 845 MB），同时补上 `migrate`
+  worker 镜像改为只装生产依赖，不再复制 Next 构建产物，同时补上 `migrate`
   服务需要的 `apps/worker`；`.dockerignore` 显式排除 `.next`，避免把本地构建产物打进上下文。
 - feed 的「语言」「已验证」筛选下推到 SQL，先过滤再取候选窗口，避免小语种被全局前 500
   挤出结果。
 - **路由按登录态拆成路由组**：`(app)` 承载全部业务页和个性化导航，`(public)` 承载隐私和条款；
   根布局不再读取会话和请求头，`/privacy`、`/terms` 在构建时预渲染为静态页（`○`）。主题脚本
   改为 `public/theme.js`，不再依赖 per-request nonce。
+- **后台任务执行器从 Web 拆到 `apps/worker`**：`runner` / `handlers` / worker 入口移入
+  `apps/worker/src`，Web 通过 `@repo-radar/worker` 复用 `enqueueJob`；任务凭据、Issue 草稿、
+  项目上下文、邮件、推送下沉到 `packages/core`，`apps/web/lib` 保留 re-export 兼容层。
+  worker 镜像不再包含 Web 源码，并在同一层删掉 Next 相关包（896 MB → 553 MB）。
 
 ### Fixed
 

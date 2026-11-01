@@ -40,7 +40,7 @@ Compose 会依次：
 2. 运行一次性 `migrate` 服务应用数据库 schema；
 3. 启动 Web（默认 `http://localhost:3000`）和 worker。
 
-Web 镜像使用 Next.js 的 `standalone` 输出，只包含运行所需的产物，本地构建实测约 236 MB（此前复制整套 `node_modules` 和源码时约 1.53 GB）。worker 镜像只安装生产依赖（`pnpm install --prod`），约 845 MB；它仍然需要携带 `apps/web/lib` 和 Next 的运行依赖，进一步瘦身需要把任务执行器拆到独立 workspace。
+Web 镜像使用 Next.js 的 `standalone` 输出，只包含运行所需的产物，本地构建实测约 236 MB（此前复制整套 `node_modules` 和源码时约 1.53 GB）。worker 镜像只安装生产依赖并移除 Next 相关包，约 553 MB（此前 896 MB）；任务执行器已经拆到 `apps/worker`，镜像里不再包含 Web 源码。
 
 查看状态：
 

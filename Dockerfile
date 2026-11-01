@@ -34,20 +34,19 @@ USER node
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]
 
-# worker 要跑 TS 源码和沙箱验证，只装生产依赖，不带 Next 构建产物和开发工具。
-# 直接用构建上下文里的源码，和 builder 阶段互不依赖。
+# worker 只依赖 packages/core 和 apps/worker，不再需要 apps/web 的源码与 Next。
 FROM base AS worker
 RUN apk add --no-cache git docker-cli ca-certificates
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json tsconfig.json ./
 COPY packages ./packages
-COPY apps/web ./apps/web
-# migrate 服务用同一个 target 跑 apps/worker/src/cli.ts，必须一起带上。
 COPY apps/worker ./apps/worker
-# 双保险：构建上下文里可能残留 .next，worker 不需要。
-RUN rm -rf /app/apps/web/.next /app/apps/web/.next-e2e
+# 只用于满足 lockfile 校验；apps/web 的依赖仍会被装进来，后面删掉 Next。
+COPY apps/web/package.json apps/web/package.json
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --prod --frozen-lockfile --config.node-linker=hoisted
-WORKDIR /app/apps/web
-CMD ["/app/node_modules/.bin/tsx", "scripts/job-worker.ts"]
+    pnpm install --prod --frozen-lockfile --config.node-linker=hoisted \
+ && rm -rf /app/node_modules/next /app/node_modules/react /app/node_modules/react-dom \
+           /app/node_modules/@next /app/node_modules/.bin/next
+WORKDIR /app/apps/worker
+CMD ["/app/node_modules/.bin/tsx", "src/worker.ts"]

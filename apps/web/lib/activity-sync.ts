@@ -1,5 +1,5 @@
 import { isQuotaError, type DbPool } from '@repo-radar/core'
-import { enqueueJob } from '@/lib/ai-jobs/runner'
+import { enqueueJob } from '@repo-radar/worker'
 import { encryptJobToken } from '@/lib/job-secret'
 
 const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000
