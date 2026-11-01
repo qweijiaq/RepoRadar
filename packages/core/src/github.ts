@@ -313,3 +313,50 @@ export async function fetchTokenScopes(token: string): Promise<string[] | null> 
     return null
   }
 }
+
+export interface OpenIssue {
+  number: number
+  title: string
+  url: string
+  labels: string[]
+  comments: number
+  updatedAt: string | null
+}
+
+/** 拉取仓库最近的 open issue（过滤掉 Pull Request）。 */
+export async function listOpenIssues(
+  fullName: string,
+  options: { token?: string | null; limit?: number } = {},
+): Promise<OpenIssue[]> {
+  const perPage = Math.max(5, Math.min(50, options.limit ?? 30))
+  const response = await fetch(
+    `${githubApiBase()}/repos/${fullName}/issues?state=open&sort=updated&direction=desc&per_page=${perPage}`,
+    {
+      headers: githubHeaders(options.token ?? undefined),
+      signal: AbortSignal.timeout(10_000),
+    },
+  )
+  if (!response.ok) throw new GitHubApiError(response.status, await describeGitHubError(response))
+  const items = (await response.json()) as Array<{
+    number?: number
+    title?: string
+    html_url?: string
+    labels?: Array<{ name?: string } | string>
+    comments?: number
+    updated_at?: string | null
+    pull_request?: unknown
+  }>
+  if (!Array.isArray(items)) return []
+  return items
+    .filter((item) => !item.pull_request && typeof item.number === 'number' && typeof item.title === 'string')
+    .map((item) => ({
+      number: item.number as number,
+      title: item.title as string,
+      url: item.html_url ?? `https://github.com/${fullName}/issues/${item.number}`,
+      labels: (item.labels ?? [])
+        .map((label) => (typeof label === 'string' ? label : (label.name ?? '')))
+        .filter(Boolean),
+      comments: item.comments ?? 0,
+      updatedAt: item.updated_at ?? null,
+    }))
+}

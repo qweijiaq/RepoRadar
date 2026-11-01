@@ -7,6 +7,7 @@ const TABS = [
   { href: '/workbench/maintain', label: '维护' },
   { href: '/workbench/integrations', label: '接入' },
   { href: '/workbench/swap', label: '换库' },
+  { href: '/workbench/contribute', label: '贡献' },
   { href: '/workbench/watch', label: '关注' },
   { href: '/workbench/issue', label: '周报' },
   { href: '/workbench/copilot', label: '问雷达' },
