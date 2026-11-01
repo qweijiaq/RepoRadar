@@ -44,15 +44,15 @@ import {
   type HiddenGem,
   type OpportunityKind,
   type RadarMode,
+  getPool,
+  findLatestIssueDraft,
 } from '@repo-radar/core'
 import { auth } from '@/auth'
 import { signInGithubAction } from '@/app/actions'
 import { enqueueDiscoveryAction } from '@/app/(app)/jobs/enqueue'
 import { RepoCard } from '@/components/RepoCard'
 import { isAdminUser } from '@/lib/admin'
-import { getPool } from '@/lib/db'
 import { CollectionsView } from '@/app/(app)/collections/collections-view'
-import { findLatestIssueDraft } from '@/lib/issue-drafts'
 import { resolveGithubToken, sessionUser } from '@/lib/session'
 import { findUserById } from '@/lib/users'
 import { dismissOnboardingAction, markFeedItemDoneAction, setRadarModeAction } from './actions'

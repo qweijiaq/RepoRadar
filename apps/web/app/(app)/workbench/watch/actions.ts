@@ -13,11 +13,11 @@ import {
   loadStoredLlmConfig,
   saveWatchMatches,
   saveWatchRun,
+  getPool,
 } from '@repo-radar/core'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { guardAiQuota } from '@/lib/quota-guard'
 import { sessionUser } from '@/lib/session'
 

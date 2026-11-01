@@ -136,6 +136,7 @@ pnpm lint        # ESLint（含 typescript-eslint 类型感知规则、react-hoo
 pnpm format      # Prettier 格式化（首次运行会重排较多历史文件）
 pnpm typecheck   # 全仓类型检查（core / worker / e2e / web）
 pnpm test        # 单元测试（vitest，全部使用 mock，不需要数据库）
+pnpm test:coverage  # 单元测试 + 覆盖率门槛（packages/core）
 pnpm test:db     # 数据库集成测试（真实 Postgres，需要 TEST_DATABASE_URL）
 pnpm test:e2e    # Playwright E2E；本地使用已安装的 Chrome，CI 使用 Chromium
 pnpm build       # 生产构建

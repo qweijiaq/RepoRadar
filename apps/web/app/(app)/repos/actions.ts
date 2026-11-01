@@ -21,13 +21,13 @@ import {
   upsertUserProject,
   validateRepoName,
   type UpdateRepoInput,
+  getPool,
+  fetchGitHubRepo,
 } from '@repo-radar/core'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { guardAiQuota } from '@/lib/quota-guard'
-import { fetchGitHubRepo } from '@/lib/project-context'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 import { initialRepoActionState, type RepoActionResult } from './types'
 

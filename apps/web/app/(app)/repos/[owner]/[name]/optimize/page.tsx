@@ -7,14 +7,14 @@ import {
   findRepoByFullName,
   listDiscoverabilityHistory,
   listOwnedRepos,
+  getPool,
+  fetchGitHubRepo,
 } from '@repo-radar/core'
 import { CopyIntegrationButton } from '@/app/(app)/workbench/integrations/copy-button'
 import { enqueueDiscoverabilityAction } from '@/app/(app)/jobs/enqueue'
 import { applyDiscoverabilityAction } from '@/app/(app)/repos/actions'
 import { auth } from '@/auth'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { getPool } from '@/lib/db'
-import { fetchGitHubRepo } from '@/lib/project-context'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 import { GenerateDiscoverabilityButton } from './generate-button'
 

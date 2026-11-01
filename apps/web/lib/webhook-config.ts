@@ -1,5 +1,4 @@
-import { decryptSecret, encryptSecret, isEncryptedBox, requireAuthSecret, type EncryptedBox } from '@repo-radar/core'
-import { getPool } from './db'
+import { decryptSecret, encryptSecret, isEncryptedBox, requireAuthSecret, type EncryptedBox, getPool } from '@repo-radar/core'
 
 const SETTINGS_KEY = 'webhook.github'
 

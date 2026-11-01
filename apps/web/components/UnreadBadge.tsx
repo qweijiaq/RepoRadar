@@ -1,5 +1,4 @@
-import { countUnreadNotifications } from '@repo-radar/core'
-import { getPool } from '@/lib/db'
+import { countUnreadNotifications, getPool } from '@repo-radar/core'
 
 /**
  * 未读数单独渲染，避免布局在返回 HTML 前多做一次数据库往返。

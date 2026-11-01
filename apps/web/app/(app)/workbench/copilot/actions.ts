@@ -1,10 +1,9 @@
 'use server'
 
-import { createCopilotThread, deleteCopilotThread, getCopilotThread } from '@repo-radar/core'
+import { createCopilotThread, deleteCopilotThread, getCopilotThread, getPool } from '@repo-radar/core'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
 
 export async function newCopilotThreadAction(): Promise<void> {

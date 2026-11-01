@@ -16,6 +16,10 @@
 - CI 增加 `lint` 和 `test:db` 步骤、最小化 `permissions`、并发取消、任务超时，并在 E2E 失败时
   上传 Playwright 报告。
 - 独立的 `e2e/tsconfig.json`，E2E 测试纳入类型检查。
+- 覆盖率门槛：`pnpm test:coverage` 统计 `packages/core` 的行/语句/函数/分支覆盖率，CI 用它替代
+  `pnpm test`，低于基线（45/44/42/34）会失败。
+- 分享雷达的 OpenGraph 卡片：`/radar/[token]` 会用快照里的登录名、模式和前三个项目生成 1200×630
+  的 PNG；快照不存在或数据库不可用时退回通用卡片。
 - 错误上报：`instrumentation.ts` 的 `onRequestError` 和浏览器错误边界统一走 `reportError`，
   写结构化日志；配置 `ERROR_WEBHOOK_URL` 后额外转发 JSON，浏览器错误经 `/api/client-errors`
   （10 次/分钟限流）上报。
@@ -46,6 +50,8 @@
   `apps/worker/src`，Web 通过 `@repo-radar/worker` 复用 `enqueueJob`；任务凭据、Issue 草稿、
   项目上下文、邮件、推送下沉到 `packages/core`，`apps/web/lib` 保留 re-export 兼容层。
   worker 镜像不再包含 Web 源码，并在同一层删掉 Next 相关包（896 MB → 553 MB）。
+- 去掉 `apps/web/lib` 下 7 个 re-export 兼容层（db、job-secret、issue-drafts、project-context、
+  issue-generation、mailer、push），Web 直接从 `@repo-radar/core` 导入，减少一层间接。
 
 - **feed 主列表改为预计算快照**：新增 `feed_snapshots` 表，worker 每 30 分钟为有画像的用户重算
   排名（最多 300 条），页面按快照顺序取切片；快照缺失/过期时回退实时排名，并在响应结束后补建。

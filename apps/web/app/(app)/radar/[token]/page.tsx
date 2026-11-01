@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { findRadarSnapshot, RADAR_MODES } from '@repo-radar/core'
-import { getPool } from '@/lib/db'
+import { findRadarSnapshot, RADAR_MODES, getPool } from '@repo-radar/core'
 
 export const dynamic = 'force-dynamic'
 

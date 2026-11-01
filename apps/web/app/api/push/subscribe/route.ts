@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server'
-import {
-  countPushSubscriptions,
-  isValidPushSubscription,
-  savePushSubscription,
-} from '@/lib/push'
-import { saveNotificationPrefs, loadNotificationPrefs } from '@repo-radar/core'
+import { saveNotificationPrefs, loadNotificationPrefs, countPushSubscriptions, isValidPushSubscription, savePushSubscription, getPool } from '@repo-radar/core'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'

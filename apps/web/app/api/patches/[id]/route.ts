@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { findPatchDraft } from '@repo-radar/core'
+import { findPatchDraft, getPool } from '@repo-radar/core'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'

@@ -1,6 +1,5 @@
+import { getPool, findIssueDraft } from '@repo-radar/core'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
-import { findIssueDraft } from '@/lib/issue-drafts'
 import { sessionUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'

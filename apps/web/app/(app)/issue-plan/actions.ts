@@ -7,13 +7,13 @@ import {
   loadConfig,
   loadStoredLlmConfig,
   saveIssuePlan,
+  getPool,
+  loadProjectContext,
 } from '@repo-radar/core'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { guardAiQuota } from '@/lib/quota-guard'
-import { loadProjectContext } from '@/lib/project-context'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 
 export async function generateIssuePlanAction(formData: FormData): Promise<void> {

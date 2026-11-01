@@ -1,6 +1,5 @@
 import Link from 'next/link'
-import { HISTORY_LABEL, listHistory, type HistoryKind } from '@repo-radar/core'
-import { getPool } from '@/lib/db'
+import { HISTORY_LABEL, listHistory, type HistoryKind, getPool } from '@repo-radar/core'
 
 const KINDS = Object.keys(HISTORY_LABEL) as HistoryKind[]
 const PAGE_SIZE = 40

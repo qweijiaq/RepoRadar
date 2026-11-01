@@ -8,9 +8,9 @@ import {
   listUserProjects,
   loadHandledState,
   type MaintainerItem,
+  getPool,
 } from '@repo-radar/core'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 import { CopyIntegrationButton } from '@/app/(app)/workbench/integrations/copy-button'
 import { markFeedItemDoneAction } from '@/app/(app)/feed/actions'

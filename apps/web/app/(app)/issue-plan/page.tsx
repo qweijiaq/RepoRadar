@@ -1,10 +1,9 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { buildIssuePlanBrief, findIssuePlanById, findLatestIssuePlan, listPatchDrafts, loadHandledState } from '@repo-radar/core'
+import { buildIssuePlanBrief, findIssuePlanById, findLatestIssuePlan, listPatchDrafts, loadHandledState, getPool } from '@repo-radar/core'
 import { enqueuePatchAction } from '@/app/(app)/jobs/enqueue'
 import { CopyIntegrationButton } from '@/app/(app)/workbench/integrations/copy-button'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'

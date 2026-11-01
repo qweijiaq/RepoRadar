@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { exportHistoryContent, listHistory } from '@repo-radar/core'
+import { exportHistoryContent, listHistory, getPool } from '@repo-radar/core'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'

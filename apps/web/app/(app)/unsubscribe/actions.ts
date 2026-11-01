@@ -5,10 +5,10 @@ import {
   findUserById,
   saveNotificationPrefs,
   verifyUnsubscribeToken,
+  getPool,
 } from '@repo-radar/core'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { getPool } from '@/lib/db'
 
 export async function unsubscribeAction(formData: FormData): Promise<void> {
   const token = String(formData.get('token') ?? '')

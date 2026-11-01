@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { loadOpsMetrics, renderPrometheus } from '@repo-radar/core'
-import { getPool } from '@/lib/db'
+import { loadOpsMetrics, renderPrometheus, getPool } from '@repo-radar/core'
 
 export const dynamic = 'force-dynamic'
 

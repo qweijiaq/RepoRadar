@@ -4,8 +4,8 @@ import {
   savePrefs as coreSavePrefs,
   type UserPrefs,
   type UserRecord,
+  getPool,
 } from '@repo-radar/core'
-import { getPool } from './db'
 
 export type { UserPrefs, UserRecord }
 

@@ -1,10 +1,9 @@
 'use server'
 
-import { cancelJob, getJob, isQuotaError, recoverStaleJobs } from '@repo-radar/core'
+import { cancelJob, getJob, isQuotaError, recoverStaleJobs, getPool } from '@repo-radar/core'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { resumeJob } from '@repo-radar/worker'
 import { sessionUser } from '@/lib/session'
 

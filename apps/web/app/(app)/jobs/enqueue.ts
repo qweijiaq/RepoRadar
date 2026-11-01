@@ -6,12 +6,12 @@ import {
   loadConfig,
   loadStoredLlmConfig,
   type LlmConfig,
+  getPool,
+  encryptJobToken,
 } from '@repo-radar/core'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
-import { encryptJobToken } from '@/lib/job-secret'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 import { requireAdmin } from '@/lib/admin'
 import { enqueueJob } from '@repo-radar/worker'

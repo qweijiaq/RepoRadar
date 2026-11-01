@@ -11,9 +11,9 @@ import {
   loadWatchLibrary,
   type HistoryKind,
   type LibraryStatus,
+  getPool,
 } from '@repo-radar/core'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
 import { HistoryPanel } from './history-panel'
 import {

@@ -10,8 +10,8 @@ import {
   type RepoInput,
   type StarredSignal,
   type TasteProfile,
+  getPool,
 } from '@repo-radar/core'
-import { getPool } from './db'
 
 const MAX_STARS = 200
 const MAX_EVENT_REPO_LOOKUPS = 8

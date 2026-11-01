@@ -15,9 +15,9 @@ import {
   updateCopilotTitle,
   PROMPT_VERSIONS,
   withLlmUsage,
+  getPool,
 } from '@repo-radar/core'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { loadCopilotContext } from '@/lib/copilot-context'
 import { sessionUser } from '@/lib/session'
 

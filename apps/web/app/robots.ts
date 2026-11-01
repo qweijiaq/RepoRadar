@@ -1,6 +1,5 @@
 import type { MetadataRoute } from 'next'
-import { resolveBaseUrl } from '@repo-radar/core'
-import { getPool } from '@/lib/db'
+import { resolveBaseUrl, getPool } from '@repo-radar/core'
 
 export const dynamic = 'force-dynamic'
 

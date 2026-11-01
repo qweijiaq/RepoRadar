@@ -1,5 +1,5 @@
+import { getPool } from '@repo-radar/core'
 import { NextResponse } from 'next/server'
-import { getPool } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 

@@ -1,10 +1,9 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { listNotifications, loadNotificationCounts } from '@repo-radar/core'
+import { listNotifications, loadNotificationCounts, getPool } from '@repo-radar/core'
 import { markInboxReadAction, markNotificationReadAction } from '@/app/actions'
 import { enqueueActivitySyncAction } from '@/app/(app)/jobs/enqueue'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { maybeQueueActivitySync } from '@/lib/activity-sync'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 

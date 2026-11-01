@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { handleGitHubWebhook, parseGitHubWebhookPayload } from '@repo-radar/core'
-import { getPool } from '@/lib/db'
+import { handleGitHubWebhook, parseGitHubWebhookPayload, getPool } from '@repo-radar/core'
 import { resolveGithubWebhookSecret } from '@/lib/webhook-config'
 
 export const dynamic = 'force-dynamic'

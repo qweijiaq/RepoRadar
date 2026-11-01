@@ -1,7 +1,6 @@
 import Link from 'next/link'
-import { listCollections } from '@repo-radar/core'
+import { listCollections, getPool } from '@repo-radar/core'
 import { createCollectionAction } from '@/app/actions'
-import { getPool } from '@/lib/db'
 
 /** 收藏集列表，嵌入雷达页的「收藏」标签；详情页仍使用 /collections/[id]。 */
 export async function CollectionsView({ userId }: { userId: number }) {

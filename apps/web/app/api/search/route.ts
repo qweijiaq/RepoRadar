@@ -1,6 +1,5 @@
-import { searchEnrichedRepos } from '@repo-radar/core'
+import { searchEnrichedRepos, getPool } from '@repo-radar/core'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
 import { sessionUser } from '@/lib/session'
 

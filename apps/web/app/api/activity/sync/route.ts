@@ -1,6 +1,6 @@
+import { getPool } from '@repo-radar/core'
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { maybeQueueActivitySync } from '@/lib/activity-sync'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 

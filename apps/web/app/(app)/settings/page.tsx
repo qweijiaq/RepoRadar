@@ -19,6 +19,9 @@ import {
   loadSubscriptions,
   loadUsageSummary,
   resolveBaseUrlStatus,
+  getPool,
+  countPushSubscriptions,
+  countPendingDeliveries,
 } from '@repo-radar/core'
 import {
   addSubscriptionAction,
@@ -45,12 +48,9 @@ import {
 import { auth } from '@/auth'
 import { isAdminUser } from '@/lib/admin'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { getPool } from '@/lib/db'
 import { maskClientId, resolveGithubCredentials } from '@/lib/oauth-config'
 import { resolveGithubWebhookSecret } from '@/lib/webhook-config'
 import { sessionAccessToken, sessionGithubScope, sessionUser } from '@/lib/session'
-import { countPushSubscriptions } from '@/lib/push'
-import { countPendingDeliveries } from '@repo-radar/core'
 import { findUserById } from '@/lib/users'
 import { enqueueDiscoveryAction, enqueueEnrichAction } from '@/app/(app)/jobs/enqueue'
 import { LlmConfigForm } from './llm-form'

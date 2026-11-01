@@ -1,6 +1,6 @@
+import { getPool } from '@repo-radar/core'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
-import { getPool } from './db'
 import { sessionUser, type SessionUser } from './session'
 
 export function adminLogins(): string[] {

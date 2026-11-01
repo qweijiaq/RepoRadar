@@ -7,8 +7,8 @@ import {
   hasRepoScope,
   loadConfig,
   loadUserGithubToken,
+  getPool,
 } from '@repo-radar/core'
-import { getPool } from './db'
 
 export interface SessionUser {
   id: string

@@ -7,11 +7,11 @@ import {
   loadRecentFailures,
   renderPrometheus,
   runDoctor,
+  getPool,
 } from '@repo-radar/core'
 import { resetOpsConfigAction } from '@/app/actions'
 import { requireAdmin } from '@/lib/admin'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { getPool } from '@/lib/db'
 import { OpsConfigForm } from './ops-config-form'
 
 export const dynamic = 'force-dynamic'

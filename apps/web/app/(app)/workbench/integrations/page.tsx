@@ -10,6 +10,7 @@ import {
   listIntegrationOutcomes,
   listUserProjects,
   removeHandledSuggestions,
+  getPool,
 } from '@repo-radar/core'
 import {
   addUserProjectAction,
@@ -24,7 +25,6 @@ import {
   enqueueIntegrationProjectAction,
 } from '@/app/(app)/jobs/enqueue'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
 import { CopyIntegrationButton } from './copy-button'
 import { GenerateIntegrationButton } from './generate-button'

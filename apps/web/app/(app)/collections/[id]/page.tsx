@@ -1,13 +1,12 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { findCollection, findRepoByFullName, listCollectionItems, loadHandledState } from '@repo-radar/core'
+import { findCollection, findRepoByFullName, listCollectionItems, loadHandledState, getPool } from '@repo-radar/core'
 import {
   deleteCollectionAction,
   removeCollectionItemAction,
   toggleCollectionPublicAction,
 } from '@/app/actions'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'

@@ -12,11 +12,11 @@ import {
   loadVerifications,
   type CollectionRecord,
   type EnrichedRepoRecord,
+  getPool,
 } from '@repo-radar/core'
 import { addToCollectionAction } from '@/app/actions'
 import { auth } from '@/auth'
 import { StarChart } from '@/components/StarChart'
-import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
 
 const VERIFY_STATUS_LABELS: Record<string, string> = {

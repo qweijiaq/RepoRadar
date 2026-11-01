@@ -1,7 +1,6 @@
 import Link from 'next/link'
-import { findEnrichedRepos, loadRecentReleaseEvents, loadStarHistory, risingRepos } from '@repo-radar/core'
+import { findEnrichedRepos, loadRecentReleaseEvents, loadStarHistory, risingRepos, getPool } from '@repo-radar/core'
 import { StarChart } from '@/components/StarChart'
-import { getPool } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 

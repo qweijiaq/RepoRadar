@@ -65,14 +65,17 @@ import {
   upsertUserProject,
   type IntegrationCandidate,
   type SubscriptionKind,
+  getPool,
+  saveIssueDraft,
+  generateIssueForUser,
+  fetchGitHubRepo,
+  loadProjectContext,
+  sendMail,
 } from '@repo-radar/core'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { auth, signIn, signOut } from '@/auth'
-import { getPool } from '@/lib/db'
-import { saveIssueDraft } from '@/lib/issue-drafts'
-import { generateIssueForUser } from '@/lib/issue-generation'
 import { clearGithubCredentials, resolveGithubCredentials, saveGithubCredentials } from '@/lib/oauth-config'
 import {
   clearGithubWebhookSecret,
@@ -83,10 +86,8 @@ import {
 import { adminLogins, requireAdmin } from '@/lib/admin'
 import { guardAiQuota } from '@/lib/quota-guard'
 import { sessionAccessToken, sessionUser } from '@/lib/session'
-import { fetchGitHubRepo, loadProjectContext } from '@/lib/project-context'
 import { rebuildProfile, syncUserTaste } from '@/lib/sync'
 import { findUserById, savePrefs } from '@/lib/users'
-import { sendMail } from '@/lib/mailer'
 
 export async function signInGithubAction(formData?: FormData): Promise<void> {
   const requested = String(formData?.get('redirectTo') ?? '')

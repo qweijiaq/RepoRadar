@@ -1,9 +1,8 @@
 'use server'
 
-import { isRadarMode, saveRadarSnapshot } from '@repo-radar/core'
+import { isRadarMode, saveRadarSnapshot, getPool } from '@repo-radar/core'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
-import { getPool } from '@/lib/db'
 import { sessionUser } from '@/lib/session'
 
 interface RawSnapshot {
