@@ -5,8 +5,11 @@ import {
   checkProjectDependencies,
   fetchIssueContext,
   fetchMaintainerSnapshot,
+  enrichPendingRepos,
   fetchReadme,
   fetchRepoFile,
+  loadDiscoveryStatus,
+  runDiscovery,
   findEnrichedRepos,
   findLatestIntegrationReport,
   findLatestIssuePlan,
@@ -24,6 +27,7 @@ import {
   listFeedStatuses,
   listFeedbackSignals,
   listIntegrationOutcomes,
+  listUserGithubTokens,
   listUserProjects,
   loadConfig,
   loadFeedback,
@@ -419,6 +423,45 @@ async function issuePlanJob(pool: DbPool, userId: number, job: JobRecord, progre
   }
 }
 
+async function discoveryJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const config = loadConfig()
+  let token = decryptJobToken(job.payload.token) ?? config.githubToken ?? null
+  if (!token) {
+    const stored = await listUserGithubTokens(pool)
+    token = stored[0]?.token ?? null
+  }
+  const topics = (job.payload.topics?.length ? job.payload.topics : config.search.topics)
+    .map((topic) => topic.trim())
+    .filter(Boolean)
+  const llm = config.llm ?? (await loadStoredLlmConfig(pool))
+  const enrichLimit = Math.max(1, Math.min(50, Number(job.payload.enrichLimit) || 20))
+
+  await progress(`采集 ${topics.length} 个主题的候选仓库…`)
+  const run = await runDiscovery(pool, {
+    topics,
+    token,
+    llm,
+    pages: 1,
+    perPage: 30,
+    enrichLimit,
+    delayMs: 2200,
+    sort: 'updated',
+    freshDays: 120,
+    onProgress: progress,
+  })
+  const status = await loadDiscoveryStatus(pool)
+  await addNotification(pool, userId, {
+    kind: 'discover',
+    title: '候选池已更新',
+    body: `新增 ${run.inserted} 个仓库，富化 ${run.enriched} 个；当前 ${status.enrichedRepos} 个已富化。`,
+    url: '/settings?pool=updated',
+  })
+  return {
+    href: '/settings?pool=updated',
+    label: `候选池：新增 ${run.inserted}，富化 ${run.enriched}`,
+  }
+}
+
 async function patchJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
   const llm = await loadLlm(pool)
   const token = requireToken(job)
@@ -541,10 +584,10 @@ async function watchJob(pool: DbPool, userId: number, job: JobRecord, progress: 
   const intent = await findWatchIntent(pool, userId, intentId)
   if (!intent) throw new Error('关注意图不存在')
   await progress('从候选池筛选匹配…')
-  const repos = await findEnrichedRepos(pool, 80)
+  const repos = await findEnrichedRepos(pool, 120)
   const candidates = repos.map((repo) => ({
     repo: repo.fullName,
-    summary: repo.summary ?? repo.description ?? '',
+    summary: (repo.summary ?? repo.description ?? '').slice(0, 180),
     language: repo.language,
     topics: repo.topics,
     stars: repo.stars,
@@ -571,6 +614,32 @@ async function watchJob(pool: DbPool, userId: number, job: JobRecord, progress: 
     })
   }
   return { href: '/watch', label: '查看关注匹配' }
+}
+
+async function enrichJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
+  const config = loadConfig()
+  const llm = config.llm ?? (await loadStoredLlmConfig(pool))
+  const limit = Math.max(1, Math.min(50, Number(job.payload.enrichLimit) || 20))
+  let token = decryptJobToken(job.payload.token) ?? config.githubToken ?? null
+  if (!token) {
+    const stored = await listUserGithubTokens(pool)
+    token = stored[0]?.token ?? null
+  }
+  await progress(`富化 ${limit} 个待处理仓库…`)
+  const enriched = await enrichPendingRepos(pool, {
+    limit,
+    topics: config.search.topics,
+    token,
+    llm,
+  })
+  const status = await loadDiscoveryStatus(pool)
+  await addNotification(pool, userId, {
+    kind: 'discover',
+    title: '候选池富化完成',
+    body: `本轮富化 ${enriched} 个仓库；当前 ${status.enrichedRepos} 个已富化，${status.pendingRepos} 个待处理。`,
+    url: '/settings?pool=enriched',
+  })
+  return { href: '/settings?pool=enriched', label: `已富化 ${enriched} 个仓库` }
 }
 
 async function activityJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
@@ -610,6 +679,10 @@ export async function runJobHandler(pool: DbPool, job: JobRecord, userId: number
       return patchJob(pool, userId, job, progress)
     case 'upgrade':
       return upgradeJob(pool, userId, job, progress)
+    case 'discover':
+      return discoveryJob(pool, userId, job, progress)
+    case 'enrich':
+      return enrichJob(pool, userId, job, progress)
     default:
       throw new Error(`未知任务类型：${job.kind}`)
   }

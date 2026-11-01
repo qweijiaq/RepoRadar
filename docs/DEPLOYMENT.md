@@ -143,7 +143,15 @@ curl -k -I https://localhost:8443/login
 
 不要把 PostgreSQL 的 `5433` 端口暴露到公网。Compose 默认只绑定 `127.0.0.1`。
 
-## 5. worker 与 Docker 沙箱
+## 5. 候选池自动刷新
+
+worker 每 6 小时检查一次候选池：如果最近一次采集超过 6 小时或从未运行，会在后台采集 `RADAR_TOPICS` 主题并富化 20 个待处理仓库。它优先使用页面保存的 GitHub token 和模型配置，失败后 30 分钟再试；多 worker 用 PostgreSQL advisory lock 避免重复采集。
+
+- 管理员可以在设置页「候选池」查看已收录/已富化/待富化数量，手动刷新，或只富化待处理仓库（不重新采集）；
+- 设置 `DISCOVERY_AUTO=off` 可以关闭自动采集，只保留手动刷新；
+- 采集会消耗 GitHub Search 限额，富化会消耗模型额度，建议按站点规模调整 `RADAR_TOPICS`。
+
+## 6. worker 与 Docker 沙箱
 
 worker 负责定时同步、邮件/推送投递，以及 patch / 依赖升级 / 仓库验证。沙箱容器以调用方的非 root UID 运行；worker 自身是 root 时切到 1000:1000，丢弃全部 capabilities，使用只读根文件系统、tmpfs 缓存、`no-new-privileges` 和资源限制。后三者需要调用 Docker 构建不可信仓库代码，因此 Compose 把宿主机的 Docker socket 挂载给 worker：
 
@@ -161,7 +169,7 @@ volumes:
 
 如果不需要 patch / 依赖升级 / 仓库验证，可以移除 worker 的 Docker socket 挂载。
 
-## 6. 升级
+## 7. 升级
 
 ```bash
 git pull
@@ -171,7 +179,7 @@ docker compose up -d
 
 `migrate` 服务只执行 `packages/core/src/db/migrations/` 中尚未应用的版本，并把版本和 checksum 记录到 `schema_migrations`。历史迁移文件被修改时会拒绝启动；升级前先备份数据库。
 
-## 7. 备份与恢复
+## 8. 备份与恢复
 
 备份：
 
@@ -189,7 +197,7 @@ CONFIRM=YES pnpm db:restore backups/repo-radar-<时间>.dump
 
 恢复会清理并覆盖目标数据库中的对象。数据库数据保存在命名卷 `radar-pgdata` 中。
 
-## 8. 停止
+## 9. 停止
 
 ```bash
 docker compose down
@@ -201,7 +209,7 @@ docker compose down
 docker compose down -v
 ```
 
-## 9. 限流、配额与公测白名单
+## 10. 限流、配额与公测白名单
 
 管理员可以在设置页「限流与配额」调整每用户每日 AI 调用/token、全站 token 预算、任务频率、Copilot 消息数和邮件/推送投递数。`0` 表示不限制；关闭「启用 AI 功能」会立即阻止新的 AI 任务和 Copilot 请求，GitHub 动态同步不受影响。
 
@@ -213,11 +221,11 @@ ALLOWED_LOGINS=alice,bob
 
 设置后只有名单内的 GitHub 登录名可以登录，`ADMIN_LOGINS` 会自动包含。留空表示开放注册。
 
-## 10. 数据保留
+## 11. 数据保留
 
 管理员在设置页「数据保留与自动清理」配置保留天数；worker 每天最多执行一次，也可以手动清理。`0` 表示永久保留。默认清理已读通知、已发送/失败投递、已完成任务、动态事件、LLM 用量、采集记录和验证记录；AI 生成内容和 Copilot 对话默认永久保留。多 worker 使用 PostgreSQL advisory lock 避免重复清理。
 
-## 11. 监控与告警
+## 12. 监控与告警
 
 设置 `METRICS_TOKEN` 后，Prometheus 可以抓取：
 

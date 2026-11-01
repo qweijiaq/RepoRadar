@@ -15,12 +15,16 @@ export interface QueryOptions {
   windows: SearchWindow[]
   language?: string
   now?: Date
+  /** 额外生成一组「最近创建」查询，用来发现刚出现的新项目。 */
+  freshDays?: number
 }
 
 export interface SearchOptions {
   token?: string
   page?: number
   perPage?: number
+  /** GitHub Search 排序；定时采集用 updated 可以发现新活跃项目。 */
+  sort?: 'stars' | 'forks' | 'updated'
 }
 
 export interface GitHubRepoPayload {
@@ -56,6 +60,21 @@ export function buildSearchQueries(options: QueryOptions): string[] {
         'archived:false',
         'fork:false',
         window.max === null ? `stars:>=${window.min}` : `stars:${window.min}..${window.max}`,
+      ]
+      if (options.language) parts.push(`language:${options.language}`)
+      queries.push(parts.join(' '))
+    }
+    if (options.freshDays && options.freshDays > 0) {
+      const createdSince = new Date(now.getTime() - options.freshDays * 86_400_000)
+        .toISOString()
+        .slice(0, 10)
+      const parts = [
+        `topic:${topic}`,
+        `pushed:>=${since}`,
+        `created:>=${createdSince}`,
+        'archived:false',
+        'fork:false',
+        'stars:>=50',
       ]
       if (options.language) parts.push(`language:${options.language}`)
       queries.push(parts.join(' '))
@@ -119,7 +138,7 @@ async function describeGitHubError(response: Response): Promise<string> {
 export async function searchRepos(query: string, options: SearchOptions): Promise<RepoInput[]> {
   const params = new URLSearchParams({
     q: query,
-    sort: 'stars',
+    sort: options.sort ?? 'stars',
     order: 'desc',
     per_page: String(options.perPage ?? 50),
     page: String(options.page ?? 1),

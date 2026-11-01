@@ -7,6 +7,7 @@ import {
   addSubscription,
   buildDiscoveryQueries,
   buildFeedbackContext,
+  chatCompletion,
   clearMailConfig,
   clearOpsConfig,
   clearQuotaConfig,
@@ -37,6 +38,8 @@ import {
   markNotificationsRead,
   rankForUser,
   resolveBaseUrlStatus,
+  resolveMailConfig,
+  resolveNotificationEmail,
   runRetentionIfDue,
   removeCollectionItem,
   removeSubscription,
@@ -81,6 +84,7 @@ import { sessionAccessToken, sessionUser } from '@/lib/session'
 import { fetchGitHubRepo, loadProjectContext } from '@/lib/project-context'
 import { rebuildProfile, syncUserTaste } from '@/lib/sync'
 import { findUserById, savePrefs } from '@/lib/users'
+import { sendMail } from '@/lib/mailer'
 
 export async function signInGithubAction(formData?: FormData): Promise<void> {
   const requested = String(formData?.get('redirectTo') ?? '')
@@ -100,6 +104,56 @@ export async function signInDevAction(): Promise<void> {
 
 export async function signOutAction(): Promise<void> {
   await signOut({ redirectTo: '/' })
+}
+
+export async function testLlmConnectionAction(): Promise<void> {
+  const admin = await requireAdmin()
+  const pool = getPool()
+  const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
+  if (!llm) redirect('/settings?test=llm-missing#ai')
+
+  let failure: string | null = null
+  try {
+    const reply = await chatCompletion(
+      llm,
+      [{ role: 'user', content: '只回复 OK 两个字母，用于连接测试。' }],
+      { maxTokens: 16, temperature: 0 },
+    )
+    console.log(`[settings] LLM connection test by ${admin.login}: ${reply.trim().slice(0, 40)}`)
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error)
+    console.error('[settings] LLM connection test failed:', failure)
+  }
+  if (failure) {
+    const status = /(4\d{2}|5\d{2})/.exec(failure)?.[1]
+    redirect(`/settings?test=llm-fail${status ? `&code=${status}` : ''}#ai`)
+  }
+  redirect('/settings?test=llm-ok#ai')
+}
+
+export async function testMailAction(): Promise<void> {
+  const admin = await requireAdmin()
+  const pool = getPool()
+  const mail = await resolveMailConfig(pool)
+  if (!mail) redirect('/settings?test=mail-missing#mail')
+  const user = await findUserById(Number(admin.id))
+  const to = user ? resolveNotificationEmail(user) : null
+  if (!to) redirect('/settings?test=mail-no-address#mail')
+
+  let failure: string | null = null
+  try {
+    await sendMail(mail, {
+      to,
+      subject: '[RepoRadar] 邮件通道测试',
+      text: `这是一封来自 RepoRadar 的测试邮件。\n\n如果你收到它，说明 SMTP 配置和通知邮箱都可以正常工作。\n\n发送时间：${new Date().toLocaleString('zh-CN')}`,
+    })
+    console.log(`[settings] test mail sent by ${admin.login}`)
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error)
+    console.error('[settings] test mail failed:', failure)
+  }
+  if (failure) redirect('/settings?test=mail-fail#mail')
+  redirect('/settings?test=mail-ok#mail')
 }
 
 function parseList(value: FormDataEntryValue | null): string[] {

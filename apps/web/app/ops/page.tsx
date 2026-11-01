@@ -2,6 +2,7 @@ import Link from 'next/link'
 import {
   loadAlertLog,
   loadOpsConfig,
+  listAdminUserOverview,
   loadOpsMetrics,
   loadRecentFailures,
   renderPrometheus,
@@ -30,11 +31,12 @@ export default async function OpsPage({ searchParams }: OpsPageProps) {
   await requireAdmin()
   const params = await searchParams
   const pool = getPool()
-  const [metrics, failures, config, alertLog] = await Promise.all([
+  const [metrics, failures, config, alertLog, users] = await Promise.all([
     loadOpsMetrics(pool),
     loadRecentFailures(pool),
     loadOpsConfig(pool),
     loadAlertLog(pool),
+    listAdminUserOverview(pool),
   ])
 
   return (
@@ -82,6 +84,55 @@ export default async function OpsPage({ searchParams }: OpsPageProps) {
             : '尚未配置 METRICS_TOKEN，/api/metrics 会返回 404。请在环境变量中设置后重启 Web。'}
         </p>
         <pre className="log-block">{renderPrometheus(metrics)}</pre>
+      </section>
+
+      <section className="panel">
+        <h2>用户概览</h2>
+        <p className="muted small">
+          共 {users.length} 个账号。这里只展示使用情况，不包含 token、邮件密码等凭据。
+        </p>
+        <div className="admin-user-table">
+          <div className="admin-user-row admin-user-head">
+            <span>账号</span>
+            <span>画像</span>
+            <span>任务</span>
+            <span>30 天 tokens</span>
+            <span>最近任务</span>
+          </div>
+          {users.map((user) => (
+            <div className="admin-user-row" key={user.id}>
+              <span className="admin-user-name">
+                <a href={`https://github.com/${user.login}`} target="_blank" rel="noreferrer">
+                  {user.login}
+                </a>
+                <small className="muted">
+                  {user.notificationEmail || user.email || '无通知邮箱'} · 注册于{' '}
+                  {new Date(user.createdAt).toLocaleDateString('zh-CN')}
+                </small>
+              </span>
+              <span>
+                {user.topicCount > 0 ? `${user.topicCount} 个主题` : '未建立'}
+                <small className="muted">
+                  {user.starsSyncedAt
+                    ? `同步于 ${new Date(user.starsSyncedAt).toLocaleDateString('zh-CN')}`
+                    : '未同步'}
+                </small>
+              </span>
+              <span>
+                {user.jobsTotal} 个
+                <small className="muted">
+                  运行 {user.jobsRunning} · 失败 {user.jobsFailed}
+                </small>
+              </span>
+              <span>{user.tokens30d.toLocaleString('zh-CN')}</span>
+              <span>
+                {user.lastJobAt
+                  ? new Date(user.lastJobAt).toLocaleString('zh-CN')
+                  : '还没有任务'}
+              </span>
+            </div>
+          ))}
+        </div>
       </section>
 
       <div className="maintain-columns">

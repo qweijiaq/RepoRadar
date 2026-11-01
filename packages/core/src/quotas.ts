@@ -110,6 +110,8 @@ const AI_JOB_KINDS = new Set<JobKind>([
   'watch',
   'patch',
   'upgrade',
+  'discover',
+  'enrich',
 ])
 
 export function jobUsesAi(kind: JobKind): boolean {

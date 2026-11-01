@@ -16,6 +16,9 @@ export async function sendMail(
         host: config.host,
         port: config.port,
         secure: config.secure,
+        connectionTimeout: 15_000,
+        greetingTimeout: 15_000,
+        socketTimeout: 30_000,
         ...(config.user && config.pass
           ? { auth: { user: config.user, pass: config.pass } }
           : {}),

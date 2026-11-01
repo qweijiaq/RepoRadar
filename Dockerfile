@@ -35,8 +35,8 @@ EXPOSE 3000
 CMD ["node", "/app/apps/web/node_modules/next/dist/bin/next", "start", "/app/apps/web"]
 
 FROM base AS worker
-WORKDIR /app
 RUN apk add --no-cache git docker-cli ca-certificates
 ENV NODE_ENV=production
 COPY --from=builder /app /app
+WORKDIR /app/apps/web
 CMD ["/app/node_modules/.bin/tsx", "scripts/job-worker.ts"]

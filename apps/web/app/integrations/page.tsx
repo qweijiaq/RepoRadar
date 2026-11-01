@@ -110,7 +110,7 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
         </div>
       ) : null}
 
-      <section className="panel">
+      <section className="panel" id="projects">
         <h2>正在维护的项目</h2>
         <p className="muted small">
           标记为「维护中」的项目会参与接入建议。没有标记时，AI 会根据最近推送的仓库自动选择。

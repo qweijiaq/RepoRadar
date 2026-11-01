@@ -33,6 +33,12 @@ export default async function TrendsPage() {
         </div>
       </section>
 
+      {repos.length === 0 ? (
+        <div className="notice">
+          候选池还没有数据。管理员可以在设置页刷新候选池，或等待 worker 自动采集。
+        </div>
+      ) : null}
+
       <section className="panel">
         <h2>上升最快</h2>
         {rising.length === 0 ? (
@@ -64,6 +70,9 @@ export default async function TrendsPage() {
       <div className="trend-grid">
         <section className="panel">
           <h2>主题热度</h2>
+          {topics.length === 0 ? (
+            <p className="muted small">还没有主题数据，采集并富化候选仓库后会显示。</p>
+          ) : (
           <ul className="topic-bars">
             {topics.map(([topic, count]) => (
               <li key={topic}>
@@ -75,12 +84,13 @@ export default async function TrendsPage() {
               </li>
             ))}
           </ul>
+          )}
         </section>
 
         <section className="panel">
           <h2>本周新版本</h2>
           {releases.length === 0 ? (
-            <p className="muted small">还没有同步 release 事件。运行 pnpm radar releases 后会出现。</p>
+            <p className="muted small">还没有同步 release 事件。worker 会定时检查，也可以在设置页确认 GitHub 授权状态。</p>
           ) : (
             <ul className="timeline">
               {releases.map((release) => (

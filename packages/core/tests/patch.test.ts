@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseGeneratedPatch, selectPatchFiles } from '../src/patch.js'
+import { buildPullRequestBrief, parseGeneratedPatch, selectPatchFiles } from '../src/patch.js'
 import type { IssueContext } from '../src/issue-plan.js'
 
 const issue: IssueContext = {
@@ -60,5 +60,28 @@ describe('selectPatchFiles', () => {
     )
     expect(files[0]).toBe('src/server.ts')
     expect(files).toContain('src/config.ts')
+  })
+})
+
+
+describe('buildPullRequestBrief', () => {
+  it('builds a copyable PR title and body without pushing anything', () => {
+    const brief = buildPullRequestBrief({
+      id: 1,
+      repo: 'acme/widget',
+      issueNumber: 7,
+      title: 'Crash when parsing empty config',
+      summary: 'Treat empty input as an empty config object.\nAdds a regression test.',
+      patch: validPatch,
+      files: ['src/config.ts'],
+      validation: { applies: true, buildStatus: 'verified', commands: [], changedFiles: ['src/config.ts'], logTail: '' },
+      status: 'validated',
+      createdAt: '2026-11-01T00:00:00.000Z',
+    })
+    expect(brief).toContain('Title: fix: Treat empty input')
+    expect(brief).toContain('Closes #7')
+    expect(brief).toContain('- 补丁应用：通过')
+    expect(brief).toContain('- 构建 / 测试：verified')
+    expect(brief).not.toContain('git push')
   })
 })

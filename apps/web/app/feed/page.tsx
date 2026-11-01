@@ -26,6 +26,7 @@ import {
   loadUserStars,
   OPPORTUNITY_LABEL,
   RADAR_MODES,
+  isGithubTokenInvalid,
   isRadarMode,
   recordFeedImpressions,
   radarPersona,
@@ -37,12 +38,15 @@ import {
   type RadarMode,
 } from '@repo-radar/core'
 import { auth } from '@/auth'
+import { signInGithubAction } from '@/app/actions'
+import { enqueueDiscoveryAction } from '@/app/jobs/enqueue'
 import { RepoCard } from '@/components/RepoCard'
+import { isAdminUser } from '@/lib/admin'
 import { getPool } from '@/lib/db'
 import { findLatestIssueDraft } from '@/lib/issue-drafts'
 import { resolveGithubToken, sessionUser } from '@/lib/session'
 import { findUserById } from '@/lib/users'
-import { markFeedItemDoneAction, setRadarModeAction } from './actions'
+import { dismissOnboardingAction, markFeedItemDoneAction, setRadarModeAction } from './actions'
 import { FeedDismissButton } from './dismiss-button'
 import { RefreshFeedButton } from './refresh-button'
 import { createRadarShareAction } from './share-action'
@@ -66,10 +70,16 @@ interface FeedPageProps {
     release?: string
     rising?: string
     language?: string
+    q?: string
+    limit?: string
   }>
 }
 
-function buildFilterHref(filters: FeedFilters, overrides: Partial<Record<keyof FeedFilters, string | null>>): string {
+function buildFilterHref(
+  filters: FeedFilters,
+  overrides: Partial<Record<keyof FeedFilters, string | null>>,
+  extras: { query?: string; limit?: number } = {},
+): string {
   const next: FeedFilters = { ...filters }
   for (const [key, value] of Object.entries(overrides) as Array<[keyof FeedFilters, string | null]>) {
     if (key === 'language') next.language = value ?? ''
@@ -81,6 +91,8 @@ function buildFilterHref(filters: FeedFilters, overrides: Partial<Record<keyof F
   if (next.release) params.set('release', '1')
   if (next.rising) params.set('rising', '1')
   if (next.language) params.set('language', next.language)
+  if (extras.query) params.set('q', extras.query)
+  if (extras.limit && extras.limit > 30) params.set('limit', String(extras.limit))
   return `/feed?${params.toString()}`
 }
 
@@ -126,21 +138,37 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
     rising: params.rising === '1',
     language: params.language ?? '',
   }
-  const hasFilters = filters.verified || filters.release || filters.rising || Boolean(filters.language)
+  const query = (params.q ?? '').trim().slice(0, 80)
+  const hasFilters =
+    filters.verified || filters.release || filters.rising || Boolean(filters.language) || Boolean(query)
+  const requestedLimit = Number.parseInt(params.limit ?? '', 10)
+  const libraryLimit =
+    Number.isFinite(requestedLimit) && requestedLimit > 30
+      ? Math.min(300, Math.ceil(requestedLimit / 30) * 30)
+      : 30
+  const filterHref = (
+    overrides: Partial<Record<keyof FeedFilters, string | null>>,
+    extraLimit?: number,
+  ) => buildFilterHref(filters, overrides, { query, limit: extraLimit ?? libraryLimit })
   const isLibrary = tab === 'library'
   const returnTo = isLibrary ? '/feed?tab=library' : `/feed?seed=${seed}`
 
   const userId = Number(sessionInfo.id)
   const pool = getPool()
-  const [user, repos, feedback, signals, starred, subscriptions, latestDraft] = await Promise.all([
-    findUserById(userId),
-    findEnrichedRepos(pool, 500),
-    loadFeedback(pool, userId),
-    listFeedbackSignals(pool, userId),
-    loadUserStars(pool, userId),
-    loadSubscriptions(pool, userId),
-    findLatestIssueDraft(pool, userId),
-  ])
+  const githubToken = resolveGithubToken(session)?.token ?? null
+  const [user, repos, feedback, signals, starred, subscriptions, latestDraft, projects, intents] =
+    await Promise.all([
+      findUserById(userId),
+      findEnrichedRepos(pool, 500),
+      loadFeedback(pool, userId),
+      listFeedbackSignals(pool, userId),
+      loadUserStars(pool, userId),
+      loadSubscriptions(pool, userId),
+      findLatestIssueDraft(pool, userId),
+      listUserProjects(pool, userId),
+      listWatchIntents(pool, userId),
+    ])
+  const admin = await isAdminUser(sessionInfo)
   const recentReleaseNames = await loadRecentReleaseRepoNames(pool, 7)
 
   const profile = user?.profile ?? null
@@ -150,11 +178,25 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
     if (filters.release && !recentReleaseNames.has(repo.fullName)) return false
     if (filters.rising && !(repo.stars7d !== null && repo.stars > repo.stars7d)) return false
     if (filters.language && repo.language !== filters.language) return false
+    if (query) {
+      const haystack = [
+        repo.fullName,
+        repo.description ?? '',
+        repo.language ?? '',
+        ...repo.topics,
+      ]
+        .join(' ')
+        .toLowerCase()
+      if (!haystack.includes(query.toLowerCase())) return false
+    }
     return true
   })
   const ranked = rankForUser(profile, filteredRepos, Date.now(), context, subscriptions)
-  const diversified = diversifyRanking(ranked, { limit: 30 })
-  const groups = groupByProfileTopic(diversified, profile, { maxGroups: 4, perGroup: 8 })
+  const diversified = diversifyRanking(ranked, { limit: isLibrary ? libraryLimit : 30 })
+  const groups = groupByProfileTopic(diversified, profile, {
+    maxGroups: isLibrary ? 12 : 4,
+    perGroup: isLibrary ? 30 : 8,
+  })
   const savedCount = [...feedback.values()].filter((kind) => kind === 'save').length
   const hiddenCount = feedback.size - savedCount
   const topTopics = Object.entries(profile?.topicWeights ?? {})
@@ -195,15 +237,13 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   let strictFeedback = false
 
   if (!isLibrary) {
-    const [maintainer, integration, dismissals, statuses, outcomes, impressions, projects, intents] = await Promise.all([
+    const [maintainer, integration, dismissals, statuses, outcomes, impressions] = await Promise.all([
       findLatestMaintainerReport(pool, userId),
       findLatestIntegrationReport(pool, userId),
       listFeedDismissals(pool, userId),
       listFeedStatuses(pool, userId),
       listIntegrationOutcomes(pool, userId),
       listFeedImpressions(pool, userId),
-      listUserProjects(pool, userId),
-      listWatchIntents(pool, userId),
     ])
     const dismissedKeys = new Set([
       ...dismissals.map((item) => item.key),
@@ -291,8 +331,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
       limit: 18,
     }
 
-    const token = resolveGithubToken(session)?.token ?? null
-    const searchGems = await discoverHiddenGems(token, gemContext)
+    const searchGems = await discoverHiddenGems(githubToken, gemContext)
     const libraryGems = hiddenGemsFromLibrary(repos, gemContext)
     const merged = new Map<string, HiddenGem>()
     for (const gem of [...searchGems, ...libraryGems]) {
@@ -334,6 +373,45 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   })
 
   const nextSeed = seed + 1
+  const onboardingSteps = [
+    {
+      key: 'profile',
+      label: '同步 GitHub 口味画像',
+      hint: '从最近 star、活跃仓库和公开事件了解你在做什么',
+      done: Boolean(profile),
+      href: githubToken ? '/settings#sync' : '/settings#github-status',
+      cta: '去同步',
+    },
+    {
+      key: 'project',
+      label: '添加正在维护的项目',
+      hint: '推荐会优先贴合这些项目的技术栈和缺口',
+      done: projects.length > 0,
+      href: '/integrations#projects',
+      cta: '添加项目',
+    },
+    {
+      key: 'watch',
+      label: '设置一个关注目标',
+      hint: '让雷达持续追踪你关心的方向或仓库',
+      done: intents.length > 0,
+      href: '/watch',
+      cta: '设置目标',
+    },
+    {
+      key: 'digest',
+      label: '生成第一份 AI 周报',
+      hint: '把本周变化整理成可以行动的情报',
+      done: Boolean(latestDraft),
+      href: '/issue',
+      cta: '生成周报',
+    },
+  ]
+  const onboardingDone = onboardingSteps.filter((step) => step.done).length
+  const showOnboarding =
+    !user?.prefs.onboardingDismissed && onboardingDone < onboardingSteps.length - 1
+  const emptyPool = repos.length === 0
+  const githubAuthInvalid = isGithubTokenInvalid(githubToken)
 
   return (
     <div className="page">
@@ -412,6 +490,79 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
         </div>
       </section>
 
+      {showOnboarding ? (
+        <section className="onboarding-panel">
+          <div className="onboarding-head">
+            <div>
+              <p className="eyebrow">新手引导</p>
+              <h2>把雷达调到你的频道</h2>
+              <p className="muted small">
+                已完成 {onboardingDone} / {onboardingSteps.length}。完成这些步骤后，推荐会更贴近你正在做的事。
+              </p>
+            </div>
+            <form action={dismissOnboardingAction}>
+              <input type="hidden" name="returnTo" value={returnTo} />
+              <button className="btn quiet small" type="submit">
+                暂时隐藏
+              </button>
+            </form>
+          </div>
+          <ol className="onboarding-list">
+            {onboardingSteps.map((step, index) => (
+              <li className={step.done ? 'onboarding-item done' : 'onboarding-item'} key={step.key}>
+                <span className="onboarding-check">{step.done ? '✓' : index + 1}</span>
+                <span className="onboarding-copy">
+                  <strong>{step.label}</strong>
+                  <span className="muted small">{step.hint}</span>
+                </span>
+                {step.done ? (
+                  <span className="muted small">已完成</span>
+                ) : (
+                  <Link className="btn quiet small" href={step.href}>
+                    {step.cta}
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
+      {githubAuthInvalid ? (
+        <section className="notice auth-warning">
+          <div>
+            <p>
+              <strong>GitHub 授权已失效。</strong>
+              实时搜索、仓库同步和仓库管理都会暂停，重新登录即可恢复。
+            </p>
+          </div>
+          <form action={signInGithubAction} className="inline-action">
+            <input type="hidden" name="redirectTo" value="/feed" />
+            <button className="btn small" type="submit">
+              重新登录 GitHub
+            </button>
+          </form>
+        </section>
+      ) : null}
+
+      {emptyPool ? (
+        <section className="notice empty-pool-notice">
+          <p>
+            <strong>候选池还没有数据。</strong>
+            {admin
+              ? ' 可以立即采集一批候选仓库；worker 也会每 6 小时自动补充。'
+              : ' 管理员配置或等待后台采集后，这里会出现推荐。'}
+          </p>
+          {admin ? (
+            <form action={enqueueDiscoveryAction} className="inline-action">
+              <button className="btn solid small" type="submit">
+                立即采集候选仓库
+              </button>
+            </form>
+          ) : null}
+        </section>
+      ) : null}
+
       {isLibrary ? (
         <>
           {topTopics.length > 0 ? (
@@ -460,23 +611,47 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
             </section>
           ) : null}
 
+          <form action="/feed" method="get" className="feed-search">
+            <input type="hidden" name="tab" value="library" />
+            {filters.verified ? <input type="hidden" name="verified" value="1" /> : null}
+            {filters.release ? <input type="hidden" name="release" value="1" /> : null}
+            {filters.rising ? <input type="hidden" name="rising" value="1" /> : null}
+            {filters.language ? <input type="hidden" name="language" value={filters.language} /> : null}
+            <input
+              className="input"
+              type="search"
+              name="q"
+              defaultValue={query}
+              placeholder="搜索名称、描述、语言或 topic"
+              spellCheck={false}
+            />
+            <button className="btn small" type="submit">
+              搜索
+            </button>
+            {query ? (
+              <Link className="btn quiet small" href={buildFilterHref(filters, {}, { limit: libraryLimit })}>
+                清除搜索
+              </Link>
+            ) : null}
+          </form>
+
           <div className="filter-bar">
             <span className="filter-label">筛选</span>
             <Link
               className={filters.verified ? 'chip toggle active' : 'chip toggle'}
-              href={buildFilterHref(filters, { verified: filters.verified ? null : '1' })}
+              href={filterHref({ verified: filters.verified ? null : '1' })}
             >
               已验证
             </Link>
             <Link
               className={filters.release ? 'chip toggle active' : 'chip toggle'}
-              href={buildFilterHref(filters, { release: filters.release ? null : '1' })}
+              href={filterHref({ release: filters.release ? null : '1' })}
             >
               有新版本
             </Link>
             <Link
               className={filters.rising ? 'chip toggle active' : 'chip toggle'}
-              href={buildFilterHref(filters, { rising: filters.rising ? null : '1' })}
+              href={filterHref({ rising: filters.rising ? null : '1' })}
             >
               上升中
             </Link>
@@ -484,7 +659,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
               <Link
                 key={language}
                 className={filters.language === language ? 'chip toggle active' : 'chip toggle'}
-                href={buildFilterHref(filters, { language: filters.language === language ? null : language })}
+                href={filterHref({ language: filters.language === language ? null : language })}
               >
                 {language}
               </Link>
@@ -494,7 +669,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
                 清除
               </Link>
             ) : null}
-            <span className="filter-count">{diversified.length} 个结果</span>
+            <span className="filter-count">{filteredRepos.length} 个结果</span>
           </div>
 
           <p className="muted small">
@@ -503,8 +678,17 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
 
           {diversified.length === 0 ? (
             <div className="empty">
-              <p>没有符合筛选条件的仓库。</p>
-              <p className="small">试试清除筛选，或等下一轮采集/富化。</p>
+              <p>{repos.length === 0 ? '候选池还没有数据。' : '没有符合筛选条件的仓库。'}</p>
+              <p className="small">
+                {repos.length === 0
+                  ? '管理员可以在设置页刷新候选池，或等待 worker 自动采集。'
+                  : '试试清除筛选，或等下一轮采集/富化。'}
+              </p>
+              {hasFilters ? (
+                <Link className="btn small" href="/feed?tab=library">
+                  清除筛选
+                </Link>
+              ) : null}
             </div>
           ) : (
             groups.map((group) => (
@@ -527,6 +711,16 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
               </section>
             ))
           )}
+          {filteredRepos.length > diversified.length ? (
+            <div className="feed-more">
+              <Link className="btn small" href={filterHref({}, libraryLimit + 30)}>
+                加载更多
+              </Link>
+              <span className="muted small">
+                已显示 {diversified.length} / {filteredRepos.length}
+              </span>
+            </div>
+          ) : null}
         </>
       ) : (
         <>

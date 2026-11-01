@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { buildPatchBrief, findPatchDraft } from '@repo-radar/core'
+import { buildPatchBrief, buildPullRequestBrief, findPatchDraft } from '@repo-radar/core'
 import { CopyIntegrationButton } from '@/app/integrations/copy-button'
 import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
@@ -36,6 +36,7 @@ export default async function PatchPage({ params }: PatchPageProps) {
   const patch = await findPatchDraft(getPool(), Number(currentUser.id), id)
   if (!patch) notFound()
   const brief = buildPatchBrief(patch)
+  const pullRequestBrief = buildPullRequestBrief(patch)
   const issueHref = patch.issueNumber
     ? `/issue-plan?repo=${encodeURIComponent(patch.repo)}&number=${patch.issueNumber}`
     : '/maintain'
@@ -58,6 +59,7 @@ export default async function PatchPage({ params }: PatchPageProps) {
         </div>
         <div className="feed-actions">
           <CopyIntegrationButton text={brief} label="复制补丁" className="btn small" />
+          <CopyIntegrationButton text={pullRequestBrief} label="复制 PR 描述" className="btn quiet small" />
           <a className="btn small" href={`/api/patches/${patch.id}`}>
             下载 .patch
           </a>
@@ -99,6 +101,14 @@ export default async function PatchPage({ params }: PatchPageProps) {
       <section className="panel">
         <h2>补丁内容</h2>
         <pre className="patch-diff">{patch.patch}</pre>
+      </section>
+
+      <section className="panel">
+        <h2>PR 描述草稿</h2>
+        <p className="muted small">
+          提交前先人工 review diff。复制下面的标题和正文，到 GitHub 新建 PR 时粘贴；RepoRadar 不会自动推送或创建 PR。
+        </p>
+        <pre className="log-block">{pullRequestBrief}</pre>
       </section>
 
       <p className="muted small">

@@ -20,6 +20,8 @@ const KIND_LABEL: Record<JobKind, string> = {
   activity: 'GitHub 动态',
   patch: '修复补丁',
   upgrade: '依赖升级',
+  discover: '候选池刷新',
+  enrich: '候选池富化',
 }
 
 const STATUS_LABEL: Record<JobStatus, string> = {

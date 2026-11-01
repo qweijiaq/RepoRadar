@@ -88,11 +88,18 @@ interface SearchCacheEntry {
 
 const searchCache = new Map<string, SearchCacheEntry>()
 const invalidTokens = new Map<string, number>()
+
 const warnedTokens = new Map<string, number>()
 const INVALID_TOKEN_TTL = 5 * 60 * 1000
 
 function tokenKey(token: string): string {
   return createHash('sha256').update(token).digest('hex')
+}
+
+/** 当前进程内是否已确认该 GitHub token 失效（用于页面提示）。 */
+export function isGithubTokenInvalid(token: string | null | undefined, now = new Date()): boolean {
+  if (!token) return false
+  return (invalidTokens.get(tokenKey(token)) ?? 0) > now.getTime()
 }
 
 export function isMegaOwner(fullName: string): boolean {

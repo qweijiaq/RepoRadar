@@ -4,6 +4,7 @@ import {
   assertCopilotQuota,
   buildCopilotMessages,
   chatCompletion,
+  deleteLastCopilotAnswer,
   getCopilotThread,
   getOrCreateCopilotThread,
   isQuotaError,
@@ -26,15 +27,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   const currentUser = sessionUser(session)
   if (!currentUser) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  let body: { message?: unknown; threadId?: unknown }
+  let body: { message?: unknown; threadId?: unknown; regenerate?: unknown }
   try {
-    body = (await request.json()) as { message?: unknown; threadId?: unknown }
+    body = (await request.json()) as { message?: unknown; threadId?: unknown; regenerate?: unknown }
   } catch {
     return NextResponse.json({ error: '请求格式不正确' }, { status: 400 })
   }
 
   const message = typeof body.message === 'string' ? body.message.trim().slice(0, 2000) : ''
   if (message.length < 1) return NextResponse.json({ error: '消息不能为空' }, { status: 400 })
+  const regenerate = body.regenerate === true
 
   const pool = getPool()
   const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
@@ -54,9 +56,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     (Number.isFinite(requestedThread) && requestedThread > 0
       ? await getCopilotThread(pool, userId, requestedThread)
       : null) ?? (await getOrCreateCopilotThread(pool, userId))
-  const history = await listCopilotMessages(pool, thread.id)
-  await addCopilotMessage(pool, thread.id, { role: 'user', content: message })
-  await updateCopilotTitle(pool, thread.id, message)
+  let history = await listCopilotMessages(pool, thread.id)
+  if (regenerate) {
+    await deleteLastCopilotAnswer(pool, thread.id)
+    history = await listCopilotMessages(pool, thread.id)
+  } else {
+    await addCopilotMessage(pool, thread.id, { role: 'user', content: message })
+    await updateCopilotTitle(pool, thread.id, message)
+  }
 
   try {
     const context = await loadCopilotContext(pool, userId, currentUser.login)

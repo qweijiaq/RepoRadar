@@ -12,6 +12,8 @@ export type JobKind =
   | 'activity'
   | 'patch'
   | 'upgrade'
+  | 'discover'
+  | 'enrich'
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
@@ -24,6 +26,8 @@ export interface JobPayload {
   issueNumber?: number
   intentId?: number
   packageName?: string
+  topics?: string[]
+  enrichLimit?: number
   targetVersion?: string
   currentVersion?: string
   manifestPath?: string

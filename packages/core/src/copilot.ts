@@ -218,6 +218,17 @@ export async function addCopilotMessage(
   return Number(rows[0]?.id ?? 0)
 }
 
+/** 删除线程里最后一条助手消息（仅当它确实是最后一条），用于重新生成。 */
+export async function deleteLastCopilotAnswer(pool: DbPool, threadId: number): Promise<void> {
+  await pool.query(
+    `DELETE FROM copilot_messages
+     WHERE id = (
+       SELECT id FROM copilot_messages WHERE thread_id = $1 ORDER BY id DESC LIMIT 1
+     ) AND role = 'assistant'`,
+    [threadId],
+  )
+}
+
 export async function updateCopilotTitle(pool: DbPool, threadId: number, title: string): Promise<void> {
   await pool.query(
     `UPDATE copilot_threads SET title = COALESCE(title, $2), updated_at = now() WHERE id = $1`,

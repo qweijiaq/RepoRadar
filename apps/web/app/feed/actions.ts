@@ -2,6 +2,7 @@
 
 import {
   dismissFeedItem,
+  dismissOnboarding,
   isFeedDismissReason,
   isRadarMode,
   markFeedItemDone,
@@ -31,6 +32,16 @@ export async function dismissFeedItemAction(formData: FormData): Promise<void> {
   await dismissFeedItem(getPool(), Number(currentUser.id), key, kind, reason, note || null)
   revalidatePath('/feed')
   redirect(returnTo)
+}
+
+export async function dismissOnboardingAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  await dismissOnboarding(getPool(), Number(currentUser.id))
+  revalidatePath('/feed')
+  const requested = String(formData.get('returnTo') ?? '')
+  redirect(requested.startsWith('/feed') ? requested : '/feed')
 }
 
 export async function markFeedItemDoneAction(formData: FormData): Promise<void> {

@@ -2,8 +2,12 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import {
   LLM_PROVIDERS,
+  GitHubManageError,
   envLlmSummary,
+  getAuthenticatedLogin,
+  hasRepoScope,
   findLlmProvider,
+  loadDiscoveryStatus,
   loadMailStatus,
   loadQuotaConfig,
   loadQuotaUsage,
@@ -32,6 +36,10 @@ import {
   saveNotificationEmailAction,
   saveOAuthConfigAction,
   savePrefsAction,
+  signInGithubAction,
+  signInGithubRepoAction,
+  testLlmConnectionAction,
+  testMailAction,
 } from '@/app/actions'
 import { auth } from '@/auth'
 import { isAdminUser } from '@/lib/admin'
@@ -39,10 +47,11 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { getPool } from '@/lib/db'
 import { maskClientId, resolveGithubCredentials } from '@/lib/oauth-config'
 import { resolveGithubWebhookSecret } from '@/lib/webhook-config'
-import { sessionAccessToken, sessionUser } from '@/lib/session'
+import { sessionAccessToken, sessionGithubScope, sessionUser } from '@/lib/session'
 import { countPushSubscriptions } from '@/lib/push'
 import { countPendingDeliveries } from '@repo-radar/core'
 import { findUserById } from '@/lib/users'
+import { enqueueDiscoveryAction, enqueueEnrichAction } from '@/app/jobs/enqueue'
 import { LlmConfigForm } from './llm-form'
 import { DeleteAccountForm } from './delete-account-form'
 import { MailConfigForm } from './mail-config-form'
@@ -77,6 +86,9 @@ interface SettingsPageProps {
     quota?: string
     account?: string
     retention?: string
+    pool?: string
+    test?: string
+    code?: string
   }>
 }
 
@@ -89,11 +101,25 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const user = await findUserById(Number(sessionInfo.id))
   const admin = await isAdminUser(sessionInfo)
   const token = sessionAccessToken(session)
+  const githubScope = sessionGithubScope(session)
+  const repoScope = githubScope === null ? null : hasRepoScope(githubScope)
+  let githubTokenState: 'none' | 'ok' | 'invalid' | 'mismatch' | 'unknown' = token ? 'unknown' : 'none'
+  if (token) {
+    try {
+      const owner = await getAuthenticatedLogin(token)
+      if (!owner) githubTokenState = 'invalid'
+      else if (owner.toLowerCase() !== sessionInfo.login.toLowerCase()) githubTokenState = 'mismatch'
+      else githubTokenState = 'ok'
+    } catch (error) {
+      githubTokenState =
+        error instanceof GitHubManageError && error.status === 401 ? 'invalid' : 'unknown'
+    }
+  }
   const devMode = process.env.AUTH_DEV_MODE === '1' && process.env.NODE_ENV !== 'production'
   const oauth = await resolveGithubCredentials()
   const subscriptions = await loadSubscriptions(getPool(), Number(sessionInfo.id))
   const usage = await loadUsageSummary(getPool(), Number(sessionInfo.id), 30)
-  const [pendingDeliveries, pushDevices, mailStatus, siteStatus, quotaConfig, quotaUsage, retentionConfig, retentionLastRun] =
+  const [pendingDeliveries, pushDevices, mailStatus, siteStatus, quotaConfig, quotaUsage, retentionConfig, retentionLastRun, discovery] =
     await Promise.all([
       countPendingDeliveries(getPool(), Number(sessionInfo.id)),
       countPushSubscriptions(getPool(), Number(sessionInfo.id)),
@@ -103,6 +129,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       loadQuotaUsage(getPool(), Number(sessionInfo.id)),
       loadRetentionConfig(getPool()),
       loadRetentionLastRun(getPool()),
+      loadDiscoveryStatus(getPool()),
     ])
   const webhook = await resolveGithubWebhookSecret()
   const webhookUrl = `${siteStatus.url}/api/github/webhook`
@@ -147,6 +174,81 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         </div>
       </div>
 
+      <nav className="settings-toc" aria-label="设置导航">
+        <a href="#github-status">GitHub 授权</a>
+        {admin ? <a href="#ai">AI 模型</a> : null}
+        <a href="#automation">后台自动化</a>
+        {admin ? <a href="#pool">候选池</a> : null}
+        <a href="#notifications">通知</a>
+        {admin ? <a href="#mail">邮件通道</a> : null}
+        {admin ? <a href="#site">站点地址</a> : null}
+        {admin ? <a href="#quota">限流与配额</a> : null}
+        {admin ? <a href="#retention">数据保留</a> : null}
+        <a href="#usage">AI 用量</a>
+        {topics.length > 0 || languages.length > 0 ? <a href="#taste">口味画像</a> : null}
+        <a href="#subscriptions">订阅规则</a>
+        {token ? <a href="#sync">同步画像</a> : null}
+        <a href="#privacy">隐私与数据</a>
+        {admin ? <a href="#oauth">GitHub OAuth</a> : null}
+        {devMode ? <a href="#demo">演示数据</a> : null}
+      </nav>
+
+      <section className="panel" id="github-status">
+        <h2>GitHub 授权</h2>
+        <ul className="maintain-list">
+          <li>登录账户：{sessionInfo.login}</li>
+          <li>
+            访问令牌：
+            {token
+              ? githubTokenState === 'ok'
+                ? '有效'
+                : githubTokenState === 'invalid'
+                  ? '已失效，需要重新登录'
+                  : githubTokenState === 'mismatch'
+                    ? `属于其他账户（${sessionInfo.login} 之外）`
+                    : '暂时无法验证（GitHub API 不可用）'
+              : '未获取（仅使用环境变量或未通过 GitHub 登录）'}
+          </li>
+          <li>
+            仓库权限：
+            {repoScope === true
+              ? '已授权 repo / delete_repo'
+              : repoScope === false
+                ? '仅基础权限（公开数据只读）'
+                : '未知'}
+          </li>
+        </ul>
+        {githubTokenState === 'invalid' || githubTokenState === 'mismatch' ? (
+          <div className="webhook-form-actions">
+            <p className="muted small">
+              {githubTokenState === 'invalid'
+                ? 'GitHub 访问令牌已失效，实时搜索、动态同步和仓库管理会暂停。'
+                : '当前令牌属于其他 GitHub 账户，仓库管理已停用。'}
+            </p>
+            <form action={signInGithubAction}>
+              <input type="hidden" name="redirectTo" value="/settings" />
+              <button className="btn small" type="submit">
+                重新登录 GitHub
+              </button>
+            </form>
+          </div>
+        ) : null}
+        {repoScope === false ? (
+          <div className="webhook-form-actions">
+            <p className="muted small">
+              需要读取私有仓库、同步维护项目或管理仓库时，再申请 <code>repo</code> 与{' '}
+              <code>delete_repo</code>；日常雷达只需要基础权限。
+            </p>
+            <form action={signInGithubRepoAction}>
+              <input type="hidden" name="redirectTo" value="/settings" />
+              <button className="btn small" type="submit">
+                授权仓库管理
+              </button>
+            </form>
+          </div>
+        ) : null}
+      </section>
+
       {params.oauth === 'saved' ? <div className="notice success">OAuth 凭据已更新。</div> : null}
       {params.oauth === 'cleared' ? <div className="notice success">OAuth 配置已清除。</div> : null}
       {params.oauth === 'invalid' ? <div className="notice">Client ID 或 Client Secret 格式不正确。</div> : null}
@@ -189,6 +291,9 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       {params.retention === 'reset' ? <div className="notice success">数据保留策略已恢复默认。</div> : null}
       {params.retention === 'ran' ? <div className="notice success">清理已完成。</div> : null}
       {params.retention === 'error' ? <div className="notice">清理失败，请查看 worker/web 日志。</div> : null}
+      {params.pool === 'queued' ? <div className="notice success">候选池刷新任务已排队，进度见任务中心。</div> : null}
+      {params.pool === 'updated' ? <div className="notice success">候选池已更新。</div> : null}
+      {params.pool === 'enriched' ? <div className="notice success">候选池富化已完成。</div> : null}
       {!admin ? (
         <div className="notice">
           当前账号不是管理员。AI 模型、邮件通道、站点地址、GitHub OAuth 和 Webhook 属于全局配置，只有管理员可以修改；通知偏好、通知邮箱和订阅仍可自行设置。
@@ -199,7 +304,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       ) : null}
 
       {admin ? (
-      <section className="panel">
+      <section className="panel" id="ai">
         <h2>AI 模型</h2>
         <p className="muted small">
           用于生成周报叙事和富化摘要。支持 Anthropic、OpenAI、DeepSeek、Qwen、Gemini、Grok、GLM、Kimi 等 8
@@ -219,6 +324,20 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
               : '尚未配置。生成周报前需要在这里选择服务商并填入 API Key。'}
           </p>
         )}
+        {params.test === 'llm-ok' ? <div className="notice success">模型连接正常。</div> : null}
+        {params.test === 'llm-fail' ? (
+          <div className="notice">
+            模型连接失败{params.code ? `（HTTP ${params.code}）` : ''}。请检查 API Key、模型名、端点和服务商额度。
+          </div>
+        ) : null}
+        {params.test === 'llm-missing' ? <div className="notice">还没有可测试的模型配置。</div> : null}
+        {currentLlm ? (
+          <form action={testLlmConnectionAction} className="inline-form">
+            <button className="btn quiet small" type="submit">
+              测试模型连接
+            </button>
+          </form>
+        ) : null}
         {envLlm ? (
           <p className="muted small">通过环境变量 LLM_API_KEY 配置，页面修改不会生效。</p>
         ) : (
@@ -259,7 +378,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       </section>
       ) : null}
 
-      <section className="panel">
+      <section className="panel" id="automation">
         <h2>后台自动化</h2>
         <p className="muted small">
           独立 worker 每 15 分钟同步 GitHub 动态和 release，每 30 分钟检查本周精选邮件，并持续投递邮件/浏览器推送。失败任务会进入重试并在收件箱提醒。
@@ -281,7 +400,57 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         ) : null}
       </section>
 
-      <section className="panel">
+      {admin ? (
+      <section className="panel" id="pool">
+        <h2>候选池</h2>
+        <p className="muted small">
+          雷达、趋势和维护建议都基于已富化仓库。worker 每 6 小时尝试自动采集一次；也可以在这里手动刷新。
+        </p>
+        <ul className="maintain-list">
+          <li>已收录仓库：{discovery.totalRepos} 个</li>
+          <li>已富化：{discovery.enrichedRepos} 个</li>
+          <li>待富化：{discovery.pendingRepos} 个</li>
+          <li>
+            最近刷新：
+            {discovery.lastRun
+              ? `${new Date(discovery.lastRun.at).toLocaleString('zh-CN')} · 新增 ${discovery.lastRun.inserted} · 富化 ${discovery.lastRun.enriched}`
+              : '尚未运行'}
+          </li>
+        </ul>
+        <form action={enqueueDiscoveryAction} className="webhook-form">
+          <label className="field">
+            <span>主题（可选，逗号分隔）</span>
+            <input name="topics" placeholder="llm, ai-agents, developer-tools" spellCheck={false} />
+          </label>
+          <p className="muted small">留空使用 RADAR_TOPICS 默认主题。采集会消耗 GitHub Search 限额，富化会消耗模型额度。</p>
+          <div className="webhook-form-actions">
+            <button className="btn small" type="submit">
+              刷新候选池
+            </button>
+            <Link className="btn quiet small" href="/tasks">
+              查看任务
+            </Link>
+          </div>
+        </form>
+
+        <form action={enqueueEnrichAction} className="webhook-form">
+          <label className="field">
+            <span>只富化待处理仓库（本轮数量）</span>
+            <input name="limit" type="number" min={1} max={50} defaultValue={20} />
+          </label>
+          <p className="muted small">
+            不重新采集，只对已收录但还没有摘要的仓库补 README 和模型摘要。适合候选池排队较多时逐步消化。
+          </p>
+          <div className="webhook-form-actions">
+            <button className="btn quiet small" type="submit">
+              富化待处理仓库
+            </button>
+          </div>
+        </form>
+      </section>
+      ) : null}
+
+      <section className="panel" id="notifications">
         <h2>通知</h2>
         <form action={saveNotificationEmailAction} className="webhook-form" autoComplete="off">
           <p className="muted small">
@@ -365,12 +534,29 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
       {admin ? (
       <>
-      <section className="panel">
+      <section className="panel" id="mail">
         <h2>邮件通道</h2>
         <p className="muted small">
           邮件通知、任务失败提醒和每周精选都通过这里发送。密码会使用 AUTH_SECRET 加密保存在数据库；QQ、163、Gmail 需要填写授权码或应用专用密码。
         </p>
+        {params.test === 'mail-ok' ? (
+          <div className="notice success">测试邮件已发送，请查收（也检查垃圾箱）。</div>
+        ) : null}
+        {params.test === 'mail-fail' ? (
+          <div className="notice">测试邮件发送失败，请检查 SMTP 服务器、端口、授权码和发件地址。</div>
+        ) : null}
+        {params.test === 'mail-missing' ? <div className="notice">还没有配置邮件通道。</div> : null}
+        {params.test === 'mail-no-address' ? (
+          <div className="notice">当前账号还没有通知邮箱，请先在「通知」里填写。</div>
+        ) : null}
         <MailConfigForm status={mailStatus} />
+        {mailStatus.summary ? (
+          <form action={testMailAction} className="inline-form">
+            <button className="btn quiet small" type="submit">
+              发送测试邮件到我的通知邮箱
+            </button>
+          </form>
+        ) : null}
         {mailStatus.source === 'database' ? (
           <ConfirmDialog
             action={clearMailConfigAction}
@@ -383,7 +569,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         ) : null}
       </section>
 
-      <section className="panel">
+      <section className="panel" id="site">
         <h2>站点地址</h2>
         <p className="muted small">
           用于邮件里的项目链接和 GitHub Webhook 完整地址。填写公网地址后，别人收到的邮件才能点回你的站点。
@@ -410,7 +596,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       ) : null}
 
       {admin ? (
-      <section className="panel">
+      <section className="panel" id="quota">
         <h2>限流与配额</h2>
         <p className="muted small">
           控制每个用户的 AI 调用、任务和投递频率，以及全站每日 token 预算。公测阶段建议保持默认值或更低。
@@ -428,7 +614,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       ) : null}
 
       {admin ? (
-      <section className="panel">
+      <section className="panel" id="retention">
         <h2>数据保留与自动清理</h2>
         <p className="muted small">
           worker 每天最多清理一次过期数据，也可以在这里手动执行。默认只清理运行日志，AI 生成内容和 Copilot 对话默认永久保留。
@@ -455,7 +641,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       </section>
       ) : null}
 
-      <section className="panel">
+      <section className="panel" id="usage">
         <h2>AI 用量（近 30 天）</h2>
         <p className="muted">
           {usage.calls} 次调用 · {usage.promptTokens + usage.completionTokens} tokens
@@ -481,7 +667,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       </section>
 
       {topics.length > 0 || languages.length > 0 ? (
-        <section className="panel">
+        <section className="panel" id="taste">
           <h2>口味画像</h2>
           <p className="muted small">
             由最近 star、你维护的仓库和近期公开事件共同生成。点击标签可以排除该方向，再次点击恢复；想主动关注某个主题，可以在下方订阅规则里添加。
@@ -524,7 +710,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         </details>
       </section>
 
-      <section className="panel">
+      <section className="panel" id="subscriptions">
         <h2>订阅规则</h2>
         <p className="muted small">
           主题 / 语言 / 作者订阅会提升相关项目在 feed 中的排序；仓库更新订阅会追踪这些仓库的新版本。
@@ -558,7 +744,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       </section>
 
       {token ? (
-        <form className="panel" action={resyncStarsAction}>
+        <form className="panel" id="sync" action={resyncStarsAction}>
           <h2>同步画像</h2>
           <p className="muted small">重新读取你最近的 star、活跃仓库和公开事件，更新口味画像。</p>
           {user?.profile && !user.profile.sourceCounts?.owned && !user.profile.sourceCounts?.events ? (
@@ -572,7 +758,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         </form>
       ) : null}
 
-      <section className="panel">
+      <section className="panel" id="privacy">
         <h2>隐私与数据</h2>
         <p className="muted small">
           你可以随时导出全部个人数据，或永久删除账号。GitHub token、推送订阅密钥等凭据不会出现在导出文件中。
@@ -592,7 +778,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       </section>
 
       {admin ? (
-      <section className="panel">
+      <section className="panel" id="oauth">
         <h2>GitHub OAuth 应用</h2>
         {oauth ? (
           <>
@@ -647,7 +833,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       ) : null}
 
       {devMode ? (
-        <form className="panel" action={loadDemoTasteAction}>
+        <form className="panel" id="demo" action={loadDemoTasteAction}>
           <h2>演示数据</h2>
           <p className="muted small">本地演示模式：把已收录的高分项目当作你的 star，生成口味画像。</p>
           <div className="form-actions">

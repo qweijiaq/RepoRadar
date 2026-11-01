@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   buildSearchQueries,
   isValidGithubClientId,
   isValidGithubClientSecret,
   mapGitHubRepo,
+  searchRepos,
   type GitHubRepoPayload,
 } from '../src/github.js'
 
@@ -28,6 +29,20 @@ describe('buildSearchQueries', () => {
     ])
   })
 
+  it('adds a recently-created query for discovery', () => {
+    const queries = buildSearchQueries({
+      topics: ['llm'],
+      days: 30,
+      windows: [{ min: 50, max: 500 }],
+      freshDays: 120,
+      now,
+    })
+    expect(queries).toEqual([
+      'topic:llm pushed:>=2026-09-30 archived:false fork:false stars:50..500',
+      'topic:llm pushed:>=2026-09-30 created:>=2026-07-02 archived:false fork:false stars:>=50',
+    ])
+  })
+
   it('deduplicates topics and applies the language filter', () => {
     const queries = buildSearchQueries({
       topics: ['llm', 'llm'],
@@ -39,6 +54,27 @@ describe('buildSearchQueries', () => {
     expect(queries).toEqual([
       'topic:llm pushed:>=2026-10-23 archived:false fork:false stars:100..200 language:TypeScript',
     ])
+  })
+})
+
+describe('searchRepos', () => {
+  it('passes the requested sort to GitHub Search', async () => {
+    const calls: string[] = []
+    const mock = vi.fn(async (url: string | URL | Request) => {
+      calls.push(String(url))
+      return new Response(JSON.stringify({ items: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    vi.stubGlobal('fetch', mock)
+    try {
+      await searchRepos('topic:llm', { sort: 'updated', perPage: 20 })
+      expect(calls[0]).toContain('sort=updated')
+      expect(calls[0]).toContain('per_page=20')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

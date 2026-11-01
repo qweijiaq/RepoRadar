@@ -13,6 +13,7 @@ import { auth } from '@/auth'
 import { getPool } from '@/lib/db'
 import { encryptJobToken } from '@/lib/job-secret'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
+import { requireAdmin } from '@/lib/admin'
 import { enqueueJob } from '@/lib/ai-jobs/runner'
 
 function repoScopeRedirect(reason: string, fallback: string): string {
@@ -215,6 +216,36 @@ export async function enqueueWatchRunAction(formData: FormData): Promise<void> {
   await enqueueAndGo(pool, userId, 'watch', `关注代理 · ${intent.text.slice(0, 60)}`, {
     intentId,
     origin: '/watch',
+  })
+}
+
+export async function enqueueDiscoveryAction(formData: FormData): Promise<void> {
+  const currentUser = await requireAdmin()
+  const session = await auth()
+  const { pool, userId } = await context()
+  const access = await resolveRepoAccess(session, currentUser.login, { requireRepoScope: false })
+  const requested = String(formData.get('topics') ?? '')
+    .split(/[,\s]+/)
+    .map((topic) => topic.trim())
+    .filter(Boolean)
+    .slice(0, 8)
+
+  await enqueueAndGo(pool, userId, 'discover', '刷新候选池', {
+    ...(requested.length > 0 ? { topics: requested } : {}),
+    enrichLimit: 20,
+    token: encryptJobToken(access.access?.token ?? null),
+    origin: '/settings',
+  })
+}
+
+export async function enqueueEnrichAction(formData: FormData): Promise<void> {
+  await requireAdmin()
+  const { pool, userId } = await context()
+  const requested = Number.parseInt(String(formData.get('limit') ?? ''), 10)
+  const enrichLimit = Number.isFinite(requested) ? Math.min(50, Math.max(1, requested)) : 20
+  await enqueueAndGo(pool, userId, 'enrich', '富化候选池', {
+    enrichLimit,
+    origin: '/settings',
   })
 }
 

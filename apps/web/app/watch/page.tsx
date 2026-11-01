@@ -82,7 +82,7 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
           </div>
         </form>
         <p className="muted small">
-          当前会在已收录的高质量候选池里匹配（按质量分取前 80 个），不会自动向 GitHub 发起搜索。
+          当前会在已收录的高质量候选池里匹配（按质量分取前 120 个），不会自动向 GitHub 发起搜索。
         </p>
       </section>
 

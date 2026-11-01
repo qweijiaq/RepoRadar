@@ -20,6 +20,8 @@ export interface UserPrefs {
   notificationPrefs?: NotificationPrefs
   /** 页面里单独设置的通知邮箱；留空时回退到 GitHub 邮箱 */
   notificationEmail?: string | null
+  /** 新手引导卡片是否已隐藏 */
+  onboardingDismissed?: boolean
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
@@ -84,6 +86,7 @@ function mapUser(row: UserRow): UserRecord {
         ...(row.prefs?.notificationPrefs ?? {}),
       },
       notificationEmail: row.prefs?.notificationEmail?.trim() || null,
+      onboardingDismissed: row.prefs?.onboardingDismissed === true,
     },
     starsSyncedAt: toIso(row.stars_synced_at),
   }
@@ -130,6 +133,13 @@ export async function findUserByLogin(pool: DbPool, login: string): Promise<User
 export async function listUsersWithProfiles(pool: DbPool): Promise<UserRecord[]> {
   const { rows } = await pool.query<UserRow>(`SELECT * FROM users WHERE profile IS NOT NULL ORDER BY id`)
   return rows.map(mapUser)
+}
+
+export async function dismissOnboarding(pool: DbPool, userId: number): Promise<void> {
+  await pool.query(
+    `UPDATE users SET prefs = COALESCE(prefs, '{}'::jsonb) || jsonb_build_object('onboardingDismissed', true), updated_at = now() WHERE id = $1`,
+    [userId],
+  )
 }
 
 export async function savePrefs(pool: DbPool, userId: number, prefs: UserPrefs): Promise<void> {

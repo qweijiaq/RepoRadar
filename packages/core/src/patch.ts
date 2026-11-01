@@ -293,6 +293,29 @@ export async function listPatchDrafts(
   return rows.map(mapPatch)
 }
 
+/** 供用户复制到 GitHub 新建 PR 的描述草稿；不会自动推送或创建 PR。 */
+export function buildPullRequestBrief(draft: PatchDraftRecord): string {
+  const firstLine = draft.summary?.split('\n').find((line) => line.trim())?.trim() ?? ''
+  const title = firstLine
+    ? `fix: ${firstLine.replace(/^#+\s*/, '').slice(0, 72)}`
+    : `fix: resolve ${draft.repo}${draft.issueNumber ? ` #${draft.issueNumber}` : ''}`
+  return [
+    `Title: ${title}`,
+    '',
+    '## 改动说明',
+    draft.summary?.trim() || '（在这里补充改动说明）',
+    '',
+    ...(draft.issueNumber ? [`Closes #${draft.issueNumber}`, ''] : []),
+    '## 验证',
+    draft.validation
+      ? `- 补丁应用：${draft.validation.applies ? '通过' : '失败'}\n- 构建 / 测试：${draft.validation.buildStatus}`
+      : '- 尚未验证',
+    '',
+    '## 说明',
+    '本补丁由 RepoRadar 生成，请在提交前人工 review diff，并确认仓库的贡献指南和许可证。',
+  ].join('\n')
+}
+
 export function buildPatchBrief(draft: PatchDraftRecord): string {
   return [
     `# RepoRadar 修复补丁 · ${draft.repo}${draft.issueNumber ? ` #${draft.issueNumber}` : ''}`,

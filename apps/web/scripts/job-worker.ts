@@ -18,18 +18,23 @@ import {
   listUserGithubTokens,
   listUsersWithProfiles,
   loadConfig,
+  loadDiscoveryStatus,
   loadOpsConfig,
+  loadStoredLlmConfig,
   logEvent,
   markDeliveryFailed,
   markDeliverySent,
   notifyReleaseSubscribers,
+  recordLlmUsageRows,
   recoverStaleJobs,
   resolveBaseUrl,
   resolveMailConfig,
   resolveNotificationEmail,
+  runDiscovery,
   runRetentionIfDue,
   saveReleaseEvent,
   syncRepoActivity,
+  withLlmUsage,
 } from '@repo-radar/core'
 import { executeJob } from '../lib/ai-jobs/runner'
 import { sendMail } from '../lib/mailer'
@@ -60,12 +65,18 @@ let lastReleaseSync = 0
 let lastDigestCheck = 0
 let lastRetentionCheck = 0
 let lastAlertCheck = 0
+let lastDiscoveryCheck = 0
+let discoveryRunning = false
+let discoveryRetryAt = 0
 const ACTIVITY_INTERVAL = 15 * 60 * 1000
 const RELEASE_INTERVAL = 15 * 60 * 1000
 const DIGEST_INTERVAL = 30 * 60 * 1000
 const RETENTION_CHECK_INTERVAL = 30 * 60 * 1000
 const ALERT_CHECK_INTERVAL = 5 * 60 * 1000
 const DELIVERY_INTERVAL = 5 * 1000
+const DISCOVERY_CHECK_INTERVAL = 10 * 60 * 1000
+const DISCOVERY_INTERVAL = 6 * 60 * 60 * 1000
+const DISCOVERY_LOCK_KEY = 728413
 let lastDeliveryDrain = 0
 
 function sleep(ms: number): Promise<void> {
@@ -167,6 +178,70 @@ async function scheduledWeeklyDigest(): Promise<void> {
     }
   } catch (error) {
     console.error('[worker] digest scan failed:', error)
+  }
+}
+
+async function runScheduledDiscovery(): Promise<void> {
+  // advisory lock 是连接级的，必须和 unlock 使用同一个连接。
+  const client = await pool.connect()
+  try {
+    const lock = await client.query<{ locked: boolean }>('select pg_try_advisory_lock($1) as locked', [
+      DISCOVERY_LOCK_KEY,
+    ])
+    if (!lock.rows[0]?.locked) return
+    try {
+      const status = await loadDiscoveryStatus(pool)
+      if (status.lastRun && Date.now() - new Date(status.lastRun.at).getTime() < DISCOVERY_INTERVAL) return
+      const config = loadConfig()
+      const topics = config.search.topics
+      if (topics.length === 0) return
+      const llm = config.llm ?? (await loadStoredLlmConfig(pool))
+      const stored = await listUserGithubTokens(pool)
+      const token = stored[0]?.token ?? config.githubToken ?? null
+      console.log(`[worker] discovery starting: ${topics.length} topics`)
+      const enrichLimit = status.enrichedRepos < 100 ? 50 : 20
+      const run = await runDiscovery(pool, {
+        topics,
+        token,
+        llm,
+        pages: 1,
+        perPage: 30,
+        enrichLimit,
+        delayMs: 2200,
+        sort: 'updated',
+        freshDays: 120,
+      })
+      console.log(`[worker] discovery inserted ${run.inserted}, enriched ${run.enriched}`)
+      logEvent('info', 'discovery.auto', { inserted: run.inserted, enriched: run.enriched, topics })
+    } catch (error) {
+      discoveryRetryAt = Date.now() + 30 * 60 * 1000
+      logEvent('error', 'discovery.auto_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      console.error('[worker] discovery failed:', error)
+    } finally {
+      await client.query('select pg_advisory_unlock($1)', [DISCOVERY_LOCK_KEY])
+    }
+  } finally {
+    client.release()
+  }
+}
+
+async function scheduledDiscovery(): Promise<void> {
+  if (discoveryRunning) return
+  if (Date.now() < discoveryRetryAt) return
+  if (Date.now() - lastDiscoveryCheck < DISCOVERY_CHECK_INTERVAL) return
+  lastDiscoveryCheck = Date.now()
+  if (process.env.DISCOVERY_AUTO === 'off') return
+  try {
+    const status = await loadDiscoveryStatus(pool)
+    if (status.lastRun && Date.now() - new Date(status.lastRun.at).getTime() < DISCOVERY_INTERVAL) return
+    discoveryRunning = true
+    void runScheduledDiscovery().finally(() => {
+      discoveryRunning = false
+    })
+  } catch (error) {
+    console.error('[worker] discovery check failed:', error)
   }
 }
 
@@ -285,6 +360,7 @@ async function loop(): Promise<void> {
       await scheduledActivity()
       await scheduledReleases()
       await scheduledWeeklyDigest()
+      await scheduledDiscovery()
       await scheduledRetention()
       await scheduledAlerts()
     } catch (error) {

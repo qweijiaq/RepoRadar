@@ -1,6 +1,8 @@
 # RepoRadar
 
 > A personalized radar for open-source projects — verified, explained, and relevant to you.
+>
+> [English](README.en.md) · 中文
 
 一个懂你口味的开源项目雷达：从 GitHub 和社区信号中自动发现值得关注的开源项目，按你的技术栈和兴趣排序，给你「已验证、讲得清、可行动」的精选。
 
@@ -61,7 +63,8 @@ pnpm radar pipeline --topics=llm --limit=20
 - 设置 `METRICS_TOKEN` 后，`GET /api/metrics` 输出 Prometheus 文本指标，需要 `Authorization: Bearer <token>`；
 - worker 每 5 分钟检查失败任务、失败投递、队列积压和心跳超时任务，按冷却时间发送告警邮件；
 - 告警阈值和收件邮箱可在 `/ops` 页面配置，留空时发给 `ADMIN_LOGINS` 对应用户的通知邮箱或 `ALERT_EMAILS`；
-- `/api/health` 返回数据库健康状态，可用于容器和负载均衡探针。
+- `/api/health` 返回数据库健康状态，可用于容器和负载均衡探针；
+- worker 每 6 小时自动刷新候选池（可用 `DISCOVERY_AUTO=off` 关闭），管理员也可以在设置页手动刷新。
 
 ## GitHub 权限
 
