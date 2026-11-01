@@ -76,9 +76,27 @@ export function entryPointsFromManifest(manifest: string | null): string[] {
 }
 
 
-interface SymbolPart {
+export interface CodeSymbolPart {
   symbol: string | null
   content: string
+}
+
+export type SymbolSplitter = (
+  path: string,
+  content: string,
+) => Promise<CodeSymbolPart[] | null> | CodeSymbolPart[]
+
+let defaultSymbolSplitter: SymbolSplitter | null = null
+
+/**
+ * worker 启动时注入 tree-sitter 实现；web 不引入它，避免把 wasm 打进前端 bundle。
+ */
+export function setSymbolSplitter(splitter: SymbolSplitter | null): void {
+  defaultSymbolSplitter = splitter
+}
+
+export function getSymbolSplitter(): SymbolSplitter | null {
+  return defaultSymbolSplitter
 }
 
 const SYMBOL_PATTERNS = [
@@ -118,7 +136,7 @@ function findSymbols(content: string): SymbolMatch[] {
  * 轻量的函数/类级切块：按导出的符号把文件切开，不依赖 tree-sitter。
  * 找不到符号时退回固定长度切块，保证仍可索引。
  */
-export function splitCodeBySymbol(content: string, maxChars = 2000): SymbolPart[] {
+export function splitCodeBySymbol(content: string, maxChars = 2000): CodeSymbolPart[] {
   const text = content.trim()
   if (!text) return []
   const symbols = findSymbols(text)
@@ -126,7 +144,7 @@ export function splitCodeBySymbol(content: string, maxChars = 2000): SymbolPart[
     return splitCodeChunks(text, maxChars, 200).map((chunk) => ({ symbol: null, content: chunk }))
   }
 
-  const parts: SymbolPart[] = []
+  const parts: CodeSymbolPart[] = []
   const preamble = text.slice(0, symbols[0]!.index).trim()
   if (preamble.length > 0) parts.push({ symbol: null, content: preamble.slice(0, maxChars) })
 
@@ -179,7 +197,12 @@ function pickPaths(paths: string[], maxFiles: number, preferred: string[] = []):
 export async function indexRepoCode(
   pool: DbPool,
   repoFullName: string,
-  options: { token?: string | null; llm?: LlmConfig | null; maxFiles?: number } = {},
+  options: {
+    token?: string | null
+    llm?: LlmConfig | null
+    maxFiles?: number
+    symbolSplitter?: SymbolSplitter | null
+  } = {},
 ): Promise<IndexRepoResult> {
   const tree = await listRepoTree(repoFullName, options.token ?? undefined)
   const manifestPath = tree.find((path) => /(^|\/)package\.json$/i.test(path)) ?? null
@@ -201,7 +224,10 @@ export async function indexRepoCode(
   }> = []
   for (const file of files) {
     if (!file) continue
-    const parts = splitCodeBySymbol(file.content).slice(0, 8)
+    const customParts = options.symbolSplitter
+      ? await Promise.resolve(options.symbolSplitter(file.path, file.content)).catch(() => null)
+      : null
+    const parts = (customParts && customParts.length > 0 ? customParts : splitCodeBySymbol(file.content)).slice(0, 12)
     for (const [index, part] of parts.entries()) {
       let embedding: number[] | null = null
       if (options.llm?.embeddingModel) {

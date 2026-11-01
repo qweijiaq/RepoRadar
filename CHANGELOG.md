@@ -59,6 +59,11 @@
   排名（最多 300 条），页面按快照顺序取切片；快照缺失/过期时回退实时排名，并在响应结束后补建。
   「加载更多」不再重新排名整个候选池。
 
+- 换库沙盘新增「只做机械替换」模式：用 Babel 解析 import/require/re-export，确定性重写模块名，
+  不依赖模型；沙箱验证照旧。
+- MCP 新增 `generate_integration_preflight` / `generate_comparison` / `get_job_status`，
+  agent 可以触发任务并轮询结果（需要 worker 在运行）。
+- worker 的代码索引优先用 tree-sitter（wasm）抽取函数/类边界，加载失败时自动退回启发式切块。
 - 接入回访的安全公告会先从项目 lockfile 解析真实安装版本，再按精确版本查 OSV；
   解析不到时回退到按包查询。
 - 代码索引升级为函数/类级切块（`code_chunks.symbol`，迁移 `0012`）：按导出符号切分，

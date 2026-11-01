@@ -75,6 +75,10 @@ export default async function SwapPage({ searchParams }: SwapPageProps) {
             目标文件（可选）
             <input className="input" name="file" placeholder="src/lib/http.ts" />
           </label>
+          <label className="swap-mode">
+            <input type="checkbox" name="mode" value="mechanical" /> 只做机械替换（不调用模型，
+            适合 API 兼容的换库）
+          </label>
           <button className="btn solid" type="submit">
             生成换库补丁
           </button>

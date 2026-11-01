@@ -326,6 +326,7 @@ export async function enqueueSwapTrialAction(formData: FormData): Promise<void> 
   const file = /^[A-Za-z0-9._/-]+$/.test(rawFile) && !rawFile.includes('..') && !rawFile.startsWith('/')
     ? rawFile.slice(0, 200)
     : ''
+  const mode = formData.get('mode') === 'mechanical' ? 'mechanical' : 'llm'
 
   const access = await resolveRepoAccess(session, currentUser.login)
   if (!access.access) redirect(repoScopeRedirect(access.reason, '/workbench/swap?error=need-token'))
@@ -334,6 +335,7 @@ export async function enqueueSwapTrialAction(formData: FormData): Promise<void> 
     project,
     fromPackage,
     toPackage,
+    mode,
     ...(file ? { file } : {}),
     token: encryptJobToken(access.access.token),
     origin: '/workbench/swap',

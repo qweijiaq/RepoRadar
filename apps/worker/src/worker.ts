@@ -35,10 +35,12 @@ import {
   runDiscovery,
   runRetentionIfDue,
   saveReleaseEvent,
+  setSymbolSplitter,
   syncRepoActivity,
 } from '@repo-radar/core'
 import { sendMail, sendPushToUser } from '@repo-radar/core'
 import { executeJob } from './ai-jobs/runner.js'
+import { splitWithTreeSitter } from './code-symbols.js'
 
 try {
   process.loadEnvFile(fileURLToPath(new URL('../../../.env', import.meta.url)))
@@ -382,6 +384,9 @@ async function drainDeliveries(): Promise<void> {
     draining = false
   }
 }
+
+// 代码索引优先用 tree-sitter，加载失败时 core 会自动退回启发式切块。
+setSymbolSplitter(splitWithTreeSitter)
 
 async function loop(): Promise<void> {
   console.log(`[worker] started ${workerId}`)

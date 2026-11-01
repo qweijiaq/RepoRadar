@@ -44,4 +44,10 @@ const diff = await client.callTool({
 })
 console.log('\nSIMILAR_DIFF:', diff.content[0].text.slice(0, 200))
 
+const status = await client.callTool({
+  name: 'get_job_status',
+  arguments: { jobId: 999999, login: 'demo' },
+})
+console.log('\nJOB_STATUS:', status.content[0].text.slice(0, 160))
+
 await client.close()

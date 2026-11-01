@@ -10,6 +10,7 @@
     "packages/*/tests/**/*.ts",
     "packages/*/eval/**/*.ts",
     "apps/worker/src/**/*.ts",
+    "apps/worker/tests/**/*.ts",
     "vitest.config.ts",
     "vitest.integration.config.ts",
     "playwright.config.ts"

@@ -3,6 +3,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   addSubscription,
+  assertAiQuota,
+  assertJobQuota,
   buildFeedbackContext,
   createPool,
   diversifyRanking,
@@ -13,6 +15,10 @@ import {
   findLatestIntegrationReport,
   findLatestMaintainerReport,
   findLatestVerification,
+  createJob,
+  encryptJobToken,
+  getJob,
+  loadUserGithubToken,
   findRepoByFullName,
   findUserByLogin,
   handledRepoNames,
@@ -542,6 +548,115 @@ function createServer(pool: DbPool): McpServer {
         recommendation: report.recommendation,
         capabilities: report.capabilities,
         candidates,
+      })
+    },
+  )
+
+  type QueueResult = { ok: true; jobId: number } | { ok: false; error: string }
+
+  async function queueJob(
+    login: string | undefined,
+    kind: 'integration-trial' | 'comparison',
+    title: string,
+    payload: Record<string, unknown>,
+  ): Promise<QueueResult> {
+    const user = await resolveUser(login)
+    if (!user) return { ok: false, error: '需要提供 login，或设置 RADAR_MCP_USER 环境变量' }
+    const token = await loadUserGithubToken(pool, user.id)
+    if (!token) return { ok: false, error: '这个用户没有保存 GitHub token，请先在 Web 登录授权' }
+    try {
+      await assertJobQuota(pool, user.id, kind)
+      if (kind === 'integration-trial') await assertAiQuota(pool, user.id)
+      const jobId = await createJob(pool, {
+        userId: user.id,
+        kind,
+        title,
+        payload: { ...payload, token: encryptJobToken(token) },
+      })
+      return { ok: true, jobId }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  server.registerTool(
+    'generate_integration_preflight',
+    {
+      title: '触发接入预演',
+      description:
+        '为项目和候选库排队一次沙箱试接入，返回 jobId。需要 worker 在运行；用 get_job_status 轮询结果。',
+      inputSchema: {
+        project: z.string().describe('你的项目，owner/name'),
+        candidate: z.string().describe('候选库，owner/name'),
+        file: z.string().optional().describe('可选：接入文件路径，例如 src/lib/foo.ts'),
+        login: z.string().optional(),
+      },
+    },
+    async ({ project, candidate, file, login }) => {
+      const result = await queueJob(
+        login,
+        'integration-trial',
+        `接入预演 · ${project} ← ${candidate}`,
+        { project, repo: candidate, ...(file ? { file } : {}), origin: '/workbench/integrations' },
+      )
+      if (!result.ok) return errorResult(result.error)
+      return textResult({
+        jobId: result.jobId,
+        status: 'queued',
+        hint: 'worker 处理完后，用 get_job_status 查看 result.href',
+      })
+    },
+  )
+
+  server.registerTool(
+    'generate_comparison',
+    {
+      title: '触发选型对比',
+      description:
+        '为一个项目和 2-5 个候选库排队一次对比，返回 jobId。需要 worker 在运行；用 get_job_status 轮询结果。',
+      inputSchema: {
+        project: z.string().describe('你的项目，owner/name'),
+        candidates: z.array(z.string()).min(2).max(5).describe('候选库 owner/name 列表'),
+        login: z.string().optional(),
+      },
+    },
+    async ({ project, candidates, login }) => {
+      const result = await queueJob(login, 'comparison', `选型对比 · ${project}`, {
+        project,
+        candidates,
+        origin: '/compare',
+      })
+      if (!result.ok) return errorResult(result.error)
+      return textResult({
+        jobId: result.jobId,
+        status: 'queued',
+        hint: 'worker 处理完后，用 get_job_status 查看 result.href',
+      })
+    },
+  )
+
+  server.registerTool(
+    'get_job_status',
+    {
+      title: '查询任务状态',
+      description: '按 jobId 查询排队/运行/完成状态，完成后返回结果链接',
+      inputSchema: {
+        jobId: z.number().int().positive(),
+        login: z.string().optional(),
+      },
+    },
+    async ({ jobId, login }) => {
+      const user = await resolveUser(login)
+      if (!user) return errorResult('需要提供 login，或设置 RADAR_MCP_USER 环境变量')
+      const job = await getJob(pool, user.id, jobId)
+      if (!job) return errorResult('没有找到这个任务')
+      return textResult({
+        id: job.id,
+        kind: job.kind,
+        status: job.status,
+        progress: job.progress,
+        error: job.error,
+        result: job.result,
       })
     },
   )

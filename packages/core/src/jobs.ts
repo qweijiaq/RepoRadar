@@ -38,6 +38,7 @@ export interface JobPayload {
   file?: string
   fromPackage?: string
   toPackage?: string
+  mode?: 'llm' | 'mechanical'
   currentVersion?: string
   manifestPath?: string
 }

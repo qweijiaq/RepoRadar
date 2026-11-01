@@ -28,8 +28,10 @@ import {
   generateIntegrationReport,
   countCodeChunks,
   generateIntegrationTrial,
+  getSymbolSplitter,
   indexRepoCode,
   searchCodeChunks,
+  buildMechanicalSwapPatch,
   generateSwapTrial,
   generateIssuePlan,
   generateMaintainerReport,
@@ -639,7 +641,12 @@ async function integrationTrialJob(
   try {
     if ((await countCodeChunks(pool, candidateName)) === 0) {
       await progress('索引候选仓库的入口代码…')
-      await indexRepoCode(pool, candidateName, { token, llm, maxFiles: 5 })
+      await indexRepoCode(pool, candidateName, {
+        token,
+        llm,
+        maxFiles: 8,
+        symbolSplitter: getSymbolSplitter(),
+      })
     }
     const query = [candidate.summary, ...(job.payload.steps ?? []), project].join(' ')
     codeEvidence = await searchCodeChunks(pool, candidateName, query, { llm, limit: 3 })
@@ -715,17 +722,33 @@ async function swapTrialJob(
   const targetFile = targetPath ? await fetchRepoFile(project, targetPath, token) : null
   if (targetPath && !targetFile) await progress(`没有读到 ${targetPath}，改为只修改依赖清单`)
 
-  await progress(`模型生成换库补丁（${fromPackage} → ${toPackage}）…`)
-  const generated = await generateSwapTrial(
-    {
-      project,
-      projectContext,
+  let generated: { summary: string; files: string[]; patch: string }
+  if (job.payload.mode === 'mechanical') {
+    await progress(`机械替换 ${fromPackage} → ${toPackage}…`)
+    const built = buildMechanicalSwapPatch({
+      manifestName: projectContext.manifestName,
+      manifest: projectContext.manifest,
+      targetFile: targetFile ? { path: targetFile.path, content: targetFile.content } : null,
       fromPackage,
       toPackage,
-      targetFile: targetFile ? { path: targetFile.path, content: targetFile.content } : null,
-    },
-    llm,
-  )
+    })
+    if (!built) {
+      throw new Error('没有可机械替换的内容：需要 package.json 依赖或目标文件里的 import')
+    }
+    generated = built
+  } else {
+    await progress(`模型生成换库补丁（${fromPackage} → ${toPackage}）…`)
+    generated = await generateSwapTrial(
+      {
+        project,
+        projectContext,
+        fromPackage,
+        toPackage,
+        targetFile: targetFile ? { path: targetFile.path, content: targetFile.content } : null,
+      },
+      llm,
+    )
+  }
 
   await progress('在 Docker 沙箱验证换库补丁…')
   const validation = await validatePatch({
