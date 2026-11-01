@@ -139,7 +139,7 @@ QQ 邮箱支持情况：
   - `/setup` 返回 200；
   - 迁移服务成功退出，Web/worker 在迁移完成后启动。
 - 测试后已执行 `docker compose down -v --rmi local`，删除测试容器、网络、数据库卷和测试镜像。
-- 部署说明见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+- 部署说明见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
 ## 限流与配额验证
 
@@ -186,7 +186,7 @@ QQ 邮箱支持情况：
 ## GitHub OAuth 权限收敛验证
 
 - 默认登录 scope 从 `read:user user:email repo delete_repo` 收敛为 `read:user user:email`；
-- 仓库管理、维护周报、Issue 方案和补丁生成需要到 `/repos` 点「授权仓库管理」，通过 OAuth `authorizationParams` 增量申请 `repo` + `delete_repo`；
+- 仓库管理、维护周报、Issue 方案和补丁生成需要到 `/repos` 点「授权仓库管理」，通过 OAuth `authorizationParams` 增量申请 `repo`，删除仓库时再单独申请 `delete_repo`；
 - JWT 记录实际 scope，`resolveRepoAccess` 会拒绝基础 scope 访问仓库级操作；GitHub 动态同步仍允许基础 scope；
 - 用合成 session 验证：基础 scope 在 `/repos` 显示重新授权提示，`/inbox` 仍可访问；完整 scope 通过 scope 检查并进入仓库读取流程；
 - `hasRepoScope` 单元测试覆盖基础 scope、public_repo、repo 和空值。

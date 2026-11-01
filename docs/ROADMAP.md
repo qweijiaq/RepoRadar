@@ -1,6 +1,6 @@
-# RepoRadar 路线图 v0.2（M5–M8）
+# RepoRadar 路线图 v0.3（M5–M8）
 
-> 更新于 2026-10-30。M0–M4 已完成，本文件规划下一阶段。
+> 更新于 2026-11-01。M0–M4 与发布基线已完成，本文件规划下一阶段。
 
 ## 一、现状盘点
 
@@ -8,51 +8,53 @@
 
 - 采集 → 富化 → 个性化排序 → 反馈 / 多样性 → 摘要 → Web / MCP 分发。
 - 订阅（topic / language / author / release）、release 追踪、加速度雷达。
-- 63 个单元测试、类型检查、生产构建。
-- 用真实 MCP 客户端脚本验证了工具握手与调用。
+- 260+ 个单元测试、类型检查、生产构建和 Playwright E2E。
+- 真实模型已经跑过维护周报、接入建议、相似项目对比和曝光优化，并产出了可回看的报告。
+- git、Apache-2.0 LICENSE、GitHub Actions CI、Docker Compose、部署/运维/开发文档都已补齐。
+- MCP server、订阅、反馈、通知和后台任务队列可以工作。
 
-还没有被真实验证的（关键）：
+仍待真实验证的（关键）：
 
 | 能力 | 现状 | 风险 |
 | --- | --- | --- |
-| LLM 富化 | 从未用真实 API key 跑过，摘要和评分一直是启发式降级 | 产品核心质量未经检验 |
-| 沙箱验证 | 代码完成，但真实 clone/build 被权限拦截，未执行 | 差异化卖点「已验证」没有真实证据 |
-| MCP 接入 | 只用 SDK 脚本验证过，没有接进 Claude Code / Cursor | 真实 agent 场景未跑通 |
-| 数据规模 | 150 个仓库入库、20 个已富化、只有 1 天 star 快照 | feed 的代表性和雷达都不足 |
+| 沙箱验证 | 代码可用，但还没有在隔离机器上对一批真实仓库做系统验收 | 差异化卖点「已验证」的证据强度不足 |
+| MCP 接入 | 已有 server 和工具定义，仍需在真实 Claude Code / Cursor 工作流里持续验证 | 真实 agent 场景的稳定性未知 |
+| 数据规模 | 候选池和 star 快照仍在积累 | feed 的代表性和趋势信号会波动 |
+| 托管 demo | 还没有公开的只读实例 | 冷启动用户需要先自托管才能完整体验 |
 
-发布基线同样缺失：没有 git 提交、没有 LICENSE、没有 CI、没有 lint、没有部署文档。
+发布基线已经具备；下一步要补的是可验证的证据和更低门槛的试用路径。
 
 ## 二、下一阶段原则
 
-1. **先验证核心假设，再加功能。** 两个卖点（AI 评审、已验证推荐）都还没真实跑过，后面的功能不应建立在未验证的假设上。
+1. **先验证核心假设，再加功能。** AI 评审已经用真实模型跑过；沙箱验证和 MCP 还需要系统验收，后面的功能不应建立在未验证的假设上。
 2. **先让陌生人一键跑起来，再谈增长。** 开源项目的第一个门槛是「5 分钟内看到 feed」。
 3. **每个里程碑有量化验收。** 不写「体验更好」，写清楚通过率和耗时。
 
-## 三、M5：核心假设验证（约 1 周）
+## 三、M5：核心假设验证（进行中）
 
 目标：证明「LLM 评审 + 沙箱验证」真的成立，并校准排序公式。
 
 工作项：
 
-1. **LLM 富化实跑**：配置一个 OpenAI 兼容 key，富化 200 个候选仓库；人工抽检 30 条，记录摘要准确率与 verdict 合理性。
-2. **沙箱验证实跑**：在无敏感凭据的机器上验证 20 个 node / python 仓库；记录成功率、平均耗时、失败原因；给验证增加「只构建、不跑测试」的轻量策略。
-3. **MCP 实接**：在 Claude Code 或 Cursor 中接入，走通「搜索 → 推荐 → 记录反馈」一条真实链路。
-4. **成本测量**：记录富化与摘要的实际 token 成本，写入文档。
+- [x] **LLM 评审实跑**：用真实模型生成维护周报、接入建议、相似项目对比和曝光优化，并保留可回看的报告。
+- [ ] **沙箱验证实跑**：在无敏感凭据的机器上验证 20 个 node / python 仓库；记录成功率、平均耗时、失败原因；给验证增加「只构建、不跑测试」的轻量策略。
+- [ ] **MCP 实接**：在 Claude Code 或 Cursor 中接入，走通「搜索 → 推荐 → 记录反馈」一条真实链路。
+- [ ] **成本测量**：记录富化与摘要的实际 token 成本，写入文档。
+- [ ] **规模抽检**：富化 200 个候选仓库，人工抽检 30 条，记录摘要准确率与 verdict 合理性。
 
 验收：产出 `docs/evaluation.md`，包含样本、指标、结论；据此决定是否调整 `personalize.ts` 的权重。
 
-需要你提供：LLM API key、允许执行一次沙箱验证、一个真实 MCP 客户端。
+还需要：一台可以执行沙箱验证的隔离机器，以及一个真实 MCP 客户端。
 
-## 四、M6：发布工程（约 1 周）
+## 四、M6：发布工程（基本完成）
 
 目标：任何人从 clone 到看到 feed，只需要一条命令。
 
-- 首次 git 提交与分支策略；Apache-2.0 LICENSE；CONTRIBUTING、CODE_OF_CONDUCT、CHANGELOG、issue/PR 模板。
-- ESLint + Prettier，接入 `pnpm run ci`。
-- GitHub Actions：typecheck、test、build、lint。
-- Docker Compose 全家桶（postgres + web + worker）和 Dockerfile；种子数据脚本。
-- 英文 README + 快速开始 + 截图；自托管部署文档（Docker / Fly.io / Railway）。
-- 打 v0.1.0 tag。
+- [x] git 仓库、Apache-2.0 LICENSE、Docker Compose（postgres + web + worker）和 Dockerfile。
+- [x] GitHub Actions：typecheck、test、build；CI workflow 已接入。
+- [x] 中英文 README、截图、快速开始、部署/运维/开发文档。
+- [ ] CONTRIBUTING、CODE_OF_CONDUCT、CHANGELOG、issue/PR 模板。
+- [ ] 打 v0.1.0 tag。
 
 验收：新机器 `git clone && docker compose up` 后能打开 feed；CI 全绿。
 

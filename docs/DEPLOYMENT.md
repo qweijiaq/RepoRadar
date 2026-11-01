@@ -76,7 +76,7 @@ POSTGRES_PORT=5434 docker compose up -d
 
 保存后登录，第一个用户或 `ADMIN_LOGINS` 中的用户可以进入设置页配置 AI 模型、邮件通道和站点地址。
 
-默认 OAuth 登录只申请 `read:user user:email`。需要仓库管理、维护周报或补丁生成时，到 `/repos` 点「授权仓库管理」，再授权 `repo` + `delete_repo`；动态同步不需要额外权限。
+默认 OAuth 登录只申请 `read:user user:email`。需要仓库管理、维护周报或补丁生成时，到 `/repos` 点「授权仓库管理」申请 `repo`；删除仓库时再单独申请 `delete_repo`。动态同步不需要额外权限。
 
 ## 4. 域名、TLS 与反向代理
 
