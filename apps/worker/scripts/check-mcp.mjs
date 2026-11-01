@@ -32,4 +32,16 @@ const digest = await client.callTool({
 })
 console.log('\nDIGEST:', digest.content[0].text.slice(0, 300))
 
+const pick = await client.callTool({
+  name: 'pick_library',
+  arguments: { task: 'structured logging for a Next.js app', language: 'TypeScript', limit: 2 },
+})
+console.log('\nPICK_LIBRARY:', pick.content[0].text.slice(0, 300))
+
+const diff = await client.callTool({
+  name: 'similar_diff',
+  arguments: { project: 'demo/app', login: 'demo' },
+})
+console.log('\nSIMILAR_DIFF:', diff.content[0].text.slice(0, 200))
+
 await client.close()

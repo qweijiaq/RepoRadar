@@ -9,6 +9,7 @@ import {
   findEnrichedRepos,
   filterIntegrationProjects,
   filterMaintainerReport,
+  findLatestComparisonReport,
   findLatestIntegrationReport,
   findLatestMaintainerReport,
   findLatestVerification,
@@ -17,6 +18,7 @@ import {
   handledRepoNames,
   isValidSubscriptionValue,
   listFeedbackSignals,
+  listPatchDrafts,
   listWatchIntents,
   listWatchMatches,
   loadComparisonLibrary,
@@ -432,6 +434,115 @@ function createServer(pool: DbPool): McpServer {
       const subscriptions = await loadSubscriptions(pool, user.id)
       const watched = subscriptions.filter((sub) => sub.kind === 'release').map((sub) => sub.value)
       return textResult(await loadReleaseEvents(pool, watched, limit ?? 5))
+    },
+  )
+
+  server.registerTool(
+    'pick_library',
+    {
+      title: '按任务选库',
+      description:
+        '给一个任务描述，返回最匹配的开源库候选（含质量分、摘要和是否已验证），用于写代码前选依赖',
+      inputSchema: {
+        task: z.string().describe('要完成的任务，例如「给 Next.js 应用加结构化日志」'),
+        language: z.string().optional().describe('限定语言，例如 TypeScript'),
+        limit: z.number().int().min(1).max(10).optional(),
+      },
+    },
+    async ({ task, language, limit }) => {
+      const keywords = [
+        ...new Set(
+          task
+            .split(/[^A-Za-z0-9\u4e00-\u9fff]+/)
+            .map((word) => word.trim())
+            .filter((word) => word.length >= 2),
+        ),
+      ].slice(0, 3)
+      const queries = keywords.length > 0 ? keywords : [task.slice(0, 40)]
+      const batches = await Promise.all(
+        queries.map((query) => searchEnrichedRepos(pool, { query, language, limit: 10 })),
+      )
+      const seen = new Map<string, EnrichedRepoRecord>()
+      for (const repo of batches.flat()) {
+        if (!seen.has(repo.fullName)) seen.set(repo.fullName, repo)
+      }
+      const candidates = [...seen.values()]
+        .sort((left, right) => (right.qualityScore ?? 0) - (left.qualityScore ?? 0))
+        .slice(0, limit ?? 5)
+        .map((repo) => toItem(repo))
+      return textResult({ task, keywords, candidates })
+    },
+  )
+
+  server.registerTool(
+    'integration_preflight',
+    {
+      title: '查看接入预演结果',
+      description:
+        '返回某个项目对某个候选库最近一次「试接入」的补丁、构建状态和改动文件；没有记录时给出提示',
+      inputSchema: {
+        project: z.string().describe('你的项目，owner/name'),
+        candidate: z.string().describe('候选库，owner/name'),
+        login: z.string().optional(),
+      },
+    },
+    async ({ project, candidate, login }) => {
+      const user = await resolveUser(login)
+      if (!user) return errorResult('需要提供 login，或设置 RADAR_MCP_USER 环境变量')
+      const drafts = await listPatchDrafts(pool, user.id, { repo: project, limit: 20 })
+      const trial = drafts.find(
+        (draft) => draft.kind === 'integration' && draft.title.includes(candidate),
+      )
+      if (!trial) {
+        return textResult({
+          found: false,
+          hint: '还没有试接入记录：在 /workbench/integrations 对这条建议点击「试接入（沙箱预演）」',
+        })
+      }
+      return textResult({
+        found: true,
+        status: trial.status,
+        summary: trial.summary,
+        files: trial.files,
+        applies: trial.validation?.applies ?? null,
+        buildStatus: trial.validation?.buildStatus ?? null,
+        patch: trial.patch.slice(0, 4000),
+      })
+    },
+  )
+
+  server.registerTool(
+    'similar_diff',
+    {
+      title: '相似项目能力差异',
+      description: '返回某个项目最近一次选型对比的能力矩阵和候选差异，可按候选过滤',
+      inputSchema: {
+        project: z.string().describe('你的项目，owner/name'),
+        candidate: z.string().optional().describe('只看某个候选，owner/name'),
+        login: z.string().optional(),
+      },
+    },
+    async ({ project, candidate, login }) => {
+      const user = await resolveUser(login)
+      if (!user) return errorResult('需要提供 login，或设置 RADAR_MCP_USER 环境变量')
+      const stored = await findLatestComparisonReport(pool, user.id, project)
+      if (!stored) {
+        return textResult({
+          found: false,
+          hint: '还没有对比报告：在 /compare 生成一次选型对比',
+        })
+      }
+      const report = stored.report
+      const candidates = candidate
+        ? report.candidates.filter((item) => item.repo.toLowerCase() === candidate.toLowerCase())
+        : report.candidates
+      return textResult({
+        found: true,
+        project: report.project,
+        recommendation: report.recommendation,
+        capabilities: report.capabilities,
+        candidates,
+      })
     },
   )
 
