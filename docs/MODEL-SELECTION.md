@@ -46,10 +46,11 @@ pnpm eval:ai -- --models=deepseek-flash,deepseek-chat --repeat=3
 
 - 当前部署保存的模型配置已从 `deepseek-flash` 改为 `deepseek-chat`（`radar doctor` 可见）。
 - 用默认配置复跑 `pnpm eval:ai -- --repeat=3`：**6/6**，36.1s，输入 5,111 / 输出 5,544 tokens。
-- 真实仓库验证：项目 `vercel/arg` + 候选 `sindresorhus/meow`，1.7s 生成补丁，`git apply` 成功，
-  `package.json` 增加 `"meow": "^10.1.5"`（未提供目标文件，只改清单）。
-- 本机 `GITHUB_TOKEN` 为空且 git 克隆被网络限制，所以没有跑通「克隆 + Docker 构建」；
-  补丁对真实清单的应用已验证，完整沙箱验证需要在有 token 和 Docker 网络的环境执行。
+- 真实仓库完整沙箱验证：用 GitHub API 重建 `vercel/arg` 的 10 个文件（本机 git clone 被网络限制），
+  候选 `sindresorhus/meow`，**1.6s** 生成补丁（只改 `package.json`）。
+- `validatePatch` 在 Docker 里执行 `npm install` + `npm run test`：
+  **applies: true，buildStatus: verified，39 个测试通过**，改动文件 `package.json`。
+- 生产环境用 `git clone` 获取仓库，后面走的是同一条 `validatePatch` 链路；本机只是用 API 重建绕过了克隆限制。
 
 ## 何时重新评估
 

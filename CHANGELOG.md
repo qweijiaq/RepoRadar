@@ -60,6 +60,8 @@
   「加载更多」不再重新排名整个候选池。
 
 - 试接入/换库生成补丁后会做结构检查，失败时带错误重试一次；重试后 `deepseek-chat` 从 5/6 提升到 6/6。
+- 真实仓库沙箱验证：`vercel/arg`（API 重建 10 个文件）+ `sindresorhus/meow`，1.6s 生成补丁，
+  Docker 中 `npm install` + `npm test` 通过（39 tests）。
 - 已把当前部署的默认模型切换为 `deepseek-chat` 并验证：默认配置评测 6/6（36.1s），
   真实 `vercel/arg` 清单的试接入补丁 `git apply` 成功。
 - 默认模型决策修订为 `deepseek-chat`（质量打平，速度快约 4.6 倍、输出 token 少约 4.4 倍），
