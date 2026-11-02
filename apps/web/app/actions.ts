@@ -85,6 +85,7 @@ import {
 } from '@/lib/webhook-config'
 import { adminLogins, requireAdmin } from '@/lib/admin'
 import { guardAiQuota } from '@/lib/quota-guard'
+import { assertWritable } from '@/lib/readonly'
 import { sessionAccessToken, sessionUser } from '@/lib/session'
 import { rebuildProfile, syncUserTaste } from '@/lib/sync'
 import { findUserById, savePrefs } from '@/lib/users'
@@ -181,6 +182,7 @@ export async function savePrefsAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   await savePrefs(Number(currentUser.id), {
     excludedTopics: parseList(formData.get('excludedTopics')),
@@ -195,6 +197,7 @@ export async function resyncStarsAction(): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const token = sessionAccessToken(session)
   let failed = false
@@ -217,6 +220,7 @@ export async function loadDemoTasteAction(): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   await getPool().query(
     `INSERT INTO user_stars (user_id, repo_full_name, starred_at)
@@ -237,6 +241,7 @@ export async function loadDemoTasteAction(): Promise<void> {
 export async function submitFeedbackAction(formData: FormData): Promise<void> {  const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const repoFullName = String(formData.get('repo') ?? '').trim()
   if (!repoFullName) return
@@ -261,6 +266,7 @@ export async function addSubscriptionAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const kind = parseSubscriptionKind(formData.get('kind'))
   const value = String(formData.get('value') ?? '').trim()
@@ -275,6 +281,7 @@ export async function removeSubscriptionAction(formData: FormData): Promise<void
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const kind = parseSubscriptionKind(formData.get('kind'))
   const value = String(formData.get('value') ?? '').trim()
@@ -380,6 +387,7 @@ export async function generateIssueAction(): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   await guardAiQuota(getPool(), Number(currentUser.id))
   const llm = loadConfig().llm ?? (await loadStoredLlmConfig(getPool()))
@@ -413,6 +421,7 @@ export async function markInboxReadAction(): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   await markNotificationsRead(getPool(), Number(currentUser.id))
   revalidatePath('/inbox')
@@ -424,6 +433,7 @@ export async function createCollectionAction(formData: FormData): Promise<void> 
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const name = String(formData.get('name') ?? '').trim()
   if (!name) redirect('/feed?tab=collections&error=name')
@@ -452,6 +462,7 @@ export async function addToCollectionAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const collectionId = Number(formData.get('collectionId'))
   const repoFullName = String(formData.get('repo') ?? '').trim()
@@ -469,6 +480,7 @@ export async function removeCollectionItemAction(formData: FormData): Promise<vo
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const collectionId = Number(formData.get('collectionId'))
   const repoFullName = String(formData.get('repo') ?? '').trim()
@@ -485,6 +497,7 @@ export async function toggleCollectionPublicAction(formData: FormData): Promise<
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const collectionId = Number(formData.get('collectionId'))
   const collection = await ownedCollection(collectionId, Number(currentUser.id))
@@ -499,6 +512,7 @@ export async function deleteCollectionAction(formData: FormData): Promise<void> 
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const collectionId = Number(formData.get('collectionId'))
   if (await ownedCollection(collectionId, Number(currentUser.id))) {
@@ -512,6 +526,7 @@ export async function toggleProjectActiveAction(formData: FormData): Promise<voi
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const repoFullName = String(formData.get('repo') ?? '').trim()
   const active = String(formData.get('active') ?? '') === '1'
@@ -526,6 +541,7 @@ export async function addUserProjectAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const fullName = String(formData.get('repo') ?? '').trim()
   if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(fullName)) redirect('/workbench/integrations?error=invalid')
@@ -555,6 +571,7 @@ export async function removeUserProjectAction(formData: FormData): Promise<void>
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const repoFullName = String(formData.get('repo') ?? '').trim()
   if (repoFullName) {
@@ -572,6 +589,7 @@ export async function generateIntegrationAction(formData: FormData): Promise<voi
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   await guardAiQuota(getPool(), Number(currentUser.id))
 
   const pool = getPool()
@@ -692,6 +710,7 @@ export async function setIntegrationOutcomeAction(formData: FormData): Promise<v
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const project = String(formData.get('project') ?? '').trim()
   const repo = String(formData.get('repo') ?? '').trim()
@@ -716,6 +735,7 @@ export async function clearIntegrationOutcomeAction(formData: FormData): Promise
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const project = String(formData.get('project') ?? '').trim()
   const repo = String(formData.get('repo') ?? '').trim()
@@ -736,6 +756,7 @@ export async function markNotificationReadAction(formData: FormData): Promise<vo
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const id = Number(formData.get('id'))
   const requested = String(formData.get('returnTo') ?? '')
@@ -753,6 +774,7 @@ export async function saveNotificationPrefsAction(formData: FormData): Promise<v
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   await saveNotificationPrefs(getPool(), Number(currentUser.id), {
     githubStar: formData.get('githubStar') === '1',
@@ -774,6 +796,7 @@ export async function saveNotificationEmailAction(formData: FormData): Promise<v
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const email = String(formData.get('email') ?? '').trim()
   if (email && !isValidMailAddress(email)) redirect('/settings?notify=email-invalid')
@@ -837,6 +860,7 @@ export async function deleteAccountAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const confirmation = String(formData.get('confirm') ?? '').trim()
   if (confirmation.toLowerCase() !== currentUser.login.toLowerCase()) {

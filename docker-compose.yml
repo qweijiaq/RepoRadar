@@ -41,6 +41,7 @@ services:
       DATABASE_URL: postgres://radar:${POSTGRES_PASSWORD:-radar}@postgres:5432/radar
       AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET in .env}
       AUTH_DEV_MODE: "0"
+      RADAR_DEMO_MODE: ${RADAR_DEMO_MODE:-0}
       RADAR_INLINE_JOBS: "0"
       PORT: "3000"
       HOSTNAME: 0.0.0.0
@@ -58,6 +59,24 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  demo-seed:
+    profiles: ["demo"]
+    build:
+      context: .
+      target: worker
+    working_dir: /app
+    command: ["/app/node_modules/.bin/tsx", "/app/apps/worker/src/cli.ts", "demo-seed"]
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://radar:${POSTGRES_PASSWORD:-radar}@postgres:5432/radar
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
 
   worker:
     build:

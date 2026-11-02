@@ -59,6 +59,8 @@
   排名（最多 300 条），页面按快照顺序取切片；快照缺失/过期时回退实时排名，并在响应结束后补建。
   「加载更多」不再重新排名整个候选池。
 
+- docker-compose 新增 `demo` profile（自动 seed）与 `RADAR_DEMO_MODE` 开关；演示账号改为只读，
+  写操作统一拦截并显示只读提示。
 - 新增 `RADAR_DEMO_MODE=1`：登录页提供「以演示账号进入」，配合 `demo-seed` 可托管只读演示站。
 - 换库沙盘的机械模式扩展到 Python / Go / Rust，并支持 requirements.txt、pyproject.toml、
   go.mod、Cargo.toml 的依赖替换；MCP 新增 `generate_swap_trial`。

@@ -35,4 +35,5 @@ test('demo mode signs in with the seeded demo account', async ({ page }) => {
   await page.getByRole('button', { name: '以演示账号进入' }).click()
   await expect(page).toHaveURL(/\/feed/)
   await expect(page.getByRole('link', { name: '工作台' }).first()).toBeVisible()
+  await expect(page.getByText('演示账号只读')).toBeVisible()
 })

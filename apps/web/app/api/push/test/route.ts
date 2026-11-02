@@ -2,6 +2,7 @@ import { getPool, sendPushToUser } from '@repo-radar/core'
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { rateLimit } from '@/lib/rate-limit'
+import { isDemoLogin } from '@/lib/readonly'
 import { sessionUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
@@ -10,6 +11,9 @@ export async function POST(): Promise<NextResponse> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (isDemoLogin(currentUser.login)) {
+    return NextResponse.json({ error: 'demo-readonly' }, { status: 403 })
+  }
   const limit = rateLimit(`push-test:${currentUser.id}`, 5, 60 * 60 * 1000)
   if (!limit.allowed) {
     return NextResponse.json(

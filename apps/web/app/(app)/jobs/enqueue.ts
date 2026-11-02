@@ -13,6 +13,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
+import { assertWritable } from '@/lib/readonly'
 import { requireAdmin } from '@/lib/admin'
 import { enqueueJob } from '@repo-radar/worker'
 
@@ -29,6 +30,7 @@ async function context(): Promise<{
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const pool = getPool()
   const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
@@ -65,6 +67,7 @@ export async function enqueueIntegrationAction(formData: FormData): Promise<void
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { userId, login, pool } = await context()
   const focus = String(formData.get('focus') ?? '').trim().slice(0, 200) || null
   const access = await resolveRepoAccess(session, login)
@@ -80,6 +83,7 @@ export async function enqueueMaintainerAction(): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
 
   const access = await resolveRepoAccess(session, currentUser.login)
@@ -105,6 +109,7 @@ export async function enqueueDiscoverabilityAction(formData: FormData): Promise<
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
 
   const repo = String(formData.get('repo') ?? '').trim()
@@ -123,6 +128,7 @@ export async function enqueueIntegrationProjectAction(formData: FormData): Promi
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
   const project = String(formData.get('project') ?? '').trim()
   if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(project)) {
@@ -145,6 +151,7 @@ export async function enqueueComparisonAction(formData: FormData): Promise<void>
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
 
   const project = String(formData.get('project') ?? '').trim()
@@ -180,6 +187,7 @@ export async function enqueueSimilarComparisonAction(formData: FormData): Promis
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
   const project = String(formData.get('project') ?? '').trim()
   if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(project)) {
@@ -199,6 +207,7 @@ export async function enqueueIssuePlanAction(formData: FormData): Promise<void> 
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
 
   const repo = String(formData.get('repo') ?? '').trim()
@@ -221,6 +230,7 @@ export async function enqueueUpgradeAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
 
   const repo = String(formData.get('repo') ?? '').trim()
@@ -248,6 +258,7 @@ export async function enqueuePatchAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
 
   const repo = String(formData.get('repo') ?? '').trim()
@@ -270,6 +281,7 @@ export async function enqueueIntegrationTrialAction(formData: FormData): Promise
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
 
   const project = String(formData.get('project') ?? '').trim()
@@ -311,6 +323,7 @@ export async function enqueueSwapTrialAction(formData: FormData): Promise<void> 
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
 
   const project = String(formData.get('project') ?? '').trim()
@@ -346,6 +359,7 @@ export async function enqueueWatchRunAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
 
   const intentId = Number(formData.get('id'))
@@ -393,6 +407,7 @@ export async function enqueueActivitySyncAction(): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   const { pool, userId } = await context()
 
   const access = await resolveRepoAccess(session, currentUser.login, { requireRepoScope: false })

@@ -177,15 +177,21 @@ volumes:
 想公开一个只读演示站，可以不配置模型 Key，直接用预置数据：
 
 ```bash
-# 1. 打开演示登录（登录页会出现「以演示账号进入」）
-RADAR_DEMO_MODE=1
+# 一条命令：打开演示登录 + 写入演示数据（demo-seed 会跑一次后退出）
+RADAR_DEMO_MODE=1 docker compose --profile demo up -d --build
+```
 
-# 2. 写入演示数据（在 worker 容器或能连到数据库的机器上执行）
-docker compose exec -w /app worker pnpm radar demo-seed
+也可以分开执行：
+
+```bash
+RADAR_DEMO_MODE=1 docker compose up -d --build
+docker compose run --rm demo-seed        # 等价于 pnpm radar demo-seed
 # 或者：DATABASE_URL=... pnpm radar demo-seed
 ```
 
-演示账号 `demo-radar` 带 10 个仓库、画像、收藏、订阅和两个维护项目，页面上的接入/换库等需要真实授权的操作会提示登录 GitHub。
+演示账号 `demo-radar` 带 10 个仓库、画像、收藏、订阅和两个维护项目。**演示账号是只读的**：
+反馈、订阅、设置、收藏集、生成任务和推送订阅都会被拦截并跳回首页，顶部会显示「演示账号只读」；
+接入/换库等需要真实授权的操作会提示登录 GitHub。
 
 注意：
 

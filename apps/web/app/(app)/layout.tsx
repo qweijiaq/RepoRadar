@@ -9,6 +9,7 @@ import { NavLink } from '@/components/NavLink'
 import { SiteBrand } from '@/components/SiteBrand'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { UnreadBadge } from '@/components/UnreadBadge'
+import { isDemoLogin } from '@/lib/readonly'
 import { sessionUser } from '@/lib/session'
 import { signOutAction } from '@/app/actions'
 
@@ -62,6 +63,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           )}
         </nav>
       </header>
+
+      {currentUser && isDemoLogin(currentUser.login) ? (
+        <div className="notice demo-banner">
+          演示账号只读：反馈、订阅、设置和生成任务已禁用，浏览和搜索不受影响。
+        </div>
+      ) : null}
 
       <main className="site-main">{children}</main>
 
