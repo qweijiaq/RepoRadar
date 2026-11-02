@@ -172,6 +172,28 @@ volumes:
 
 如果不需要 patch / 依赖升级 / 仓库验证，可以移除 worker 的 Docker socket 挂载。
 
+## 6.5 托管演示实例（可选）
+
+想公开一个只读演示站，可以不配置模型 Key，直接用预置数据：
+
+```bash
+# 1. 打开演示登录（登录页会出现「以演示账号进入」）
+RADAR_DEMO_MODE=1
+
+# 2. 写入演示数据（在 worker 容器或能连到数据库的机器上执行）
+docker compose exec -w /app worker pnpm radar demo-seed
+# 或者：DATABASE_URL=... pnpm radar demo-seed
+```
+
+演示账号 `demo-radar` 带 10 个仓库、画像、收藏、订阅和两个维护项目，页面上的接入/换库等需要真实授权的操作会提示登录 GitHub。
+
+注意：
+
+- **演示模式是公开入口**，任何访问者都能以 `demo-radar` 身份浏览；不要在有私有数据的实例上开启。
+- 演示账号没有 GitHub token，不会读取或修改任何真实仓库。
+- 升级前先关闭 `RADAR_DEMO_MODE`，或确认演示数据不包含敏感内容。
+- 需要重置演示数据时重新执行 `demo-seed`（幂等），或删除 `demo-radar` 用户后重跑。
+
 ## 7. 升级
 
 ```bash

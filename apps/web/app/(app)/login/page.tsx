@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { signInDevAction, signInGithubAction } from '@/app/actions'
+import { signInDemoAction, signInDevAction, signInGithubAction } from '@/app/actions'
 import { auth } from '@/auth'
 import { resolveGithubCredentials } from '@/lib/oauth-config'
 import { sessionUser } from '@/lib/session'
@@ -18,6 +18,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   const credentials = await resolveGithubCredentials()
   const devMode = process.env.AUTH_DEV_MODE === '1' && process.env.NODE_ENV !== 'production'
+  const demoMode = process.env.RADAR_DEMO_MODE === '1'
 
   return (
     <div className="page">
@@ -49,6 +50,17 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             尚未配置 GitHub 登录。请先<Link href="/setup">完成 OAuth 配置</Link>。
           </div>
         )}
+
+        {demoMode ? (
+          <form action={signInDemoAction}>
+            <button className="btn" type="submit">
+              以演示账号进入
+            </button>
+            <p className="muted small">
+              演示账号使用预置数据，不会读取你的 GitHub；仓库权限、补丁生成等需要真实授权的功能会提示登录。
+            </p>
+          </form>
+        ) : null}
 
         {devMode ? (
           <form action={signInDevAction}>

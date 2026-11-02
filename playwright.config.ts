@@ -50,6 +50,7 @@ export default defineConfig({
     env: {
       ...inheritedEnv,
       AUTH_DEV_MODE: '1',
+      RADAR_DEMO_MODE: '1',
       ADMIN_LOGINS: 'demo',
       AUTH_SECRET: process.env.E2E_AUTH_SECRET || process.env.AUTH_SECRET || 'e2e-only-not-a-production-secret',
       DATABASE_URL: process.env.DATABASE_URL || 'postgres://radar:radar@localhost:5433/radar',

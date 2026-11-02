@@ -11,6 +11,7 @@ import { ensureUser } from './lib/users'
 export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
   const github = await resolveGithubCredentials()
   const devMode = process.env.AUTH_DEV_MODE === '1' && process.env.NODE_ENV !== 'production'
+  const demoMode = process.env.RADAR_DEMO_MODE === '1'
 
   const providers: Provider[] = []
 
@@ -20,6 +21,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
         clientId: github.clientId,
         clientSecret: github.clientSecret,
         authorization: { params: { scope: GITHUB_BASE_SCOPES } },
+      }),
+    )
+  }
+
+  if (demoMode) {
+    providers.push(
+      Credentials({
+        id: 'demo-radar',
+        name: '演示账号',
+        credentials: {},
+        async authorize() {
+          return { id: 'demo-radar', name: 'Demo Radar', email: 'demo@radar.local' }
+        },
       }),
     )
   }
@@ -102,6 +116,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
             } catch (error) {
               console.error('[auth] 用户同步失败：', error)
             }
+          }
+        }
+
+        if (account?.provider === 'demo-radar') {
+          try {
+            const userId = await ensureUser({
+              login: 'demo-radar',
+              displayName: 'Demo Radar',
+              avatarUrl: null,
+              githubId: 999001,
+            })
+            token.userId = userId
+            token.login = 'demo-radar'
+            token.avatarUrl = null
+          } catch (error) {
+            console.error('[auth] 演示账号创建失败：', error)
           }
         }
 

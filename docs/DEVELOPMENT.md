@@ -85,6 +85,7 @@ pnpm radar pipeline --topics=llm --limit=20
 | `METRICS_TOKEN` | 否 | `/api/metrics` 的 Bearer 令牌；未设置时接口返回 404 |
 | `ALERT_EMAILS` | 否 | 运维告警收件邮箱，逗号分隔；也可在 `/ops` 页面配置 |
 | `SETUP_TOKEN` | 公网首次配置建议 | `/setup` 初始化令牌；非 localhost 访问且未设置时配置页锁定 |
+| `RADAR_DEMO_MODE` | 否 | 设为 `1` 时登录页出现「以演示账号进入」，使用 `demo-radar` 的预置数据 |
 | `RADAR_BASE_URL` | 否 | 站点公开地址；未设置时使用设置页保存的值 |
 | `GITHUB_WEBHOOK_SECRET` | 否 | 可选的 Webhook Secret；也可以直接在设置页保存，环境变量优先 |
 | `GITHUB_TOKEN` | 建议 | 公开仓库只读 token 即可（https://github.com/settings/tokens）。需要页面仓库管理时授予 `repo`；删除仓库时再单独授予 `delete_repo`。不填则匿名访问，Search 限 10 次/分钟且跳过 README |

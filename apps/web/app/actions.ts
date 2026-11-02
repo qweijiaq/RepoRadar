@@ -111,6 +111,11 @@ export async function signInDevAction(): Promise<void> {
   await signIn('dev', { redirectTo: '/feed' })
 }
 
+/** 演示模式：以 seed 出来的 demo-radar 身份进入，不读取任何真实 GitHub 数据。 */
+export async function signInDemoAction(): Promise<void> {
+  await signIn('demo-radar', { redirectTo: '/feed' })
+}
+
 export async function signOutAction(): Promise<void> {
   await signOut({ redirectTo: '/' })
 }

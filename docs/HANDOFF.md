@@ -33,6 +33,7 @@ pnpm radar demo-seed
 会写入 10 个真实仓库（带中文摘要/评分/7 天前 star 快照）、用户 `demo-radar` 的画像、一条收藏、
 一条订阅和两个「维护中」项目。命令幂等，可重复执行；数据仅用于演示，**不代表真实归属**。
 写入后 `pnpm radar list` 和 Web 首页都会立刻有内容；MCP 可以用 `login: demo-radar` 体验个性化工具。
+设置 `RADAR_DEMO_MODE=1` 后，登录页会出现「以演示账号进入」，方便没有 GitHub OAuth 的演示环境。
 
 ## 逐项验收
 

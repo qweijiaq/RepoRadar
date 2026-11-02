@@ -29,3 +29,10 @@ test('theme script runs before the app and sets the theme', async ({ page }) => 
   await page.goto('/privacy')
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
 })
+
+test('demo mode signs in with the seeded demo account', async ({ page }) => {
+  await page.goto('/login', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: '以演示账号进入' }).click()
+  await expect(page).toHaveURL(/\/feed/)
+  await expect(page.getByRole('link', { name: '工作台' }).first()).toBeVisible()
+})
