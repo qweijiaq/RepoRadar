@@ -18,7 +18,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:db": "vitest run --config vitest.integration.config.ts",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/cleanup-e2e.mjs && playwright test",
     "test:e2e:ui": "playwright test --ui",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
@@ -27,7 +27,8 @@
     "typecheck": "tsc --noEmit && tsc -p e2e --noEmit && pnpm --filter @repo-radar/web run typecheck",
     "worker": "pnpm --filter @repo-radar/worker exec tsx src/worker.ts",
     "eval:llm": "tsx packages/core/eval/run.ts",
-    "eval:ai": "tsx packages/core/eval/ai.ts"
+    "eval:ai": "tsx packages/core/eval/ai.ts",
+    "smoke:prod": "node scripts/smoke-prod.mjs"
   },
   "dependencies": {
     "tsx": "^4.21.0"

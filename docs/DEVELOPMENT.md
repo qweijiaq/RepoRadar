@@ -141,9 +141,14 @@ pnpm typecheck   # 全仓类型检查（core / worker / e2e / web）
 pnpm test        # 单元测试（vitest，全部使用 mock，不需要数据库）
 pnpm test:coverage  # 单元测试 + 覆盖率门槛（packages/core）
 pnpm test:db     # 数据库集成测试（真实 Postgres，需要 TEST_DATABASE_URL）
-pnpm test:e2e    # Playwright E2E；本地使用已安装的 Chrome，CI 使用 Chromium
+pnpm test:e2e    # Playwright E2E；先清理残留 dev server，本地用 Chrome，CI 用 Chromium
 pnpm build       # 生产构建
+pnpm smoke:prod  # 对构建产物跑 next start 冒烟（/api/health、/login、/privacy、/terms）
 ```
+
+E2E 会先执行 `scripts/cleanup-e2e.mjs`：清掉 `.next-e2e/dev/lock`，并按端口 `3100` 结束残留的
+`next dev` 及其 `next-server` 子进程。Playwright 不再复用已有服务，避免跑到旧代码上。CI 在 `pnpm build`
+之后额外跑 `pnpm smoke:prod`，用 `next start` 验证生产产物能启动并渲染公开页。
 
 数据库集成测试覆盖迁移、`upsertRepo`、向量写入、搜索过滤和任务队列抢占。它会在 `TEST_DATABASE_URL` 指向的库里创建一个临时 schema（`radar_integration`），跑完自动删除，不会碰开发数据：
 

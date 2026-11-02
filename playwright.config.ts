@@ -43,10 +43,10 @@ export default defineConfig({
   ],
   webServer: {
     // 上一次异常退出可能留下 dev lock，先清掉再启动，避免误报「已有 dev server」。
-    command: `rm -f apps/web/.next-e2e/dev/lock && pnpm --filter @repo-radar/web exec next dev --webpack -p ${port}`,
+    command: `pnpm --filter @repo-radar/web exec next dev --webpack -p ${port}`,
     url: `http://127.0.0.1:${port}/login`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    reuseExistingServer: false,
+    timeout: 180_000,
     env: {
       ...inheritedEnv,
       AUTH_DEV_MODE: '1',
