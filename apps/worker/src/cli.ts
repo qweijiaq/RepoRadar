@@ -107,6 +107,7 @@ const HELP = `RepoRadar CLI（M2）
   pipeline             依次执行 ingest → enrich → list
   doctor               检查数据库、迁移、模型、GitHub 授权、邮件和任务队列
   backfill-identities  为已有仓库回填 GitHub 稳定 ID（用于改名/转移去重）
+  demo-seed            写入演示数据（仓库、画像、收藏、订阅、维护项目；可重复执行）
 
 选项：
   --topics=a,b         采集的 GitHub topics（默认来自 RADAR_TOPICS）；enrich 时用作过滤
@@ -676,7 +677,7 @@ async function main(): Promise<void> {
 
   const pool = createPool(config.databaseUrl)
   const effectiveConfig: AppConfig =
-    config.llm || command === 'migrate'
+    config.llm || command === 'migrate' || command === 'demo-seed'
       ? config
       : { ...config, llm: await loadStoredLlmConfig(pool) }
   try {
@@ -756,6 +757,14 @@ async function main(): Promise<void> {
         await runEnrich(pool, effectiveConfig, enrichLimit)
         await runList(pool, listLimit, listFormat)
         break
+      case 'demo-seed': {
+        const { runDemoSeed } = await import('./demo-seed.js')
+        const result = await runDemoSeed(pool)
+        console.log(
+          `演示数据已写入：${result.repos} 个仓库，用户 ${result.user}，${result.projects} 个维护项目`,
+        )
+        break
+      }
       case 'doctor': {
         const checks = await runDoctor(pool, { llm: effectiveConfig.llm })
         for (const item of checks) {

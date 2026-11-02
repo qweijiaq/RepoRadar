@@ -26,11 +26,11 @@ function quoteLike(original: string, value: string): string {
  * 把 import / export from / require() 里的模块名从旧包换成新包。
  * 只改模块说明符，不动本地变量名和调用方式——API 差异交给模型或人工。
  */
-export function rewriteModuleSpecifiers(
+function rewriteJsModuleSpecifiers(
   source: string,
   fromPackage: string,
   toPackage: string,
-  filePath = 'file.ts',
+  filePath: string,
 ): CodemodResult {
   if (!SCRIPT_EXTENSION.test(filePath)) return { changed: false, code: source, rewrites: 0 }
 
@@ -97,6 +97,98 @@ export function rewriteModuleSpecifiers(
   return { changed: true, code, rewrites: replacements.length }
 }
 
+function rewriteModulePath(value: string, fromPackage: string, toPackage: string): string {
+  if (value === fromPackage) return toPackage
+  if (value.startsWith(`${fromPackage}.`)) return `${toPackage}${value.slice(fromPackage.length)}`
+  if (value.startsWith(`${fromPackage}/`)) return `${toPackage}${value.slice(fromPackage.length)}`
+  return value
+}
+
+function rewritePythonImports(
+  source: string,
+  fromPackage: string,
+  toPackage: string,
+): CodemodResult {
+  let rewrites = 0
+  const code = source
+    .split('\n')
+    .map((line) => {
+      const importMatch = /^(\s*import\s+)(.+)$/.exec(line)
+      if (importMatch) {
+        const parts = importMatch[2]!.split(',').map((part) => {
+          const parsed = /^(\s*)([A-Za-z0-9_.]+)(.*)$/.exec(part)
+          if (!parsed) return part
+          const next = rewriteModulePath(parsed[2]!, fromPackage, toPackage)
+          if (next !== parsed[2]) rewrites++
+          return `${parsed[1]}${next}${parsed[3]}`
+        })
+        return importMatch[1] + parts.join(',')
+      }
+      const fromMatch = /^(\s*from\s+)([A-Za-z0-9_.]+)(\s+import\b.*)$/.exec(line)
+      if (fromMatch) {
+        const next = rewriteModulePath(fromMatch[2]!, fromPackage, toPackage)
+        if (next !== fromMatch[2]) {
+          rewrites++
+          return `${fromMatch[1]}${next}${fromMatch[3]}`
+        }
+      }
+      return line
+    })
+    .join('\n')
+  return { changed: rewrites > 0, code, rewrites }
+}
+
+function rewriteGoImports(source: string, fromPackage: string, toPackage: string): CodemodResult {
+  let rewrites = 0
+  const code = source.replace(/"([^"\n]+)"/g, (match, value: string) => {
+    const next = rewriteModulePath(value, fromPackage, toPackage)
+    if (next === value) return match
+    rewrites++
+    return `"${next}"`
+  })
+  return { changed: rewrites > 0, code, rewrites }
+}
+
+function rewriteRustImports(source: string, fromPackage: string, toPackage: string): CodemodResult {
+  let rewrites = 0
+  const code = source
+    .split('\n')
+    .map((line) => {
+      const useMatch = /^(\s*use\s+)([A-Za-z0-9_]+)(::.*)$/.exec(line)
+      if (useMatch && useMatch[2] === fromPackage) {
+        rewrites++
+        return `${useMatch[1]}${toPackage}${useMatch[3]}`
+      }
+      const crateMatch = /^(\s*extern\s+crate\s+)([A-Za-z0-9_]+)(\s*;.*)$/.exec(line)
+      if (crateMatch && crateMatch[2] === fromPackage) {
+        rewrites++
+        return `${crateMatch[1]}${toPackage}${crateMatch[3]}`
+      }
+      return line
+    })
+    .join('\n')
+  return { changed: rewrites > 0, code, rewrites }
+}
+
+/**
+ * 把 import / export from / require()（以及 python/go/rust 的导入）里的模块名换成新包。
+ * 只改模块说明符，不动本地变量名和调用方式。
+ */
+export function rewriteModuleSpecifiers(
+  source: string,
+  fromPackage: string,
+  toPackage: string,
+  filePath = 'file.ts',
+): CodemodResult {
+  if (SCRIPT_EXTENSION.test(filePath)) {
+    return rewriteJsModuleSpecifiers(source, fromPackage, toPackage, filePath)
+  }
+  if (/\.py$/i.test(filePath)) return rewritePythonImports(source, fromPackage, toPackage)
+  if (/\.go$/i.test(filePath)) return rewriteGoImports(source, fromPackage, toPackage)
+  if (/\.rs$/i.test(filePath)) return rewriteRustImports(source, fromPackage, toPackage)
+  return { changed: false, code: source, rewrites: 0 }
+}
+
 /** 生成 git apply 可用的单文件 patch。 */
 export function buildFilePatch(filePath: string, before: string, after: string): string {
   const diff = createTwoFilesPatch(`a/${filePath}`, `b/${filePath}`, before, after, '', '', {
@@ -119,6 +211,44 @@ export function swapDependencyInJson(
     return null
   }
   return manifest.replace(pattern, `"${toPackage}": "latest"`)
+}
+
+/** 按清单格式替换依赖；识别不了时返回 null。 */
+export function swapDependencyInManifest(
+  manifestName: string | null,
+  manifest: string | null,
+  fromPackage: string,
+  toPackage: string,
+): string | null {
+  if (!manifestName || !manifest) return null
+  const name = manifestName.toLowerCase()
+  if (name === 'package.json') return swapDependencyInJson(manifest, fromPackage, toPackage)
+
+  const escaped = escapeRegExp(fromPackage)
+  const patterns: Record<string, RegExp[]> = {
+    'requirements.txt': [new RegExp(`^(\\s*)${escaped}(?=["'\\s<>=!~\\[;]|$)`, 'm')],
+    'pyproject.toml': [
+      new RegExp(`(["'])${escaped}(?=["']?\\s*(?:=|,|$)|[<>=!~])`, 'g'),
+      new RegExp(`^(\\s*)${escaped}(?=\\s*=)`, 'm'),
+    ],
+    'cargo.toml': [new RegExp(`^(\\s*["']?)${escaped}(?=["']?\\s*=)`, 'm')],
+    'go.mod': [new RegExp(`^(\\s*(?:require\\s+)?)${escaped}(?=\\s|$)`, 'm')],
+  }
+  const list = patterns[name]
+  if (!list) return null
+
+  let next = manifest
+  for (const pattern of list) {
+    pattern.lastIndex = 0
+    if (!pattern.test(next)) continue
+    pattern.lastIndex = 0
+    next = next.replace(pattern, `$1${toPackage}`)
+  }
+  return next === manifest ? null : next
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 export interface MechanicalSwapInput {
@@ -144,15 +274,17 @@ export function buildMechanicalSwapPatch(input: MechanicalSwapInput): Mechanical
   const files: string[] = []
   const notes: string[] = []
 
-  if (input.manifestName === 'package.json' && input.manifest) {
-    const nextManifest = swapDependencyInJson(
+  if (input.manifestName && input.manifest) {
+    const nextManifest = swapDependencyInManifest(
+      input.manifestName,
       input.manifest,
       input.fromPackage,
       input.toPackage,
     )
     if (nextManifest && nextManifest !== input.manifest) {
-      patches.push(buildFilePatch('package.json', input.manifest, nextManifest))
-      files.push('package.json')
+      const manifestPath = input.manifestName
+      patches.push(buildFilePatch(manifestPath, input.manifest, nextManifest))
+      files.push(manifestPath)
       notes.push(`依赖 ${input.fromPackage} → ${input.toPackage}`)
     }
   }

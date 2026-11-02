@@ -4,6 +4,7 @@ import {
   buildMechanicalSwapPatch,
   rewriteModuleSpecifiers,
   swapDependencyInJson,
+  swapDependencyInManifest,
 } from '../src/codemod.js'
 
 const source = [
@@ -88,5 +89,77 @@ describe('buildMechanicalSwapPatch', () => {
         toPackage: 'ofetch',
       }),
     ).toBeNull()
+  })
+})
+
+describe('rewriteModuleSpecifiers across languages', () => {
+  it('rewrites python imports', () => {
+    const source = 'import old\nimport os, old as alias\nfrom old.sub import thing\n'
+    const result = rewriteModuleSpecifiers(source, 'old', 'next', 'src/app.py')
+    expect(result.rewrites).toBe(3)
+    expect(result.code).toContain('import next')
+    expect(result.code).toContain('import os, next as alias')
+    expect(result.code).toContain('from next.sub import thing')
+  })
+
+  it('rewrites go import paths', () => {
+    const source = 'import (\n  "github.com/old/pkg"\n  "fmt"\n)\n'
+    const result = rewriteModuleSpecifiers(source, 'github.com/old/pkg', 'github.com/new/pkg', 'main.go')
+    expect(result.rewrites).toBe(1)
+    expect(result.code).toContain('"github.com/new/pkg"')
+    expect(result.code).toContain('"fmt"')
+  })
+
+  it('rewrites rust use and extern crate', () => {
+    const source = 'use old::thing;\nextern crate old;\nuse std::fmt;\n'
+    const result = rewriteModuleSpecifiers(source, 'old', 'next', 'src/lib.rs')
+    expect(result.rewrites).toBe(2)
+    expect(result.code).toContain('use next::thing;')
+    expect(result.code).toContain('extern crate next;')
+    expect(result.code).toContain('use std::fmt;')
+  })
+
+  it('returns unchanged for unsupported files', () => {
+    const result = rewriteModuleSpecifiers('old\n', 'old', 'next', 'README.md')
+    expect(result.changed).toBe(false)
+  })
+})
+
+describe('swapDependencyInManifest', () => {
+  it('handles requirements, pyproject, go.mod and Cargo.toml', () => {
+    expect(swapDependencyInManifest('requirements.txt', 'old>=1.0\nother==2\n', 'old', 'next')).toBe(
+      'next>=1.0\nother==2\n',
+    )
+    expect(
+      swapDependencyInManifest('pyproject.toml', 'dependencies = ["old>=1.0", "other"]\n', 'old', 'next'),
+    ).toContain('"next>=1.0"')
+    expect(
+      swapDependencyInManifest('go.mod', 'require github.com/old/pkg v1.2.3\n', 'github.com/old/pkg', 'github.com/new/pkg'),
+    ).toContain('github.com/new/pkg')
+    expect(swapDependencyInManifest('Cargo.toml', '[dependencies]\nold = "1.0"\n', 'old', 'next')).toContain(
+      'next = "1.0"',
+    )
+  })
+
+  it('returns null for unknown manifests or missing dependencies', () => {
+    expect(swapDependencyInManifest('composer.json', '{}', 'old', 'next')).toBeNull()
+    expect(swapDependencyInManifest('requirements.txt', 'other==1\n', 'old', 'next')).toBeNull()
+    expect(swapDependencyInManifest(null, null, 'old', 'next')).toBeNull()
+  })
+})
+
+describe('buildMechanicalSwapPatch for python', () => {
+  it('combines requirements and a python source file', () => {
+    const result = buildMechanicalSwapPatch({
+      manifestName: 'requirements.txt',
+      manifest: 'old>=1.0\n',
+      targetFile: { path: 'app/main.py', content: 'from old import client\n' },
+      fromPackage: 'old',
+      toPackage: 'next',
+    })
+    expect(result?.files).toEqual(['requirements.txt', 'app/main.py'])
+    expect(result?.patch).toContain('diff --git a/requirements.txt')
+    expect(result?.patch).toContain('+next>=1.0')
+    expect(result?.patch).toContain('+from next import client')
   })
 })

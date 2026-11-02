@@ -59,6 +59,9 @@
   排名（最多 300 条），页面按快照顺序取切片；快照缺失/过期时回退实时排名，并在响应结束后补建。
   「加载更多」不再重新排名整个候选池。
 
+- 换库沙盘的机械模式扩展到 Python / Go / Rust，并支持 requirements.txt、pyproject.toml、
+  go.mod、Cargo.toml 的依赖替换；MCP 新增 `generate_swap_trial`。
+- 新增 `pnpm radar demo-seed`：写入真实仓库、demo 画像、收藏、订阅和维护项目，方便无 Key 的演示实例。
 - 换库沙盘新增「只做机械替换」模式：用 Babel 解析 import/require/re-export，确定性重写模块名，
   不依赖模型；沙箱验证照旧。
 - MCP 新增 `generate_integration_preflight` / `generate_comparison` / `get_job_status`，

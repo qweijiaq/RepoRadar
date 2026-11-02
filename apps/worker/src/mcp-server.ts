@@ -556,7 +556,7 @@ function createServer(pool: DbPool): McpServer {
 
   async function queueJob(
     login: string | undefined,
-    kind: 'integration-trial' | 'comparison',
+    kind: 'integration-trial' | 'comparison' | 'swap-trial',
     title: string,
     payload: Record<string, unknown>,
   ): Promise<QueueResult> {
@@ -566,7 +566,7 @@ function createServer(pool: DbPool): McpServer {
     if (!token) return { ok: false, error: '这个用户没有保存 GitHub token，请先在 Web 登录授权' }
     try {
       await assertJobQuota(pool, user.id, kind)
-      if (kind === 'integration-trial') await assertAiQuota(pool, user.id)
+      await assertAiQuota(pool, user.id)
       const jobId = await createJob(pool, {
         userId: user.id,
         kind,
@@ -625,6 +625,39 @@ function createServer(pool: DbPool): McpServer {
         project,
         candidates,
         origin: '/compare',
+      })
+      if (!result.ok) return errorResult(result.error)
+      return textResult({
+        jobId: result.jobId,
+        status: 'queued',
+        hint: 'worker 处理完后，用 get_job_status 查看 result.href',
+      })
+    },
+  )
+
+  server.registerTool(
+    'generate_swap_trial',
+    {
+      title: '触发换库预演',
+      description:
+        '把项目里的一个包换成另一个包，排队一次沙箱迁移验证。mode=mechanical 时用 Babel 机械替换、不调用模型。',
+      inputSchema: {
+        project: z.string().describe('你的项目，owner/name'),
+        from: z.string().describe('旧包名，例如 axios'),
+        to: z.string().describe('新包名，例如 ofetch'),
+        file: z.string().optional().describe('可选：要重写 import 的文件'),
+        mode: z.enum(['llm', 'mechanical']).optional(),
+        login: z.string().optional(),
+      },
+    },
+    async ({ project, from, to, file, mode, login }) => {
+      const result = await queueJob(login, 'swap-trial', `换库预演 · ${project} ${from} → ${to}`, {
+        project,
+        fromPackage: from,
+        toPackage: to,
+        ...(file ? { file } : {}),
+        ...(mode ? { mode } : {}),
+        origin: '/workbench/swap',
       })
       if (!result.ok) return errorResult(result.error)
       return textResult({

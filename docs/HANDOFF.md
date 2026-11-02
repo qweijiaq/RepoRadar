@@ -22,6 +22,18 @@ pnpm test:e2e
 - 主机可用的 Docker（接入预演、换库沙盘的沙箱验证）；
 - GitHub OAuth 或 `GITHUB_TOKEN`（读取 Issue、仓库文件、release）。
 
+## 演示数据
+
+没有模型 Key 也可以先把界面填满：
+
+```bash
+pnpm radar demo-seed
+```
+
+会写入 10 个真实仓库（带中文摘要/评分/7 天前 star 快照）、用户 `demo-radar` 的画像、一条收藏、
+一条订阅和两个「维护中」项目。命令幂等，可重复执行；数据仅用于演示，**不代表真实归属**。
+写入后 `pnpm radar list` 和 Web 首页都会立刻有内容；MCP 可以用 `login: demo-radar` 体验个性化工具。
+
 ## 逐项验收
 
 ### 1 + 2. 接入预演 / 适配层生成
