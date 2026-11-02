@@ -50,7 +50,8 @@ pnpm eval:ai -- --models=a,b --prices="a:0.14:0.28,b:0.27:1.10"  # 临时价格�
 
 2026-11-02 在加入「补丁不可应用时重试」后，用 `--repeat=3` 对比：
 两个模型都是 **6/6**；chat 35.1s、输出 6.3k tokens，flash 163.3s、输出 27.7k tokens。
-结论：**推荐默认用 `deepseek-chat`**，`deepseek-flash` 作为备选；完整数据、切换方式和注意事项见
+结论：**默认已切换为 `deepseek-chat`**，`deepseek-flash` 作为备选；切换后默认配置复跑 6/6（36.1s），
+真实 `vercel/arg` 清单的试接入补丁也能应用。完整数据、切换方式和注意事项见
 [MODEL-SELECTION.md](MODEL-SELECTION.md)。
 
 ## 演示数据

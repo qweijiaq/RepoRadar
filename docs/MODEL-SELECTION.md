@@ -40,8 +40,16 @@ pnpm eval:ai -- --models=deepseek-flash,deepseek-chat --repeat=3
 
 ## 如何应用
 
-在设置页把模型改为 `deepseek-chat`，或设置 `LLM_MODEL=deepseek-chat`。当前部署保存的配置仍是
-`deepseek-flash`，切换前建议先用真实仓库跑一两次试接入确认。
+在设置页把模型改为 `deepseek-chat`，或设置 `LLM_MODEL=deepseek-chat`。
+
+**2026-11-02 已切换并验证**：
+
+- 当前部署保存的模型配置已从 `deepseek-flash` 改为 `deepseek-chat`（`radar doctor` 可见）。
+- 用默认配置复跑 `pnpm eval:ai -- --repeat=3`：**6/6**，36.1s，输入 5,111 / 输出 5,544 tokens。
+- 真实仓库验证：项目 `vercel/arg` + 候选 `sindresorhus/meow`，1.7s 生成补丁，`git apply` 成功，
+  `package.json` 增加 `"meow": "^10.1.5"`（未提供目标文件，只改清单）。
+- 本机 `GITHUB_TOKEN` 为空且 git 克隆被网络限制，所以没有跑通「克隆 + Docker 构建」；
+  补丁对真实清单的应用已验证，完整沙箱验证需要在有 token 和 Docker 网络的环境执行。
 
 ## 何时重新评估
 
