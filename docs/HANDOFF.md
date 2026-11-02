@@ -46,9 +46,12 @@ pnpm eval:ai -- --models=a,b --prices="a:0.14:0.28,b:0.27:1.10"  # 临时价格�
 2026-11-02 单模型基线是 3/3。
 
 多模型运行会按模型汇总通过数、耗时、输入/输出 tokens 和估算成本（价格来自 `/ops` 或 `--prices`），
-推荐顺序是「通过数 → 成本 → 耗时」。实测两次：deepseek-flash 两次都通过，但一次对比要 ~60s；
-deepseek-chat 快很多（~8s），但有一次试接入补丁 `git apply` 失败。单次样本不足以定论，
-建议对候选模型重复跑几次，再结合 `/ops` 的真实成功率决定默认模型。
+推荐顺序是「通过数 → 成本 → 耗时」。
+
+2026-11-02 用 `--repeat=3` 对比了 `deepseek-flash` 与 `deepseek-chat`：
+flash **6/6**（132.9s），chat **5/6**（31.6s，一次试接入补丁无法应用）。
+结论：**默认继续用 `deepseek-flash`**，完整数据与重新评估条件见
+[MODEL-SELECTION.md](MODEL-SELECTION.md)。
 
 ## 演示数据
 

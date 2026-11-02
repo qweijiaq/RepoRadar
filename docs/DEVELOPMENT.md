@@ -59,7 +59,7 @@ pnpm radar pipeline --topics=llm --limit=20
 | `pnpm radar doctor` | 检查数据库、迁移、候选池、模型/Embedding、GitHub 授权、邮件、站点地址和任务队列 |
 | `pnpm radar backfill-identities` | 为已有仓库回填 GitHub 稳定 ID，支持 `--limit` 和 `--delay-ms` |
 | `pnpm radar demo-seed` | 写入演示数据：10 个真实仓库 + 画像/收藏/订阅/维护项目，可重复执行 |
-| `pnpm eval:ai` | 固定场景评测 AI 输出质量；`--models=a,b` 多模型对比（含 tokens/成本），报告写到 `eval-results/` |
+| `pnpm eval:ai` | 固定场景评测 AI 输出质量；`--models=a,b` 多模型对比（含 tokens/成本），报告写到 `eval-results/`。默认模型结论见 `docs/MODEL-SELECTION.md` |
 | `pnpm eval:llm` | 用 6 个固定 README 样本回归评测富化提示词，通过率低于 80% 时失败 |
 
 常用参数：`--topics`、`--days`、`--pages`、`--delay-ms`、`--language`、`--limit`、`--format=md|json`、`--dry-run`。`backfill-identities` 需要 `GITHUB_TOKEN` 或已登录用户 token。运行 `pnpm radar help` 查看完整说明。
