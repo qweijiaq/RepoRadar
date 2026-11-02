@@ -1,17 +1,21 @@
 import Link from 'next/link'
 import {
   loadAlertLog,
+  loadLlmPrices,
   loadOpsConfig,
   listAdminUserOverview,
   loadJobFailureReasons,
   loadJobKindMetrics,
   loadOpsMetrics,
   loadRecentFailures,
+  loadUsageByModel,
+  priceUsage,
   renderPrometheus,
   runDoctor,
+  totalCost,
   getPool,
 } from '@repo-radar/core'
-import { resetOpsConfigAction } from '@/app/actions'
+import { clearLlmPricesAction, resetOpsConfigAction, saveLlmPricesAction } from '@/app/actions'
 import { requireAdmin } from '@/lib/admin'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { OpsConfigForm } from './ops-config-form'
@@ -39,15 +43,25 @@ function bytes(value: number): string {
 }
 
 interface OpsPageProps {
-  searchParams: Promise<{ saved?: string; reset?: string }>
+  searchParams: Promise<{ saved?: string; reset?: string; prices?: string }>
 }
 
 export default async function OpsPage({ searchParams }: OpsPageProps) {
   await requireAdmin()
   const params = await searchParams
   const pool = getPool()
-  const [metrics, failures, config, alertLog, users, doctor, jobMetrics, failureReasons] =
-    await Promise.all([
+  const [
+    metrics,
+    failures,
+    config,
+    alertLog,
+    users,
+    doctor,
+    jobMetrics,
+    failureReasons,
+    llmPrices,
+    usageByModel,
+  ] = await Promise.all([
       loadOpsMetrics(pool),
       loadRecentFailures(pool),
       loadOpsConfig(pool),
@@ -56,7 +70,12 @@ export default async function OpsPage({ searchParams }: OpsPageProps) {
       runDoctor(pool),
       loadJobKindMetrics(pool, 30),
       loadJobFailureReasons(pool, 30, 8),
+      loadLlmPrices(pool),
+      loadUsageByModel(pool, 30),
     ])
+
+  const pricedUsage = priceUsage(usageByModel, llmPrices)
+  const estimatedTotal = totalCost(pricedUsage)
 
   return (
     <div className="page narrow">
@@ -130,6 +149,14 @@ export default async function OpsPage({ searchParams }: OpsPageProps) {
           ))}
         </ul>
       </section>
+
+      {params.prices === 'saved' ? (
+        <div className="notice success">模型单价已保存。</div>
+      ) : null}
+      {params.prices === 'cleared' ? <div className="notice">模型单价已清空。</div> : null}
+      {params.prices === 'invalid' ? (
+        <div className="notice">单价需要是非负数字；输入和输出要么都填，要么都留空。</div>
+      ) : null}
 
       <section className="panel">
         <h2>用户概览</h2>
@@ -234,6 +261,111 @@ export default async function OpsPage({ searchParams }: OpsPageProps) {
         <p className="muted small">
           成功率只统计已结束的任务；耗时从开始执行算到完成。token 来自模型返回的 usage，未返回时为 0。
         </p>
+      </section>
+
+      <section className="panel">
+        <h2>AI 成本（近 30 天）</h2>
+        <p className="muted small">
+          单价按每 100 万 token 的美元价格配置，只估算已配置单价的模型；实际账单可能因缓存或折扣有差异。
+        </p>
+        {pricedUsage.length === 0 ? (
+          <p className="muted small">还没有模型调用记录。</p>
+        ) : (
+          <div className="admin-user-table">
+            <div className="admin-user-row admin-user-head">
+              <span>模型</span>
+              <span>调用</span>
+              <span>输入 / 输出 tokens</span>
+              <span>单价（输入 / 输出）</span>
+              <span>估算成本</span>
+            </div>
+            {pricedUsage.map((row) => (
+              <div className="admin-user-row" key={row.model}>
+                <span>{row.model}</span>
+                <span>{row.calls} 次</span>
+                <span>
+                  {row.promptTokens.toLocaleString('zh-CN')} /{' '}
+                  {row.completionTokens.toLocaleString('zh-CN')}
+                </span>
+                <span>
+                  {row.price ? `$${row.price.input} / $${row.price.output}` : '未配置'}
+                </span>
+                <span>{row.cost === null ? '—' : `$${row.cost.toFixed(4)}`}</span>
+              </div>
+            ))}
+            <div className="admin-user-row">
+              <span>合计</span>
+              <span />
+              <span />
+              <span />
+              <span>${estimatedTotal.toFixed(4)}</span>
+            </div>
+          </div>
+        )}
+
+        <form action={saveLlmPricesAction}>
+          <h3 className="maintain-subhead">模型单价（USD / 1M tokens）</h3>
+          <div className="price-form">
+            <div className="price-form-row muted small">
+              <span>模型</span>
+              <span>输入</span>
+              <span>输出</span>
+            </div>
+            {pricedUsage.map((row) => (
+              <div className="price-form-row" key={`price-${row.model}`}>
+                <span>
+                  {row.model}
+                  <input type="hidden" name="model" value={row.model} />
+                </span>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  name="input"
+                  defaultValue={row.price?.input ?? ''}
+                />
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  name="output"
+                  defaultValue={row.price?.output ?? ''}
+                />
+              </div>
+            ))}
+            <div className="price-form-row">
+              <input className="input" name="model" placeholder="新模型名" />
+              <input
+                className="input"
+                type="number"
+                min="0"
+                step="0.0001"
+                name="input"
+                placeholder="输入"
+              />
+              <input
+                className="input"
+                type="number"
+                min="0"
+                step="0.0001"
+                name="output"
+                placeholder="输出"
+              />
+            </div>
+          </div>
+          <div className="feed-actions">
+            <button className="btn solid" type="submit">
+              保存单价
+            </button>
+          </div>
+        </form>
+        <form action={clearLlmPricesAction}>
+          <button className="btn quiet small" type="submit">
+            清空单价
+          </button>
+        </form>
       </section>
 
       <div className="maintain-columns">

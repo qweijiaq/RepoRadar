@@ -4667,3 +4667,17 @@ details[open] > .advanced-summary::before {
   font-size: 13px;
   color: var(--text-70);
 }
+
+
+.price-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.price-form-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+}

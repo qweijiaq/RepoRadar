@@ -11,6 +11,7 @@ import {
   chatCompletion,
   clearIntegrationOutcome,
   clearMailConfig,
+  clearLlmPrices,
   clearOpsConfig,
   clearQuotaConfig,
   clearRetentionConfig,
@@ -35,6 +36,7 @@ import {
   loadFeedback,
   loadMailStatus,
   loadStoredLlmConfig,
+  saveLlmPrices,
   loadSubscriptions,
   markNotificationRead,
   markNotificationsRead,
@@ -969,6 +971,39 @@ export async function resetOpsConfigAction(): Promise<void> {
   await clearOpsConfig(getPool())
   revalidatePath('/ops')
   redirect('/ops?reset=1')
+}
+
+export async function saveLlmPricesAction(formData: FormData): Promise<void> {
+  await requireAdmin()
+  const models = formData.getAll('model').map(String)
+  const inputs = formData.getAll('input').map(String)
+  const outputs = formData.getAll('output').map(String)
+
+  const prices: Record<string, { input: number; output: number }> = {}
+  for (let index = 0; index < models.length; index++) {
+    const model = models[index]?.trim()
+    if (!model) continue
+    const rawInput = inputs[index]?.trim() ?? ''
+    const rawOutput = outputs[index]?.trim() ?? ''
+    if (!rawInput && !rawOutput) continue
+    const input = Number(rawInput)
+    const output = Number(rawOutput)
+    if (!Number.isFinite(input) || input < 0 || !Number.isFinite(output) || output < 0) {
+      redirect('/ops?prices=invalid')
+    }
+    prices[model] = { input, output }
+  }
+
+  await saveLlmPrices(getPool(), prices)
+  revalidatePath('/ops')
+  redirect('/ops?prices=saved')
+}
+
+export async function clearLlmPricesAction(): Promise<void> {
+  await requireAdmin()
+  await clearLlmPrices(getPool())
+  revalidatePath('/ops')
+  redirect('/ops?prices=cleared')
 }
 
 export async function saveGithubWebhookSecretAction(formData: FormData): Promise<void> {
