@@ -29,7 +29,10 @@ import {
   checkPatchShape,
   countCodeChunks,
   generateIntegrationTrial,
+  generateRepoProfile,
   getSymbolSplitter,
+  loadRepoProfile,
+  repoProfileSourceHash,
   indexRepoCode,
   searchCodeChunks,
   buildMechanicalSwapPatch,
@@ -61,6 +64,7 @@ import {
   saveIssuePlan,
   saveMaintainerReport,
   savePatchDraft,
+  saveRepoProfile,
   saveSimilarReport,
   runDependencyUpgrade,
   saveWatchMatches,
@@ -789,6 +793,54 @@ async function swapTrialJob(
   }
 }
 
+async function repoProfileJob(
+  pool: DbPool,
+  userId: number,
+  job: JobRecord,
+  progress: Progress,
+): Promise<JobResult> {
+  const token = requireToken(job)
+  const repo = job.payload.repo?.trim()
+  if (!repo) throw new Error('缺少仓库名')
+  const llm = await loadLlm(pool)
+
+  await progress('读取 README 和项目清单…')
+  const context = await loadProjectContext(repo, token)
+  if (!context.readme && !context.manifest) {
+    throw new Error('没有读到 README 或项目清单，无法生成画像')
+  }
+
+  const sourceHash = repoProfileSourceHash(context.readme, context.manifest)
+  const existing = await loadRepoProfile(pool, repo)
+  if (existing?.sourceHash === sourceHash) {
+    return { href: `/r/${repo}#profile`, label: '功能画像已是最新' }
+  }
+
+  await progress('模型生成功能画像…')
+  const profile = await generateRepoProfile(
+    {
+      repo,
+      description: context.description,
+      readme: context.readme,
+      manifestName: context.manifestName,
+      manifest: context.manifest,
+      topics: context.topics,
+      language: context.language,
+    },
+    llm,
+  )
+  await saveRepoProfile(pool, repo, profile, { model: llm.model, sourceHash })
+
+  await addNotification(pool, userId, {
+    kind: 'job',
+    title: `功能画像已生成：${repo}`,
+    body: profile.positioning,
+    url: `/r/${repo}#profile`,
+  })
+
+  return { href: `/r/${repo}#profile`, label: '查看功能画像' }
+}
+
 async function upgradeJob(pool: DbPool, userId: number, job: JobRecord, progress: Progress): Promise<JobResult> {
   const repo = job.payload.repo?.trim()
   const packageName = job.payload.packageName?.trim()
@@ -1160,6 +1212,8 @@ export async function runJobHandler(pool: DbPool, job: JobRecord, userId: number
       return integrationTrialJob(pool, userId, job, progress)
     case 'swap-trial':
       return swapTrialJob(pool, userId, job, progress)
+    case 'repo-profile':
+      return repoProfileJob(pool, userId, job, progress)
     case 'patch':
       return patchJob(pool, userId, job, progress)
     case 'upgrade':

@@ -15,9 +15,13 @@ import {
   findLatestIntegrationReport,
   findLatestMaintainerReport,
   findLatestVerification,
+  computeTrendStats,
   createJob,
   encryptJobToken,
   getJob,
+  loadRepoProfile,
+  loadStoredLlmConfig,
+  loadTrendReport,
   loadUserGithubToken,
   findRepoByFullName,
   findUserByLogin,
@@ -42,6 +46,7 @@ import {
   renderDigestMarkdown,
   resolveBaseUrl,
   risingRepos,
+  searchByIntent,
   searchEnrichedRepos,
   setFeedback,
   type DbPool,
@@ -665,6 +670,69 @@ function createServer(pool: DbPool): McpServer {
         status: 'queued',
         hint: 'worker 处理完后，用 get_job_status 查看 result.href',
       })
+    },
+  )
+
+  server.registerTool(
+    'get_trends',
+    {
+      title: '本周趋势',
+      description: '返回最近一次趋势简报（AI 摘要 + 增长最快仓库 + topic 动量）；没有简报时返回数据版',
+      inputSchema: {},
+    },
+    async () => {
+      const report = await loadTrendReport(pool)
+      if (report) return textResult(report)
+      const stats = await computeTrendStats(pool)
+      return textResult({ stats, hint: 'AI 简报尚未生成，worker 会自动补上' })
+    },
+  )
+
+  server.registerTool(
+    'find_repos',
+    {
+      title: '意图搜索仓库',
+      description: '用自然语言描述需求，返回理解后的关键词/过滤条件和带解释的候选仓库',
+      inputSchema: {
+        query: z.string().describe('需求描述，例如「能解析 PDF 表格的 TypeScript 库」'),
+        limit: z.number().int().min(1).max(10).optional(),
+      },
+    },
+    async ({ query, limit }) => {
+      const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
+      if (!llm) return errorResult('还没有配置 AI 模型')
+      const result = await searchByIntent(pool, llm, query, { limit: limit ?? 5 })
+      return textResult({
+        intent: result.intent,
+        answer: result.answer,
+        results: result.results.map((hit) => ({
+          ...toItem(hit.repo),
+          fit: hit.fit,
+          why: hit.why,
+          gaps: hit.gaps,
+        })),
+      })
+    },
+  )
+
+  server.registerTool(
+    'explain_repo',
+    {
+      title: '解释仓库功能',
+      description: '返回仓库的 AI 功能画像：定位、能力点、适用场景和上手步骤；没有画像时给出生成提示',
+      inputSchema: {
+        repo: z.string().describe('仓库全名，owner/name'),
+      },
+    },
+    async ({ repo }) => {
+      const profile = await loadRepoProfile(pool, repo)
+      if (!profile) {
+        return textResult({
+          found: false,
+          hint: '还没有功能画像：在仓库页点击「生成功能画像」，或在 Web 的 /r/<owner>/<name> 生成',
+        })
+      }
+      return textResult({ found: true, ...profile })
     },
   )
 

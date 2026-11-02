@@ -23,6 +23,8 @@ import {
   loadDiscoveryStatus,
   loadOpsConfig,
   loadStoredLlmConfig,
+  buildTrendReport,
+  loadTrendReport,
   logEvent,
   markDeliveryFailed,
   markDeliverySent,
@@ -281,6 +283,19 @@ const IMPACT_INTERVAL = 6 * 60 * 60 * 1000
 let lastImpactCheckAt = 0
 
 /** 已接入的库发新版本时，写一条回访并通知用户。 */
+async function scheduledTrendBrief(): Promise<void> {
+  const latest = await loadTrendReport(pool)
+  if (latest && Date.now() - Date.parse(latest.generatedAt) < 12 * 60 * 60 * 1000) return
+  const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool).catch(() => null))
+  if (!llm) return
+  try {
+    await buildTrendReport(pool, llm)
+    console.log('[worker] 趋势简报已更新')
+  } catch (error) {
+    console.error('[worker] 趋势简报生成失败：', error)
+  }
+}
+
 async function scheduledIntegrationImpacts(): Promise<void> {
   if (Date.now() - lastImpactCheckAt < IMPACT_INTERVAL) return
   lastImpactCheckAt = Date.now()
@@ -406,6 +421,7 @@ async function loop(): Promise<void> {
       await scheduledRetention()
       await scheduledFeedSnapshots()
       await scheduledIntegrationImpacts()
+      await scheduledTrendBrief()
       await scheduledAlerts()
     } catch (error) {
       console.error('[worker] loop error:', error)

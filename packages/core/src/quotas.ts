@@ -115,6 +115,7 @@ const AI_JOB_KINDS = new Set<JobKind>([
   'similar',
   'integration-trial',
   'swap-trial',
+  'repo-profile',
 ])
 
 export function jobUsesAi(kind: JobKind): boolean {

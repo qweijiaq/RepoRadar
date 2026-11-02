@@ -60,6 +60,9 @@
   「加载更多」不再重新排名整个候选池。
 
 - 试接入/换库生成补丁后会做结构检查，失败时带错误重试一次；重试后 `deepseek-chat` 从 5/6 提升到 6/6。
+- 新增意图搜索 `/discover`：AI 解析需求 + 关键词/向量混合召回 + 重排解释；MCP `find_repos`。
+- 新增仓库功能画像（迁移 `0014_repo_profiles`）：README/清单生成定位、能力、适用场景和上手步骤；MCP `explain_repo`。
+- 新增趋势简报 `/trends`：7 天增速/topic 动量/新项目 + worker 每 12 小时生成 AI 简报；MCP `get_trends`。
 - 真实仓库沙箱验证：`vercel/arg`（API 重建 10 个文件）+ `sindresorhus/meow`，1.6s 生成补丁，
   Docker 中 `npm install` + `npm test` 通过（39 tests）。
 - 已把当前部署的默认模型切换为 `deepseek-chat` 并验证：默认配置评测 6/6（36.1s），

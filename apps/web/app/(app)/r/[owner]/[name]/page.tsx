@@ -7,6 +7,7 @@ import {
   listCollections,
   loadHandledState,
   loadReleaseHistory,
+  loadRepoProfile,
   loadStarHistory,
   loadUserStars,
   loadVerifications,
@@ -15,6 +16,7 @@ import {
   getPool,
 } from '@repo-radar/core'
 import { addToCollectionAction } from '@/app/actions'
+import { generateRepoProfileAction } from '@/app/(app)/jobs/enqueue'
 import { auth } from '@/auth'
 import { StarChart } from '@/components/StarChart'
 import { sessionUser } from '@/lib/session'
@@ -30,6 +32,7 @@ export const dynamic = 'force-dynamic'
 
 interface RepoPageProps {
   params: Promise<{ owner: string; name: string }>
+  searchParams: Promise<{ error?: string }>
 }
 
 export async function generateMetadata({ params }: RepoPageProps) {
@@ -49,18 +52,20 @@ export async function generateMetadata({ params }: RepoPageProps) {
   }
 }
 
-export default async function RepoPage({ params }: RepoPageProps) {
+export default async function RepoPage({ params, searchParams }: RepoPageProps) {
   const { owner, name } = await params
+  const query = await searchParams
   const fullName = `${owner}/${name}`
   const pool = getPool()
   const repo = await findRepoByFullName(pool, fullName)
   if (!repo) notFound()
 
-  const [verifications, history, releases, allRepos] = await Promise.all([
+  const [verifications, history, releases, allRepos, profile] = await Promise.all([
     loadVerifications(pool, fullName, 5),
     loadStarHistory(pool, repo.id, 30),
     loadReleaseHistory(pool, fullName, 8),
     findEnrichedRepos(pool, 500),
+    loadRepoProfile(pool, fullName),
   ])
   const similar = findSimilarRepos(repo, allRepos, 4)
   const latestVerification = verifications[0] ?? null
@@ -103,6 +108,7 @@ export default async function RepoPage({ params }: RepoPageProps) {
 
       <nav className="repo-detail-toc" aria-label="仓库详情导航">
         <a href="#about">这是什么</a>
+        <a href="#profile">功能画像</a>
         <a href="#trend">star 走势</a>
         <a href="#releases">版本</a>
         <a href="#similar">同类项目</a>
@@ -143,6 +149,68 @@ export default async function RepoPage({ params }: RepoPageProps) {
               <p>{repo.reason}</p>
             </>
           ) : null}
+        </section>
+
+        <section className="panel" id="profile">
+          <h2>AI 功能画像</h2>
+          {query.error === 'need-token' ? (
+            <div className="notice">生成功能画像需要 GitHub 授权，请重新登录后再试。</div>
+          ) : null}
+          {profile ? (
+            <>
+              <p className="profile-positioning">{profile.positioning}</p>
+              <h3 className="maintain-subhead">核心能力</h3>
+              <ul className="maintain-list">
+                {profile.features.map((feature) => (
+                  <li key={feature.name}>
+                    <strong>{feature.name}</strong>：{feature.detail}
+                  </li>
+                ))}
+              </ul>
+              <div className="maintain-columns">
+                <div>
+                  <h3 className="maintain-subhead">适合</h3>
+                  <ul className="maintain-list">
+                    {profile.useCases.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                {profile.notFor.length > 0 ? (
+                  <div>
+                    <h3 className="maintain-subhead">不适合</h3>
+                    <ul className="maintain-list">
+                      {profile.notFor.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+              <h3 className="maintain-subhead">快速上手</h3>
+              <ol className="maintain-actions">
+                {profile.quickstart.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+              <p className="muted small">
+                由 {profile.model ?? '模型'} 生成于{' '}
+                {new Date(profile.generatedAt).toLocaleString('zh-CN')}；README 变化后重新生成即可。
+              </p>
+            </>
+          ) : (
+            <p className="muted">
+              还没有功能画像。生成一次后会缓存，直到 README 或项目清单发生变化。
+            </p>
+          )}
+          <div className="feed-actions">
+            <form action={generateRepoProfileAction}>
+              <input type="hidden" name="repo" value={repo.fullName} />
+              <button className="btn quiet small" type="submit">
+                {profile ? '重新生成功能画像' : '生成功能画像'}
+              </button>
+            </form>
+          </div>
         </section>
 
         <section className="panel" id="trend">

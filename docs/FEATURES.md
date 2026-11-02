@@ -65,6 +65,14 @@ README 只保留产品概览和启动方式；这里按页面整理 RepoRadar �
 
 MCP server 在原有工具之外提供 `pick_library`（按任务选库）、`integration_preflight`（最近一次试接入结果）和 `similar_diff`（能力矩阵），供 Claude Code / Cursor 在写代码时调用。
 
+## 意图搜索、功能画像与趋势
+
+- **意图搜索**（`/discover`）：一句话需求 → AI 拆成关键词/语言/必须能力 → 关键词 + 向量混合召回 → AI 重排，每条结果给出「为什么匹配 / 缺口」。支持示例查询和结果缓存；MCP 有 `find_repos`。
+- **功能画像**（仓库页 `/r/<owner>/<name>`）：从 README + 项目清单生成「定位 / 核心能力 / 适合 / 不适合 / 快速上手」，按 README hash 缓存；README 变化后可重新生成。MCP 有 `explain_repo`。
+- **趋势简报**（`/trends`）：用 7 天 star 增速、topic 动量和新项目生成数据版趋势；worker 每 12 小时用模型写一份简报（headline + 3-5 条 + 观察项），MCP 有 `get_trends`。
+
+这三个功能复用已有的 enrichment、embedding、任务队列和模型配置，不需要额外服务。
+
 ## 接入建议
 
 生成建议后，可以对任意一条点「试接入（沙箱预演）」：worker 会在 Docker 沙箱里克隆你的项目、生成一份试接入补丁（加依赖，必要时加最小调用）、执行 `git apply --check` 和安装/构建，然后把 diff、命令和日志保存在补丁页。预演不会修改远端仓库，也不会自动提交或开 PR。

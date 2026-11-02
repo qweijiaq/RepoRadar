@@ -50,6 +50,7 @@ describe.skipIf(!hasTestDatabase)('database integration', () => {
       '0010_code_chunks',
       '0011_impact_kind',
       '0012_code_chunk_symbol',
+      '0014_repo_profiles',
     ])
   })
 

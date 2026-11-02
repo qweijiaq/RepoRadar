@@ -4681,3 +4681,34 @@ details[open] > .advanced-summary::before {
   gap: 8px;
   align-items: center;
 }
+
+
+.profile-positioning {
+  font-size: 15px;
+  line-height: 1.7;
+  margin: 0 0 12px;
+}
+
+
+.discover-form {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.discover-form .input {
+  flex: 1;
+}
+
+.discover-intent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.discover-results {
+  display: grid;
+  gap: 14px;
+}

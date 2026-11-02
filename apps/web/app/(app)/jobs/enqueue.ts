@@ -319,6 +319,26 @@ export async function enqueueIntegrationTrialAction(formData: FormData): Promise
   })
 }
 
+export async function generateRepoProfileAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
+  const { pool, userId } = await context()
+
+  const repo = String(formData.get('repo') ?? '').trim()
+  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo)) redirect('/feed')
+
+  const access = await resolveRepoAccess(session, currentUser.login, { requireRepoScope: false })
+  if (!access.access) redirect(`/r/${repo}?error=need-token`)
+
+  await enqueueAndGo(pool, userId, 'repo-profile', `功能画像 · ${repo}`, {
+    repo,
+    token: encryptJobToken(access.access.token),
+    origin: `/r/${repo}`,
+  })
+}
+
 export async function enqueueSwapTrialAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)

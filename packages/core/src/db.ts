@@ -727,3 +727,25 @@ export async function loadRecentReleaseRepoNames(pool: DbPool, days = 7): Promis
   )
   return new Set(rows.map((row) => row.repo_full_name))
 }
+
+/** 按向量相似度检索已富化仓库，供意图搜索使用。 */
+export async function searchEnrichedReposByEmbedding(
+  pool: DbPool,
+  embedding: number[],
+  limit = 30,
+): Promise<EnrichedRepoRecord[]> {
+  const { rows } = await pool.query<EnrichedRepoRow>(
+    `SELECT ${REPO_COLUMNS}, summary, problem, audience, verdict, reason, quality_score,
+       (SELECT s.stars FROM star_snapshots s
+          WHERE s.repo_id = repos.id AND s.captured_on <= CURRENT_DATE - INTERVAL '7 days'
+          ORDER BY s.captured_on DESC LIMIT 1) AS stars_7d,
+       embedding::text AS embedding,
+       verify_status, verified_at
+     FROM repos
+     WHERE enriched_at IS NOT NULL AND embedding IS NOT NULL
+     ORDER BY embedding <=> $1::vector
+     LIMIT $2`,
+    [JSON.stringify(embedding), limit],
+  )
+  return rows.map((row) => mapEnrichedRow(row))
+}

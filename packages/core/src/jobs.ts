@@ -17,6 +17,7 @@ export type JobKind =
   | 'similar'
   | 'integration-trial'
   | 'swap-trial'
+  | 'repo-profile'
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 

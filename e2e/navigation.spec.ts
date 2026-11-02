@@ -68,3 +68,11 @@ test('swap lab and contribution radar render', async ({ page }) => {
   await page.goto('/workbench/contribute', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: '用你熟悉的栈，给相似项目补一块' })).toBeVisible()
 })
+
+test('discover and trends pages render', async ({ page }) => {
+  await page.goto('/discover', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '用一句话找到你想要的仓库' })).toBeVisible()
+
+  await page.goto('/trends', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '本周开源在涨什么' })).toBeVisible()
+})

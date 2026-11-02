@@ -24,6 +24,7 @@ const KIND_LABEL: Record<JobKind, string> = {
   similar: '相似项目对比',
   'integration-trial': '接入预演',
   'swap-trial': '换库预演',
+  'repo-profile': '功能画像',
 }
 
 const STATUS_LABEL: Record<JobStatus, string> = {
