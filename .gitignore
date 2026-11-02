@@ -26,3 +26,5 @@ test-results/
 .next-e2e/
 
 backups/
+
+eval-results/

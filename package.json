@@ -26,7 +26,8 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit && tsc -p e2e --noEmit && pnpm --filter @repo-radar/web run typecheck",
     "worker": "pnpm --filter @repo-radar/worker exec tsx src/worker.ts",
-    "eval:llm": "tsx packages/core/eval/run.ts"
+    "eval:llm": "tsx packages/core/eval/run.ts",
+    "eval:ai": "tsx packages/core/eval/ai.ts"
   },
   "dependencies": {
     "tsx": "^4.21.0"

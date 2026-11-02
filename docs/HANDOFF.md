@@ -22,6 +22,19 @@ pnpm test:e2e
 - 主机可用的 Docker（接入预演、换库沙盘的沙箱验证）；
 - GitHub OAuth 或 `GITHUB_TOKEN`（读取 Issue、仓库文件、release）。
 
+## AI 质量评测
+
+配置好模型后可以跑固定场景回归（会真实调用模型，约 1 分钟）：
+
+```bash
+pnpm eval:ai                     # 对比 + 试接入 + 机械换库
+pnpm eval:ai -- --scenario=swap  # 只跑不花钱的机械换库
+```
+
+检查项：对比报告的结构/能力矩阵/推荐合法性、试接入补丁能否 `git apply`、机械换库的依赖和 import
+是否都替换。报告写到 `eval-results/ai-<时间>.md|json`；通过数低于 70% 时退出码非 0。
+2026-11-02 的基线是 3/3。
+
 ## 演示数据
 
 没有模型 Key 也可以先把界面填满：
