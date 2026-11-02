@@ -3,6 +3,8 @@ import {
   loadAlertLog,
   loadOpsConfig,
   listAdminUserOverview,
+  loadJobFailureReasons,
+  loadJobKindMetrics,
   loadOpsMetrics,
   loadRecentFailures,
   renderPrometheus,
@@ -16,6 +18,18 @@ import { OpsConfigForm } from './ops-config-form'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: '运维面板 — RepoRadar' }
+
+const JOB_KIND_LABEL: Record<string, string> = {
+  'integration-trial': '接入预演',
+  'swap-trial': '换库预演',
+  comparison: '选型对比',
+  'issue-plan': 'Issue 方案',
+  patch: '修复补丁',
+  upgrade: '依赖升级',
+  'repo-verify': '仓库验证',
+  'watch-run': '关注扫描',
+  'repo-patch': '仓库补丁',
+}
 
 function bytes(value: number): string {
   if (value < 1024) return `${value} B`
@@ -32,14 +46,17 @@ export default async function OpsPage({ searchParams }: OpsPageProps) {
   await requireAdmin()
   const params = await searchParams
   const pool = getPool()
-  const [metrics, failures, config, alertLog, users, doctor] = await Promise.all([
-    loadOpsMetrics(pool),
-    loadRecentFailures(pool),
-    loadOpsConfig(pool),
-    loadAlertLog(pool),
-    listAdminUserOverview(pool),
-    runDoctor(pool),
-  ])
+  const [metrics, failures, config, alertLog, users, doctor, jobMetrics, failureReasons] =
+    await Promise.all([
+      loadOpsMetrics(pool),
+      loadRecentFailures(pool),
+      loadOpsConfig(pool),
+      loadAlertLog(pool),
+      listAdminUserOverview(pool),
+      runDoctor(pool),
+      loadJobKindMetrics(pool, 30),
+      loadJobFailureReasons(pool, 30, 8),
+    ])
 
   return (
     <div className="page narrow">
@@ -161,6 +178,62 @@ export default async function OpsPage({ searchParams }: OpsPageProps) {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="panel">
+        <h2>AI 任务质量（近 30 天）</h2>
+        {jobMetrics.length === 0 ? (
+          <p className="muted small">还没有任务记录。</p>
+        ) : (
+          <div className="admin-user-table">
+            <div className="admin-user-row admin-user-head">
+              <span>类型</span>
+              <span>任务</span>
+              <span>成功率</span>
+              <span>耗时（均值 / P95）</span>
+              <span>Tokens（输入 / 输出）</span>
+            </div>
+            {jobMetrics.map((row) => (
+              <div className="admin-user-row" key={row.kind}>
+                <span>{JOB_KIND_LABEL[row.kind] ?? row.kind}</span>
+                <span>
+                  {row.total} 个
+                  <small className="muted">
+                    成功 {row.succeeded} · 失败 {row.failed}
+                    {row.running > 0 ? ` · 运行 ${row.running}` : ''}
+                  </small>
+                </span>
+                <span>{row.successRate === null ? '—' : `${Math.round(row.successRate * 100)}%`}</span>
+                <span>
+                  {row.avgSeconds === null ? '—' : `${row.avgSeconds.toFixed(1)}s`}
+                  <small className="muted">
+                    P95 {row.p95Seconds === null ? '—' : `${row.p95Seconds.toFixed(1)}s`}
+                  </small>
+                </span>
+                <span>
+                  {row.promptTokens.toLocaleString('zh-CN')} / {row.completionTokens.toLocaleString('zh-CN')}
+                  <small className="muted">{row.calls} 次调用</small>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {failureReasons.length > 0 ? (
+          <>
+            <h3 className="maintain-subhead">失败原因 Top</h3>
+            <ul className="maintain-list">
+              {failureReasons.map((reason) => (
+                <li key={`${reason.kind}:${reason.error}`}>
+                  {JOB_KIND_LABEL[reason.kind] ?? reason.kind} · {reason.error}{' '}
+                  <span className="muted small">×{reason.count}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+        <p className="muted small">
+          成功率只统计已结束的任务；耗时从开始执行算到完成。token 来自模型返回的 usage，未返回时为 0。
+        </p>
       </section>
 
       <div className="maintain-columns">

@@ -22,6 +22,12 @@ pnpm test:e2e
 - 主机可用的 Docker（接入预演、换库沙盘的沙箱验证）；
 - GitHub OAuth 或 `GITHUB_TOKEN`（读取 Issue、仓库文件、release）。
 
+## 任务质量与成本看板
+
+`/ops`（管理员）新增「AI 任务质量（近 30 天）」：按任务类型展示任务数、成功率、均值/P95 耗时、
+输入/输出 tokens 和失败原因 Top。数据来自 `ai_jobs`（时间）和 `llm_usage`（token），不需要新迁移。
+配合 `pnpm eval:ai` 可以同时看「固定场景质量」和「线上真实成功率」。
+
 ## AI 质量评测
 
 配置好模型后可以跑固定场景回归（会真实调用模型，约 1 分钟）：

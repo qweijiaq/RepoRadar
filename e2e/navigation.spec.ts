@@ -45,6 +45,7 @@ test('ops dashboard renders admin metrics and alerts', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '运行状态与告警' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '告警配置' })).toBeVisible()
   await expect(page.getByText('reporadar_users_total').first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'AI 任务质量（近 30 天）' })).toBeVisible()
 })
 
 test('repo page explains the elevated permission flow', async ({ page }) => {
