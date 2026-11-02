@@ -35,13 +35,20 @@ pnpm test:e2e
 配置好模型后可以跑固定场景回归（会真实调用模型，约 1 分钟）：
 
 ```bash
-pnpm eval:ai                     # 对比 + 试接入 + 机械换库
-pnpm eval:ai -- --scenario=swap  # 只跑不花钱的机械换库
+pnpm eval:ai                                        # 对比 + 试接入 + 机械换库
+pnpm eval:ai -- --scenario=swap                     # 只跑不花钱的机械换库
+pnpm eval:ai -- --models=deepseek-flash,deepseek-chat --repeat=3  # 多模型各跑 3 次
+pnpm eval:ai -- --models=a,b --prices="a:0.14:0.28,b:0.27:1.10"  # 临时价格，不写库
 ```
 
 检查项：对比报告的结构/能力矩阵/推荐合法性、试接入补丁能否 `git apply`、机械换库的依赖和 import
 是否都替换。报告写到 `eval-results/ai-<时间>.md|json`；通过数低于 70% 时退出码非 0。
-2026-11-02 的基线是 3/3。
+2026-11-02 单模型基线是 3/3。
+
+多模型运行会按模型汇总通过数、耗时、输入/输出 tokens 和估算成本（价格来自 `/ops` 或 `--prices`），
+推荐顺序是「通过数 → 成本 → 耗时」。实测两次：deepseek-flash 两次都通过，但一次对比要 ~60s；
+deepseek-chat 快很多（~8s），但有一次试接入补丁 `git apply` 失败。单次样本不足以定论，
+建议对候选模型重复跑几次，再结合 `/ops` 的真实成功率决定默认模型。
 
 ## 演示数据
 

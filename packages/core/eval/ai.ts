@@ -9,6 +9,8 @@ import { loadConfig } from '../src/config.js'
 import { generateComparisonReport } from '../src/comparison.js'
 import { generateIntegrationTrial } from '../src/integrations.js'
 import { loadStoredLlmConfig } from '../src/llm-config.js'
+import { estimateCost, loadLlmPrices, type LlmPriceMap } from '../src/llm-prices.js'
+import { withLlmUsage, type LlmUsageEntry } from '../src/usage.js'
 
 try {
   process.loadEnvFile('.env')
@@ -17,10 +19,21 @@ try {
 }
 
 interface ScenarioResult {
+  model: string
   name: string
   ok: boolean
   durationMs: number
+  inputTokens: number
+  outputTokens: number
+  cost: number | null
   detail: string
+}
+
+function usageTotals(usage: LlmUsageEntry[]): { inputTokens: number; outputTokens: number } {
+  return {
+    inputTokens: usage.reduce((sum, entry) => sum + entry.promptTokens, 0),
+    outputTokens: usage.reduce((sum, entry) => sum + entry.completionTokens, 0),
+  }
 }
 
 const project = 'acme/notes-cli'
@@ -147,18 +160,36 @@ function applyPatch(patch: string, files: Record<string, string>): Record<string
   }
 }
 
-async function timed(name: string, run: () => Promise<{ ok: boolean; detail: string }>): Promise<ScenarioResult> {
+async function timedModel(
+  model: string,
+  name: string,
+  run: () => Promise<{ ok: boolean; detail: string }>,
+  prices: LlmPriceMap,
+): Promise<ScenarioResult> {
+  let usage: LlmUsageEntry[] = []
   const started = Date.now()
-  try {
-    const result = await run()
-    return { name, ok: result.ok, durationMs: Date.now() - started, detail: result.detail }
-  } catch (error) {
+  const finish = (ok: boolean, detail: string): ScenarioResult => {
+    const totals = usageTotals(usage)
+    const price = prices[model]
     return {
+      model,
       name,
-      ok: false,
+      ok,
       durationMs: Date.now() - started,
-      detail: error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400),
+      inputTokens: totals.inputTokens,
+      outputTokens: totals.outputTokens,
+      cost: price ? estimateCost(totals.inputTokens, totals.outputTokens, price) : null,
+      detail,
     }
+  }
+
+  try {
+    const result = await withLlmUsage(run, async (entries) => {
+      usage = entries
+    })
+    return finish(result.ok, result.detail)
+  } catch (error) {
+    return finish(false, error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400))
   }
 }
 
@@ -232,35 +263,100 @@ const needsLlm = scenarios.some((item) => item !== 'swap')
 let llm: LlmConfig | null = null
 if (needsLlm) {
   llm = loadConfig().llm
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL || 'postgres://radar:radar@localhost:5433/radar',
+  })
   if (!llm) {
-    const pool = new Pool({
-      connectionString: process.env.DATABASE_URL || 'postgres://radar:radar@localhost:5433/radar',
-    })
     llm = await loadStoredLlmConfig(pool).catch(() => null)
-    await pool.end()
   }
+  await pool.end()
   if (!llm) {
     console.error('未找到模型配置：设置 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL，或在设置页保存模型配置。')
     process.exit(2)
   }
 }
 
-const results: ScenarioResult[] = []
-for (const scenario of scenarios) {
-  if (scenario === 'comparison') {
-    results.push(await timed('comparison', () => comparisonScenario(llm!)))
-  } else if (scenario === 'integration') {
-    results.push(await timed('integration', () => integrationScenario(llm!)))
-  } else {
-    results.push(await timed('swap', swapScenario))
+const pricePool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgres://radar:radar@localhost:5433/radar',
+})
+const dbPrices: LlmPriceMap = await loadLlmPrices(pricePool).catch(() => ({}))
+await pricePool.end()
+
+// --prices="model:in:out,model2:in:out"（USD / 1M tokens）用于临时对比，不写库
+const pricesArg = args.find((arg) => arg.startsWith('--prices='))?.split('=')[1]
+const override: LlmPriceMap = {}
+for (const part of pricesArg?.split(',') ?? []) {
+  const [model, input, output] = part.split(':')
+  if (model?.trim() && Number.isFinite(Number(input)) && Number.isFinite(Number(output))) {
+    override[model.trim()] = { input: Number(input), output: Number(output) }
   }
 }
+const prices: LlmPriceMap = { ...dbPrices, ...override }
+
+const modelArg = args.find((arg) => arg.startsWith('--models='))?.split('=')[1]
+const requestedModels = modelArg
+  ? modelArg
+      .split(',')
+      .map((model) => model.trim())
+      .filter(Boolean)
+  : []
+const models = needsLlm ? [...new Set(requestedModels.length > 0 ? requestedModels : [llm!.model])] : []
+const repeat = Math.max(
+  1,
+  Math.min(5, Number(args.find((arg) => arg.startsWith('--repeat='))?.split('=')[1] ?? 1) || 1),
+)
+
+const results: ScenarioResult[] = []
+for (const model of models) {
+  const modelLlm: LlmConfig = { ...llm!, model }
+  for (const scenario of scenarios) {
+    if (scenario === 'swap') continue
+    for (let run = 1; run <= repeat; run++) {
+      const label = repeat > 1 ? `${scenario}#${run}` : scenario
+      if (scenario === 'comparison') {
+        results.push(await timedModel(model, label, () => comparisonScenario(modelLlm), prices))
+      } else {
+        results.push(await timedModel(model, label, () => integrationScenario(modelLlm), prices))
+      }
+    }
+  }
+}
+if (scenarios.includes('swap')) {
+  results.push(await timedModel('mechanical', 'swap', swapScenario, prices))
+}
+
+const summaries = models.map((model) => {
+  const rows = results.filter((result) => result.model === model && result.name !== 'swap')
+  const passed = rows.filter((result) => result.ok).length
+  const inputTokens = rows.reduce((sum, result) => sum + result.inputTokens, 0)
+  const outputTokens = rows.reduce((sum, result) => sum + result.outputTokens, 0)
+  const durationMs = rows.reduce((sum, result) => sum + result.durationMs, 0)
+  const price = prices[model]
+  return {
+    model,
+    passed,
+    total: rows.length,
+    inputTokens,
+    outputTokens,
+    durationMs,
+    cost: price ? estimateCost(inputTokens, outputTokens, price) : null,
+  }
+})
+
+const recommended = [...summaries].sort((left, right) => {
+  if (right.passed !== left.passed) return right.passed - left.passed
+  const costDiff =
+    (left.cost ?? Number.POSITIVE_INFINITY) - (right.cost ?? Number.POSITIVE_INFINITY)
+  if (costDiff !== 0) return costDiff
+  return left.durationMs - right.durationMs
+})[0]
 
 const passed = results.filter((result) => result.ok).length
 const minPass = Math.max(1, Number(process.env.AI_EVAL_MIN_PASS ?? Math.ceil(results.length * 0.7)))
 const report = {
   generatedAt: new Date().toISOString(),
-  model: llm?.model ?? 'mechanical',
+  recommended: recommended?.model ?? null,
+  models: summaries,
   passed,
   total: results.length,
   results,
@@ -271,18 +367,27 @@ const stamp = report.generatedAt.replace(/[:.]/g, '-')
 const jsonPath = join('eval-results', `ai-${stamp}.json`)
 writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`)
 
+const money = (value: number | null) => (value === null ? '—' : `$${value.toFixed(4)}`)
+
 const lines = [
-  `# AI 质量评测 · ${report.generatedAt}`,
+  `# AI 质量与成本对比 · ${report.generatedAt}`,
   '',
-  `模型：${report.model}`,
+  recommended ? `推荐模型：**${recommended.model}**（通过数优先，成本次之）` : '',
   '',
-  `通过：${passed}/${results.length}`,
+  '| 模型 | 通过 | 耗时 | 输入 tokens | 输出 tokens | 估算成本 |',
+  '| --- | --- | ---: | ---: | ---: | ---: |',
+  ...summaries.map(
+    (item) =>
+      `| ${item.model} | ${item.passed}/${item.total} | ${(item.durationMs / 1000).toFixed(1)}s | ${item.inputTokens.toLocaleString('en-US')} | ${item.outputTokens.toLocaleString('en-US')} | ${money(item.cost)} |`,
+  ),
   '',
-  '| 场景 | 结果 | 耗时 | 说明 |',
-  '| --- | --- | ---: | --- |',
+  '## 明细',
+  '',
+  '| 模型 | 场景 | 结果 | 耗时 | tokens（输入/输出） | 成本 | 说明 |',
+  '| --- | --- | --- | ---: | --- | ---: | --- |',
   ...results.map(
     (result) =>
-      `| ${result.name} | ${result.ok ? '✅' : '❌'} | ${(result.durationMs / 1000).toFixed(1)}s | ${result.detail.replace(/\|/g, '\\|')} |`,
+      `| ${result.model} | ${result.name} | ${result.ok ? '✅' : '❌'} | ${(result.durationMs / 1000).toFixed(1)}s | ${result.inputTokens} / ${result.outputTokens} | ${money(result.cost)} | ${result.detail.replace(/\|/g, '\\|')} |`,
   ),
   '',
 ]
