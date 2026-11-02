@@ -344,3 +344,58 @@ export function buildPatchBrief(draft: PatchDraftRecord): string {
     .filter(Boolean)
     .join('\n')
 }
+
+export interface PatchCheck {
+  ok: boolean
+  error?: string
+}
+
+export type PatchCheckFn = (patch: string) => PatchCheck | Promise<PatchCheck>
+
+/**
+ * 轻量的 unified diff 结构检查：hunk 头声明的行数必须和实际 +/- 行数一致。
+ * 不需要仓库内容，用于在沙箱验证前尽早发现模型生成的坏补丁。
+ */
+export function checkPatchShape(patch: string): PatchCheck {
+  if (!patch.trim()) return { ok: false, error: '补丁为空' }
+  const lines = patch.replace(/\n$/, '').split('\n')
+  let hunks = 0
+
+  for (let index = 0; index < lines.length; index++) {
+    const header = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(lines[index] ?? '')
+    if (!header) continue
+    hunks += 1
+    const oldCount = Number(header[2] ?? 1)
+    const newCount = Number(header[4] ?? 1)
+    let oldSeen = 0
+    let newSeen = 0
+    let cursor = index + 1
+
+    for (; cursor < lines.length; cursor++) {
+      const line = lines[cursor] ?? ''
+      if (/^@@ /.test(line) || /^diff --git /.test(line) || /^--- /.test(line)) break
+      if (line.startsWith('\\')) continue
+      if (line === '' || line.startsWith(' ')) {
+        oldSeen += 1
+        newSeen += 1
+      } else if (line.startsWith('-')) {
+        oldSeen += 1
+      } else if (line.startsWith('+')) {
+        newSeen += 1
+      } else {
+        return { ok: false, error: `第 ${cursor + 1} 行不是合法的补丁行：${line.slice(0, 60)}` }
+      }
+    }
+
+    if (oldSeen !== oldCount || newSeen !== newCount) {
+      return {
+        ok: false,
+        error: `hunk 行数不匹配：声明 -${oldCount}/+${newCount}，实际 -${oldSeen}/+${newSeen}`,
+      }
+    }
+    index = cursor - 1
+  }
+
+  if (hunks === 0) return { ok: false, error: '补丁里没有 hunk' }
+  return { ok: true }
+}

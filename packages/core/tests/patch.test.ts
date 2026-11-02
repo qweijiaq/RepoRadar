@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPullRequestBrief, parseGeneratedPatch, selectPatchFiles } from '../src/patch.js'
+import { buildPullRequestBrief, checkPatchShape, parseGeneratedPatch, selectPatchFiles } from '../src/patch.js'
 import type { IssueContext } from '../src/issue-plan.js'
 
 const issue: IssueContext = {
@@ -84,5 +84,36 @@ describe('buildPullRequestBrief', () => {
     expect(brief).toContain('- 补丁应用：通过')
     expect(brief).toContain('- 构建 / 测试：verified')
     expect(brief).not.toContain('git push')
+  })
+})
+
+
+describe('checkPatchShape', () => {
+  const valid = `diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -1,3 +1,4 @@
+ {
++  "dependencies": { "zod": "^4.6.7" },
+   "name": "demo"
+ }
+`
+
+  it('accepts a well-formed patch', () => {
+    expect(checkPatchShape(valid)).toEqual({ ok: true })
+  })
+
+  it('rejects hunk counts that do not match the lines', () => {
+    const broken = valid.replace('@@ -1,3 +1,4 @@', '@@ -1,5 +1,6 @@')
+    const result = checkPatchShape(broken)
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('hunk 行数不匹配')
+  })
+
+  it('rejects patches without hunks or with invalid lines', () => {
+    expect(checkPatchShape('').ok).toBe(false)
+    expect(checkPatchShape('diff --git a/x b/x\n--- a/x\n+++ b/x\n').ok).toBe(false)
+    const invalid = valid.replace('   "name": "demo"', '?? "name": "demo"')
+    expect(checkPatchShape(invalid).ok).toBe(false)
   })
 })

@@ -211,6 +211,13 @@ async function integrationScenario(llm: LlmConfig): Promise<{ ok: boolean; detai
       projectContext,
       steps: ['把 child_process 的 execFile 调用换成 execa', '保持 run 的签名不变'],
       targetFile: trialTarget,
+      checkPatch: (patch) => {
+        const result = patchApplies(patch, {
+          'package.json': projectContext.manifest,
+          [trialTarget.path]: trialTarget.content,
+        })
+        return { ok: result.ok, error: result.error }
+      },
     },
     llm,
   )
@@ -345,9 +352,11 @@ const summaries = models.map((model) => {
 
 const recommended = [...summaries].sort((left, right) => {
   if (right.passed !== left.passed) return right.passed - left.passed
-  const costDiff =
-    (left.cost ?? Number.POSITIVE_INFINITY) - (right.cost ?? Number.POSITIVE_INFINITY)
-  if (costDiff !== 0) return costDiff
+  // 两边都有价格才比较成本；都没有时按耗时兜底（避免 Infinity - Infinity = NaN）。
+  if (left.cost !== null && right.cost !== null) {
+    const costDiff = left.cost - right.cost
+    if (costDiff !== 0) return costDiff
+  }
   return left.durationMs - right.durationMs
 })[0]
 

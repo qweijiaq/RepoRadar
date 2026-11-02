@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { generateIntegrationTrial, type IntegrationTrialInput } from '../src/integrations.js'
+import { checkPatchShape } from '../src/patch.js'
 
 const llm = {
   apiKey: 'test-key',
@@ -126,5 +127,42 @@ describe('generateIntegrationTrial', () => {
     )
 
     await expect(generateIntegrationTrial(input, llm)).rejects.toThrow()
+  })
+})
+
+
+describe('generateIntegrationTrial retry on bad patch', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('retries once when the patch shape is invalid', async () => {
+    const badPatch = `diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -1,5 +1,6 @@
+ {
+   "name": "demo"
+ }
+`
+    const responses = [badPatch, trialPatch]
+    const fetchMock = vi.fn(async () => {
+      const patch = responses.shift()
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({ summary: '加 zod', files: ['package.json'], patch }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await generateIntegrationTrial({ ...input, checkPatch: checkPatchShape }, llm)
+    expect(result.patch).toContain('zod')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

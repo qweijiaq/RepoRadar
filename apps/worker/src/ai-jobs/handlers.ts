@@ -26,6 +26,7 @@ import {
   generateComparisonReport,
   generateDiscoverabilityReport,
   generateIntegrationReport,
+  checkPatchShape,
   countCodeChunks,
   generateIntegrationTrial,
   getSymbolSplitter,
@@ -663,6 +664,7 @@ async function integrationTrialJob(
       steps: job.payload.steps ?? [],
       targetFile: targetFile ? { path: targetFile.path, content: targetFile.content } : null,
       codeEvidence,
+      checkPatch: checkPatchShape,
     },
     llm,
   )
@@ -745,6 +747,7 @@ async function swapTrialJob(
         fromPackage,
         toPackage,
         targetFile: targetFile ? { path: targetFile.path, content: targetFile.content } : null,
+        checkPatch: checkPatchShape,
       },
       llm,
     )

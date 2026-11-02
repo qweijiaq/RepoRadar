@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { LlmConfig } from './config.js'
 import type { DbPool } from './db.js'
 import { chatCompletion } from './llm.js'
-import { parseGeneratedPatch } from './patch.js'
+import { parseGeneratedPatch, type PatchCheckFn } from './patch.js'
 
 export interface IntegrationProjectInput {
   repo: string
@@ -469,6 +469,7 @@ export interface IntegrationTrialInput {
   steps: string[]
   targetFile?: { path: string; content: string } | null
   codeEvidence?: Array<{ path: string; content: string; symbol?: string | null }>
+  checkPatch?: PatchCheckFn
 }
 
 export interface GeneratedIntegrationTrial {
@@ -537,24 +538,35 @@ export async function generateIntegrationTrial(
     { role: 'user' as const, content: prompt },
   ]
   let raw = await chatCompletion(llm, messages, { temperature: 0.2, maxTokens: 6000, jsonMode: true })
+  let lastError = '未知错误'
   for (let attempt = 0; attempt < 2; attempt++) {
+    let report: GeneratedIntegrationTrial | null = null
     try {
-      return parseGeneratedPatch(raw)
+      report = parseGeneratedPatch(raw)
     } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
       console.error(`[integration-trial] 第 ${attempt + 1} 次输出解析失败：`, error, '\n', raw.slice(0, 900))
-      if (attempt === 1) break
-      raw = await chatCompletion(
-        llm,
-        [
-          { role: 'system', content: TRIAL_SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: `${prompt}\n\n上一次输出不是可应用的 unified diff JSON。请严格输出 JSON，patch 字段是 git apply 可用的 diff。`,
-          },
-        ],
-        { temperature: 0.1, maxTokens: 7000, jsonMode: true },
-      )
     }
+
+    if (report) {
+      const check = input.checkPatch ? await input.checkPatch(report.patch) : { ok: true }
+      if (check.ok) return report
+      lastError = check.error ?? '补丁无法应用'
+      console.error(`[integration-trial] 第 ${attempt + 1} 次补丁检查失败：`, lastError)
+    }
+
+    if (attempt === 1) break
+    raw = await chatCompletion(
+      llm,
+      [
+        { role: 'system', content: TRIAL_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `${prompt}\n\n上一次输出不可用：${lastError.slice(0, 300)}。请检查 unified diff 的 hunk 行数和上下文，重新输出 JSON。`,
+        },
+      ],
+      { temperature: 0.1, maxTokens: 7000, jsonMode: true },
+    )
   }
-  throw new Error('模型没有返回可应用的接入补丁（已自动重试）')
+  throw new Error(`模型没有返回可应用的接入补丁（已自动重试）：${lastError.slice(0, 300)}`)
 }
