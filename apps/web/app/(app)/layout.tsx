@@ -28,6 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <NavLink href="/feed">雷达</NavLink>
               <NavLink href="/discover">发现</NavLink>
               <NavLink href="/trends">趋势</NavLink>
+              <NavLink href="/daily">榜单</NavLink>
               <NavLink href="/workbench">工作台</NavLink>
               <NavLink href="/library">建议库</NavLink>
               <NavLink href="/repos">仓库</NavLink>

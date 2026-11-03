@@ -24,6 +24,7 @@ import {
   findLlmProvider,
   findRepoByFullName,
   generateTrendingCopy,
+  loadDailyRanking,
   saveTrendingCopy,
   selectTrendingItems,
   trendingDateKey,
@@ -409,6 +410,31 @@ export async function generateTrendingPostAction(): Promise<void> {
   })
   revalidatePath('/share/trending')
   redirect('/share/trending?generated=1')
+}
+
+export async function generateDailyCopyAction(): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
+
+  const pool = getPool()
+  const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
+  if (!llm) redirect('/daily?error=llm')
+
+  const ranking = await loadDailyRanking(pool, 10)
+  if (ranking.items.length === 0) redirect('/daily?error=empty')
+
+  const copy = await generateTrendingCopy(ranking.items, llm)
+  await saveTrendingCopy(
+    pool,
+    ranking.dateKey,
+    copy,
+    { model: llm.model, generatedAt: new Date().toISOString() },
+    'daily',
+  )
+  revalidatePath('/daily')
+  redirect('/daily?generated=1')
 }
 
 export async function generateIssueAction(): Promise<void> {

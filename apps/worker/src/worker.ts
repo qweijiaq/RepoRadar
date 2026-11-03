@@ -25,6 +25,7 @@ import {
   loadStoredLlmConfig,
   buildTrendReport,
   loadTrendReport,
+  recordDailySnapshots,
   logEvent,
   markDeliveryFailed,
   markDeliverySent,
@@ -283,6 +284,15 @@ const IMPACT_INTERVAL = 6 * 60 * 60 * 1000
 let lastImpactCheckAt = 0
 
 /** 已接入的库发新版本时，写一条回访并通知用户。 */
+async function scheduledDailySnapshots(): Promise<void> {
+  const { rows } = await pool.query<{ count: string }>(
+    `SELECT count(*)::text AS count FROM star_snapshots WHERE captured_on = CURRENT_DATE`,
+  )
+  if (Number(rows[0]?.count ?? 0) > 0) return
+  const count = await recordDailySnapshots(pool)
+  console.log(`[worker] 每日快照已记录：${count} 个仓库`)
+}
+
 async function scheduledTrendBrief(): Promise<void> {
   const latest = await loadTrendReport(pool)
   if (latest && Date.now() - Date.parse(latest.generatedAt) < 12 * 60 * 60 * 1000) return
@@ -422,6 +432,7 @@ async function loop(): Promise<void> {
       await scheduledFeedSnapshots()
       await scheduledIntegrationImpacts()
       await scheduledTrendBrief()
+      await scheduledDailySnapshots()
       await scheduledAlerts()
     } catch (error) {
       console.error('[worker] loop error:', error)

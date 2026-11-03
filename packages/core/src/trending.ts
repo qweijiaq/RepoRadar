@@ -220,22 +220,24 @@ export async function saveTrendingCopy(
   dateKey: string,
   copy: TrendingCopy,
   meta: { model: string | null; generatedAt: string },
+  kind: 'post' | 'daily' = 'post',
 ): Promise<void> {
   await pool.query(
     `INSERT INTO app_settings (key, value) VALUES ($1, $2)
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-    [`trending.post.${dateKey}`, JSON.stringify({ copy, ...meta })],
+    [`trending.${kind}.${dateKey}`, JSON.stringify({ copy, ...meta })],
   )
 }
 
 export async function loadTrendingCopy(
   pool: DbPool,
   dateKey: string,
+  kind: 'post' | 'daily' = 'post',
 ): Promise<{ copy: TrendingCopy; model: string | null; generatedAt: string } | null> {
   try {
     const { rows } = await pool.query<{
       value: { copy: TrendingCopy; model: string | null; generatedAt: string }
-    }>(`SELECT value FROM app_settings WHERE key = $1`, [`trending.post.${dateKey}`])
+    }>(`SELECT value FROM app_settings WHERE key = $1`, [`trending.${kind}.${dateKey}`])
     const value = rows[0]?.value
     if (!value?.copy) return null
     return value
