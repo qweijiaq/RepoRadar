@@ -135,6 +135,36 @@ export default async function TrendsPage() {
         )}
       </section>
 
+      <section className="panel">
+        <h2>新库速度榜（建库以来日均 star）</h2>
+        <p className="muted small">
+          给还没有 7 天快照的新库一个曝光位：按「当前 star ÷ 建库天数」排序，只统计近一年创建、至少 500 star 的项目。
+        </p>
+        {stats.velocity.length === 0 ? (
+          <p className="muted small">还没有符合条件的新库。</p>
+        ) : (
+          <div className="admin-user-table">
+            <div className="admin-user-row admin-user-head">
+              <span>仓库</span>
+              <span>日均 star</span>
+              <span>stars</span>
+              <span>建库</span>
+            </div>
+            {stats.velocity.map((repo) => (
+              <div className="admin-user-row" key={repo.fullName}>
+                <span>
+                  <Link href={`/r/${repo.fullName}`}>{repo.fullName}</Link>
+                  <small className="muted">{repo.summary?.slice(0, 40) ?? ''}</small>
+                </span>
+                <span>{repo.starsPerDay.toLocaleString('en-US')}</span>
+                <span>{repo.stars.toLocaleString('en-US')}</span>
+                <span>{new Date(repo.createdAt).toLocaleDateString('zh-CN')}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       <div className="trend-grid">
         <section className="panel">
           <h2>主题热度</h2>

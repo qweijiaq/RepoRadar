@@ -130,6 +130,34 @@ export function TrendingPoster({ post, text }: TrendingPosterProps) {
               ))}
             </div>
 
+            {post.velocity.length > 0 ? (
+              <div style={{ marginTop: 30 }}>
+                <p style={{ fontSize: 24, fontWeight: 700, color: '#9aa4ff', margin: '0 0 10px' }}>
+                  新库速度榜 · 建库以来日均 star
+                </p>
+                {post.velocity.map((item, index) => (
+                  <div
+                    key={item.fullName}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 16,
+                      fontSize: 23,
+                      padding: '6px 0',
+                      borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    <span style={{ color: '#c7cde4' }}>
+                      {index + 1}. {item.fullName}
+                    </span>
+                    <span style={{ color: '#6ee7a8', whiteSpace: 'nowrap' }}>
+                      {item.starsPerDay.toLocaleString('en-US')}/天
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
             <div
               style={{
                 marginTop: 'auto',

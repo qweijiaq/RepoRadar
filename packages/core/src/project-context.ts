@@ -7,13 +7,14 @@ import { getPool } from './pool.js'
 
 const MANIFESTS = ['package.json', 'pyproject.toml', 'requirements.txt', 'go.mod', 'Cargo.toml']
 
-function githubHeaders(token: string, accept = 'application/vnd.github+json'): Record<string, string> {
-  return {
+function githubHeaders(token?: string, accept = 'application/vnd.github+json'): Record<string, string> {
+  const headers: Record<string, string> = {
     accept,
-    authorization: `Bearer ${token}`,
     'x-github-api-version': '2022-11-28',
     'user-agent': 'repo-radar',
   }
+  if (token) headers.authorization = `Bearer ${token}`
+  return headers
 }
 
 async function fetchRaw(path: string, token: string): Promise<string | null> {
@@ -24,7 +25,7 @@ async function fetchRaw(path: string, token: string): Promise<string | null> {
   return response.text()
 }
 
-export async function fetchGitHubRepo(fullName: string, token: string): Promise<RepoInput | null> {
+export async function fetchGitHubRepo(fullName: string, token?: string): Promise<RepoInput | null> {
   const response = await fetch(`${githubApiBase()}/repos/${fullName}`, {
     headers: githubHeaders(token),
   })

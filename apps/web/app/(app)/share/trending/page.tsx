@@ -5,6 +5,7 @@ import {
   findEnrichedRepos,
   getPool,
   loadTrendingCopy,
+  rankVelocity,
   selectTrendingItems,
   templateTrendingCopy,
   trendingDateKey,
@@ -31,10 +32,10 @@ export default async function ShareTrendingPage({ searchParams }: SharePageProps
 
   const pool = getPool()
   const dateKey = trendingDateKey()
-  const [items, cached] = await Promise.all([
-    findEnrichedRepos(pool, 500).then((repos) => selectTrendingItems(repos, 10)),
-    loadTrendingCopy(pool, dateKey),
-  ])
+  const repos = await findEnrichedRepos(pool, 500)
+  const items = selectTrendingItems(repos, 10)
+  const velocity = rankVelocity(repos, Date.now(), 3)
+  const cached = await loadTrendingCopy(pool, dateKey)
 
   const post: TrendingPost = {
     dateKey,
@@ -42,6 +43,7 @@ export default async function ShareTrendingPage({ searchParams }: SharePageProps
     generatedAt: cached?.generatedAt ?? null,
     model: cached?.model ?? null,
     items,
+    velocity,
     copy: cached?.copy ?? templateTrendingCopy(items),
   }
   const text = buildTrendingText(post)

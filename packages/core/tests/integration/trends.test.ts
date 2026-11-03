@@ -14,6 +14,7 @@ const report: TrendReport = {
     ],
     topics: [{ topic: 'llm', repos: 2, growth: 0.08, stars: 300 }],
     newEntrants: [],
+    velocity: [],
   },
   brief: {
     headline: 'LLM 继续领涨',
@@ -48,5 +49,37 @@ describe.skipIf(!hasTestDatabase)('trend reports', () => {
     const loaded = await loadTrendReport(pool)
     expect(loaded?.brief.headline).toBe('LLM 继续领涨')
     expect(loaded?.stats.totalRepos).toBe(3)
+  })
+})
+
+describe.skipIf(!hasTestDatabase)('trend report compatibility', () => {
+  let pool: DbPool | undefined
+
+  beforeAll(async () => {
+    pool = await createTestPool()
+  })
+
+  afterAll(async () => {
+    await pool?.end()
+    await dropTestDatabase()
+  })
+
+  beforeEach(async () => {
+    if (pool) await truncateAll(pool)
+  })
+
+  it('fills velocity for reports written before the field existed', async () => {
+    if (!pool) throw new Error('pool 未初始化')
+    const legacy = {
+      generatedAt: new Date().toISOString(),
+      model: 'old-model',
+      stats: { ...report.stats, velocity: undefined },
+      brief: report.brief,
+    }
+    await pool.query(`INSERT INTO app_settings (key, value) VALUES ('trends.latest', $1::jsonb)`, [
+      JSON.stringify(legacy),
+    ])
+    const loaded = await loadTrendReport(pool)
+    expect(loaded?.stats.velocity).toEqual([])
   })
 })

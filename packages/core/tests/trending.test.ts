@@ -36,6 +36,7 @@ describe('buildTrendingText', () => {
       generatedAt: null,
       model: null,
       items,
+      velocity: [{ fullName: 'a/big', stars: 10_000, starsPerDay: 500, createdAt: '2026-01-01T00:00:00Z' }],
       copy: templateTrendingCopy(items),
     }
     const text = buildTrendingText(post)
@@ -43,6 +44,8 @@ describe('buildTrendingText', () => {
     expect(text).toContain('2. b/small — +100 stars')
     expect(text).toContain('#GitHub')
     expect(text).toContain('数据来自 RepoRadar')
+    expect(text).toContain('新库速度榜')
+    expect(text).toContain('a/big — 500/天')
   })
 })
 

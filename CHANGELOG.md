@@ -60,6 +60,8 @@
   「加载更多」不再重新排名整个候选池。
 
 - 试接入/换库生成补丁后会做结构检查，失败时带错误重试一次；重试后 `deepseek-chat` 从 5/6 提升到 6/6。
+- 趋势新增「新库速度榜」（建库以来日均 star），覆盖没有 7 天快照的新库；分享卡同步展示。
+- `pnpm radar ingest --repo=owner/name` 支持手动收录；采集新增「近半年新建高星仓库」查询，避免漏掉突破性新库。
 - 新增趋势分享卡 `/share/trending`：AI 文案 + 一键复制文字 + 导出 2x PNG 海报（html-to-image）。
 - 新增意图搜索 `/discover`：AI 解析需求 + 关键词/向量混合召回 + 重排解释；MCP `find_repos`。
 - 新增仓库功能画像（迁移 `0014_repo_profiles`）：README/清单生成定位、能力、适用场景和上手步骤；MCP `explain_repo`。

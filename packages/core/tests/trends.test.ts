@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aggregateTopicMomentum, fallbackTrendBrief, parseTrendBrief, type TrendStats } from '../src/trends.js'
+import { aggregateTopicMomentum, fallbackTrendBrief, parseTrendBrief, rankVelocity, type TrendStats } from '../src/trends.js'
 
 describe('aggregateTopicMomentum', () => {
   it('averages growth per topic and keeps topics with at least two repos', () => {
@@ -46,10 +46,29 @@ describe('fallbackTrendBrief', () => {
       ],
       topics: [{ topic: 'llm', repos: 2, growth: 0.08, stars: 3000 }],
       newEntrants: [],
+      velocity: [],
     }
     const brief = fallbackTrendBrief(stats)
     expect(brief.headline).toContain('a/one')
     expect(brief.points[0]?.repos).toEqual(['a/one'])
     expect(brief.points[1]?.title).toContain('#llm')
+  })
+})
+
+
+describe('rankVelocity', () => {
+  it('ranks recent high-star repos by stars per day since creation', () => {
+    const now = Date.parse('2026-11-03T00:00:00Z')
+    const ranked = rankVelocity(
+      [
+        { fullName: 'a/fast', stars: 100_000, createdAt: '2026-05-01T00:00:00Z', language: null, summary: null },
+        { fullName: 'b/slow', stars: 100_000, createdAt: '2016-01-01T00:00:00Z', language: null, summary: null },
+        { fullName: 'c/old', stars: 10_000, createdAt: '2020-01-01T00:00:00Z', language: null, summary: null },
+      ],
+      now,
+      10,
+    )
+    expect(ranked.map((entry) => entry.fullName)).toEqual(['a/fast'])
+    expect(ranked[0]?.starsPerDay).toBeGreaterThan(500)
   })
 })

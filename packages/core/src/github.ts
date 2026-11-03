@@ -113,6 +113,14 @@ export function buildSearchQueries(options: QueryOptions): string[] {
       queries.push(parts.join(' '))
     }
   }
+  // 不受 topic 限制的突破性新库：近半年建库、star 很高。
+  if (options.freshDays && options.freshDays > 0) {
+    const createdSince = new Date(now.getTime() - options.freshDays * 86_400_000)
+      .toISOString()
+      .slice(0, 10)
+    queries.push(`created:>=${createdSince} stars:>=1000 archived:false fork:false`)
+  }
+
   return queries
 }
 

@@ -75,6 +75,7 @@ test('discover and trends pages render', async ({ page }) => {
 
   await page.goto('/trends', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: '本周开源在涨什么' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '新库速度榜（建库以来日均 star）' })).toBeVisible()
 })
 
 test('trending share card renders copy and export actions', async ({ page }) => {

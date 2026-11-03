@@ -45,7 +45,7 @@ pnpm radar pipeline --topics=llm --limit=20
 | `pnpm db:migrate` | 应用未执行的数据库迁移 |
 | `pnpm db:backup` | 备份 PostgreSQL 到 `backups/`，并生成 SHA-256 |
 | `pnpm db:restore <file>` | 恢复备份（需要 `CONFIRM=YES`） |
-| `pnpm radar ingest` | 从 GitHub Search 采集候选仓库，记录每日 star 快照 |
+| `pnpm radar ingest` | 从 GitHub Search 采集候选仓库，记录每日 star 快照；`--repo=owner/name` 只收录指定仓库 |
 | `pnpm radar enrich` | 对未富化仓库：抓 README → LLM 摘要/评分/向量（无 LLM 时退化为启发式规则） |
 | `pnpm radar list` | 按 质量 + 新鲜度 + 增速 排序输出推荐列表 |
 | `pnpm radar digest` | 生成个性化摘要（Markdown / HTML，可发邮件） |

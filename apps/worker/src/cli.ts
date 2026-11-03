@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import {
+  fetchGitHubRepo,
   buildFeedbackContext,
   buildSearchQueries,
   createPool,
@@ -113,6 +114,7 @@ const HELP = `RepoRadar CLI（M2）
   --topics=a,b         采集的 GitHub topics（默认来自 RADAR_TOPICS）；enrich 时用作过滤
   --days=30            只采集最近 N 天有推送的仓库
   --pages=1            每条查询抓取页数（每页默认 50 条）
+  --repo=owner/name    只收录指定仓库，跳过搜索（可配合 enrich 使用）
   --per-page=50        每页数量
   --delay-ms=2200      GitHub 请求间隔（Search API 限制 30 次/分钟）
   --language=ts        按语言筛选
@@ -191,6 +193,7 @@ async function runMigrate(pool: DbPool): Promise<void> {
 }
 
 interface IngestOptions {
+  repo?: string
   topics: string[]
   days: number
   pages: number
@@ -205,6 +208,14 @@ async function runIngest(
   config: AppConfig,
   options: IngestOptions,
 ): Promise<{ seen: number; inserted: number }> {
+  if (options.repo) {
+    const repo = await fetchGitHubRepo(options.repo, config.githubToken ?? undefined)
+    if (!repo) throw new Error(`没有找到仓库：${options.repo}`)
+    const result = await upsertRepo(pool, repo)
+    console.log(`${options.repo}：${result.inserted ? '已收录' : '已存在，已更新元数据'}`)
+    return { seen: 1, inserted: result.inserted ? 1 : 0 }
+  }
+
   const queries = buildSearchQueries({
     topics: options.topics,
     days: options.days,
@@ -667,6 +678,7 @@ async function main(): Promise<void> {
     perPage: intArg(values['per-page'], 50),
     delayMs: intArg(values['delay-ms'], config.search.delayMs),
     language: values.language,
+    repo: values.repo,
     dryRun: Boolean(values['dry-run']),
   }
   const enrichLimit = intArg(values.limit, 100)

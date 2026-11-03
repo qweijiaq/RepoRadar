@@ -14,6 +14,16 @@ export interface TrendRiser {
   topics: string[]
 }
 
+export interface TrendVelocity {
+  fullName: string
+  stars: number
+  ageDays: number
+  starsPerDay: number
+  createdAt: string
+  language: string | null
+  summary: string | null
+}
+
 export interface TopicMomentum {
   topic: string
   repos: number
@@ -27,6 +37,7 @@ export interface TrendStats {
   risers: TrendRiser[]
   topics: TopicMomentum[]
   newEntrants: TrendRiser[]
+  velocity: TrendVelocity[]
 }
 
 export const trendBriefSchema = z.object({
@@ -85,6 +96,41 @@ export function aggregateTopicMomentum(
     .slice(0, Math.max(0, limit))
 }
 
+/**
+ * 建库以来日均 star 速度，用于覆盖「没有 7 天快照但增长很猛」的新库。
+ * 只统计近一年创建、至少 500 star 的仓库。
+ */
+export function rankVelocity(
+  repos: Array<{
+    fullName: string
+    stars: number
+    createdAt: string | null
+    language: string | null
+    summary: string | null
+  }>,
+  now = Date.now(),
+  limit = 10,
+): TrendVelocity[] {
+  return repos
+    .filter((repo) => repo.createdAt && repo.stars >= 500)
+    .map((repo) => {
+      const created = Date.parse(repo.createdAt as string)
+      const ageDays = Math.max(1, Math.round((now - created) / 86_400_000))
+      return {
+        fullName: repo.fullName,
+        stars: repo.stars,
+        ageDays,
+        starsPerDay: Math.round((repo.stars / ageDays) * 10) / 10,
+        createdAt: repo.createdAt as string,
+        language: repo.language,
+        summary: repo.summary,
+      }
+    })
+    .filter((entry) => entry.ageDays <= 365)
+    .sort((left, right) => right.starsPerDay - left.starsPerDay)
+    .slice(0, Math.max(1, limit))
+}
+
 export async function computeTrendStats(pool: DbPool, windowDays = 7): Promise<TrendStats> {
   const repos = await findEnrichedRepos(pool, 500)
   const risers: TrendRiser[] = risingRepos(repos, 12).map((repo) => ({
@@ -117,6 +163,7 @@ export async function computeTrendStats(pool: DbPool, windowDays = 7): Promise<T
     risers,
     topics: aggregateTopicMomentum(repos, 8),
     newEntrants,
+    velocity: rankVelocity(repos, Date.now(), 10),
   }
 }
 
@@ -254,7 +301,16 @@ export async function loadTrendReport(pool: DbPool): Promise<TrendReport | null>
     )
     const value = rows[0]?.value
     if (!value || !value.stats || !value.brief) return null
-    return value
+    // 旧缓存可能没有 velocity 字段，读出来时补齐，避免页面崩溃。
+    return {
+      ...value,
+      stats: {
+        ...value.stats,
+        topics: value.stats.topics ?? [],
+        newEntrants: value.stats.newEntrants ?? [],
+        velocity: value.stats.velocity ?? [],
+      },
+    }
   } catch {
     return null
   }

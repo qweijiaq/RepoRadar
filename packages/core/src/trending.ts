@@ -24,12 +24,20 @@ export const trendingCopySchema = z.object({
 
 export type TrendingCopy = z.infer<typeof trendingCopySchema>
 
+export interface TrendingVelocity {
+  fullName: string
+  stars: number
+  starsPerDay: number
+  createdAt: string
+}
+
 export interface TrendingPost {
   dateKey: string
   dateLabel: string
   generatedAt: string | null
   model: string | null
   items: TrendingItem[]
+  velocity: TrendingVelocity[]
   copy: TrendingCopy
 }
 
@@ -113,6 +121,16 @@ export function buildTrendingText(post: TrendingPost): string {
     '',
     ...lines,
     '',
+    ...(post.velocity.length > 0
+      ? [
+          '新库速度榜（建库以来日均 star）',
+          ...post.velocity.map(
+            (item, index) =>
+              `${index + 1}. ${item.fullName} — ${item.starsPerDay.toLocaleString('en-US')}/天 · ${item.stars.toLocaleString('en-US')} stars`,
+          ),
+          '',
+        ]
+      : []),
     `数据来自 RepoRadar · ${post.dateLabel}`,
     post.copy.hashtags.map((tag) => `#${tag}`).join(' '),
   ].join('\n')

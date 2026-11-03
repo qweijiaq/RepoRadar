@@ -41,6 +41,7 @@ describe('buildSearchQueries', () => {
     expect(queries).toEqual([
       'topic:llm pushed:>=2026-09-30 archived:false fork:false stars:50..500',
       'topic:llm pushed:>=2026-09-30 created:>=2026-07-02 archived:false fork:false stars:>=50',
+      'created:>=2026-07-02 stars:>=1000 archived:false fork:false',
     ])
   })
 
