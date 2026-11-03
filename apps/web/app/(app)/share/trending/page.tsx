@@ -4,7 +4,7 @@ import {
   buildTrendingText,
   findEnrichedRepos,
   getPool,
-  loadRepoProfile,
+  loadRepoProfiles,
   loadTrendingCopy,
   rankVelocity,
   selectTrendingItems,
@@ -38,9 +38,8 @@ export default async function ShareTrendingPage({ searchParams }: SharePageProps
   const items = selectTrendingItems(repos, 10)
   const velocity = rankVelocity(repos, Date.now(), 3)
   const cached = await loadTrendingCopy(pool, dateKey)
-  const detailItems = items.slice(0, 3)
-  const profiles = await Promise.all(detailItems.map((item) => loadRepoProfile(pool, item.fullName)))
-  const details = detailItems.map((item, index) => toTrendingDetail(item, profiles[index] ?? null))
+  const profiles = await loadRepoProfiles(pool, items.map((item) => item.fullName))
+  const details = items.map((item) => toTrendingDetail(item, profiles.get(item.fullName) ?? null))
 
   const post: TrendingPost = {
     dateKey,

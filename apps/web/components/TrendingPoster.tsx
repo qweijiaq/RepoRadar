@@ -226,7 +226,16 @@ export function TrendingPoster({ post, text, details }: TrendingPosterProps) {
         {message ? <span className="muted small">{message}</span> : null}
       </div>
 
-      <div className="trending-slide">
+      <nav className="trending-index" aria-label="分享卡目录">
+        <a href="#slide-cover">封面</a>
+        {details.map((detail, index) => (
+          <a key={detail.fullName} href={`#slide-${index + 1}`}>
+            {index + 1}. {detail.fullName.split('/')[1] ?? detail.fullName}
+          </a>
+        ))}
+      </nav>
+
+      <div className="trending-slide" id="slide-cover">
         <div className="trending-preview">
           <div className="trending-preview-scale">
             <div ref={coverRef} style={posterStyle}>
@@ -320,7 +329,7 @@ export function TrendingPoster({ post, text, details }: TrendingPosterProps) {
       </div>
 
       {details.map((detail, index) => (
-        <div className="trending-slide" key={detail.fullName}>
+        <div className="trending-slide" id={`slide-${index + 1}`} key={detail.fullName}>
           <div className="trending-preview">
             <div className="trending-preview-scale">
               <div

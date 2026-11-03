@@ -4761,3 +4761,29 @@ details[open] > .advanced-summary::before {
   display: grid;
   gap: 8px;
 }
+
+
+.trending-index {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.trending-index a {
+  font-size: 12px;
+  color: var(--text-70);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  text-decoration: none;
+}
+
+.trending-index a:hover {
+  color: var(--text);
+  border-color: var(--text-40);
+}
+
+.trending-slide {
+  scroll-margin-top: 80px;
+}

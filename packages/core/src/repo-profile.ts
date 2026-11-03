@@ -197,3 +197,43 @@ export async function loadRepoProfile(
     generatedAt: row.generated_at,
   }
 }
+
+/** 批量加载画像，避免 Top 10 详情页逐条查询。 */
+export async function loadRepoProfiles(
+  pool: DbPool,
+  repoFullNames: string[],
+): Promise<Map<string, StoredRepoProfile>> {
+  const names = [...new Set(repoFullNames)]
+  if (names.length === 0) return new Map()
+  const { rows } = await pool.query<{
+    repo_full_name: string
+    positioning: string
+    features: RepoProfile['features']
+    use_cases: string[]
+    not_for: string[]
+    quickstart: string[]
+    source_hash: string | null
+    model: string | null
+    generated_at: string
+  }>(
+    `SELECT repo_full_name, positioning, features, use_cases, not_for, quickstart,
+            source_hash, model, generated_at
+     FROM repo_profiles WHERE repo_full_name = ANY($1::text[])`,
+    [names],
+  )
+  const map = new Map<string, StoredRepoProfile>()
+  for (const row of rows) {
+    map.set(row.repo_full_name, {
+      repoFullName: row.repo_full_name,
+      positioning: row.positioning,
+      features: row.features,
+      useCases: row.use_cases,
+      notFor: row.not_for,
+      quickstart: row.quickstart,
+      sourceHash: row.source_hash,
+      model: row.model,
+      generatedAt: row.generated_at,
+    })
+  }
+  return map
+}

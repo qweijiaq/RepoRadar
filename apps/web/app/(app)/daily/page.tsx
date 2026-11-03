@@ -5,7 +5,7 @@ import {
   dailyTemplateCopy,
   getPool,
   loadDailyRanking,
-  loadRepoProfile,
+  loadRepoProfiles,
   loadTrendingCopy,
   toTrendingDetail,
   type TrendingPost,
@@ -30,9 +30,10 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
   const pool = getPool()
   const ranking = await loadDailyRanking(pool, 10)
   const cached = await loadTrendingCopy(pool, ranking.dateKey, 'daily')
-  const detailItems = ranking.items.slice(0, 3)
-  const profiles = await Promise.all(detailItems.map((item) => loadRepoProfile(pool, item.fullName)))
-  const details = detailItems.map((item, index) => toTrendingDetail(item, profiles[index] ?? null))
+  const profiles = await loadRepoProfiles(pool, ranking.items.map((item) => item.fullName))
+  const details = ranking.items.map((item) =>
+    toTrendingDetail(item, profiles.get(item.fullName) ?? null),
+  )
 
   const post: TrendingPost = {
     dateKey: ranking.dateKey,
