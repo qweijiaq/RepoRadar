@@ -49,7 +49,8 @@ export default async function TrendsPage() {
           <h1>本周开源在涨什么</h1>
           <p className="feed-meta">
             基于近 7 天 star 相对增速、主题分布和 release 事件；AI 简报由 worker 每 12 小时生成。
-            想按需求找库可以去 <Link href="/discover">意图搜索</Link>。
+            想按需求找库可以去 <Link href="/discover">意图搜索</Link>，想发分享卡去
+            <Link href="/share/trending">生成分享卡</Link>。
           </p>
         </div>
       </section>

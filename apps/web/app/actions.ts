@@ -23,6 +23,10 @@ import {
   findEnrichedRepos,
   findLlmProvider,
   findRepoByFullName,
+  generateTrendingCopy,
+  saveTrendingCopy,
+  selectTrendingItems,
+  trendingDateKey,
   generateIntegrationReport,
   evaluateSetupAccess,
   isDependencyUsed,
@@ -383,6 +387,28 @@ export async function clearLlmConfigAction(): Promise<void> {
   await clearStoredLlmConfig(getPool())
   revalidatePath('/settings')
   redirect('/settings?llm=cleared')
+}
+
+export async function generateTrendingPostAction(): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
+
+  const pool = getPool()
+  const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
+  if (!llm) redirect('/share/trending?error=llm')
+
+  const items = selectTrendingItems(await findEnrichedRepos(pool, 500), 10)
+  if (items.length === 0) redirect('/share/trending?error=empty')
+
+  const copy = await generateTrendingCopy(items, llm)
+  await saveTrendingCopy(pool, trendingDateKey(), copy, {
+    model: llm.model,
+    generatedAt: new Date().toISOString(),
+  })
+  revalidatePath('/share/trending')
+  redirect('/share/trending?generated=1')
 }
 
 export async function generateIssueAction(): Promise<void> {

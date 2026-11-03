@@ -27,6 +27,7 @@ pnpm test:e2e
 - `/discover`：登录后输入一句话需求，例如「能解析 PDF 表格、TypeScript、还在维护的库」；结果是带解释的候选，点「看详情」进仓库页。
 - 仓库页「AI 功能画像」：首次点「生成功能画像」需要 GitHub 授权和模型配置；生成后按 README hash 缓存，README 变了可以重新生成。
 - `/trends`：先展示 7 天增速/topic 动量/新项目；AI 简报由 worker 每 12 小时生成（没有模型时显示数据版）。
+- `/share/trending`：把 7 天 star 增量 Top 10 做成分享海报；可「复制文字」或「导出图片」（2x PNG），文案由 AI 生成并按天缓存。
 - 三个功能都依赖模型配置（设置页）；意图搜索还依赖仓库已有的 embedding，没有 embedding 时会退化为关键词召回。
 
 ## 任务质量与成本看板

@@ -76,3 +76,16 @@ test('discover and trends pages render', async ({ page }) => {
   await page.goto('/trends', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: '本周开源在涨什么' })).toBeVisible()
 })
+
+test('trending share card renders copy and export actions', async ({ page }) => {
+  await page.goto('/share/trending', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: '生成一张可以发的 GitHub 飙升榜' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '复制文字' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '导出图片' })).toBeVisible()
+  await expect(page.locator('.trending-text')).toContainText('GitHub 飙升榜')
+
+  const downloadPromise = page.waitForEvent('download', { timeout: 30_000 })
+  await page.getByRole('button', { name: '导出图片' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toContain('repo-radar-trending')
+})

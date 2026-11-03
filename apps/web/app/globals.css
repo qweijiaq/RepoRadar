@@ -4712,3 +4712,46 @@ details[open] > .advanced-summary::before {
   display: grid;
   gap: 14px;
 }
+
+
+.trending-share {
+  display: grid;
+  gap: 16px;
+}
+
+.trending-actions {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.trending-preview {
+  overflow-x: auto;
+  border-radius: 18px;
+  background: #0b1020;
+  padding: 12px;
+}
+
+.trending-preview-scale {
+  transform: scale(0.58);
+  transform-origin: top left;
+  width: 1080px;
+  height: 820px;
+}
+
+.trending-text {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.7;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  overflow-x: auto;
+}
+
+@media (max-width: 720px) {
+  .trending-preview-scale {
+    transform: scale(0.32);
+    height: 460px;
+  }
+}
