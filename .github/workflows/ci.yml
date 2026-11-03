@@ -56,6 +56,8 @@ jobs:
         run: pnpm db:migrate
       - name: Database integration tests
         run: pnpm test:db
+      - name: Seed demo data for e2e
+        run: pnpm radar demo-seed
       - run: pnpm build
       - name: Production smoke (next start)
         run: pnpm smoke:prod

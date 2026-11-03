@@ -24,6 +24,20 @@ export const trendingCopySchema = z.object({
 
 export type TrendingCopy = z.infer<typeof trendingCopySchema>
 
+export interface TrendingDetail {
+  fullName: string
+  positioning: string
+  features: Array<{ name: string; detail: string }>
+  useCases: string[]
+  quickstart: string[]
+  stars: number
+  gain: number
+  growth: number
+  language: string | null
+  topics: string[]
+  hasProfile: boolean
+}
+
 export interface TrendingVelocity {
   fullName: string
   stars: number
@@ -88,6 +102,33 @@ export function selectTrendingItems(
     .slice(0, Math.max(1, limit))
 }
 
+export function toTrendingDetail(
+  item: TrendingItem,
+  profile: {
+    positioning: string
+    features: Array<{ name: string; detail: string }>
+    useCases: string[]
+    quickstart: string[]
+  } | null,
+): TrendingDetail {
+  const topics = item.topics.slice(0, 4)
+  return {
+    fullName: item.fullName,
+    positioning: profile?.positioning ?? item.summary ?? '暂无简介',
+    features:
+      profile?.features.slice(0, 4) ??
+      topics.map((topic) => ({ name: `#${topic}`, detail: '相关主题' })),
+    useCases: profile?.useCases.slice(0, 2) ?? [],
+    quickstart: profile?.quickstart.slice(0, 2) ?? [],
+    stars: item.stars,
+    gain: item.gain,
+    growth: item.growth,
+    language: item.language,
+    topics,
+    hasProfile: Boolean(profile),
+  }
+}
+
 export function templateTrendingCopy(items: TrendingItem[]): TrendingCopy {
   const top = items[0]
   return {
@@ -109,7 +150,7 @@ export function formatGain(gain: number): string {
   return String(gain)
 }
 
-export function buildTrendingText(post: TrendingPost): string {
+export function buildTrendingText(post: TrendingPost, details: TrendingDetail[] = []): string {
   const lines = post.items.map(
     (item, index) =>
       `${index + 1}. ${item.fullName} — +${item.gain.toLocaleString('en-US')} stars（+${(item.growth * 100).toFixed(1)}%）\n   ${post.copy.lines[item.fullName] ?? item.summary ?? ''}`,
@@ -121,6 +162,19 @@ export function buildTrendingText(post: TrendingPost): string {
     '',
     ...lines,
     '',
+    ...(details.length > 0
+      ? [
+          '详细看点',
+          ...details.map((detail) => {
+            const capabilities = detail.features
+              .slice(0, 3)
+              .map((feature) => feature.name)
+              .join('、')
+            return `· ${detail.fullName}：${detail.positioning}${capabilities ? `\n  能力：${capabilities}` : ''}`
+          }),
+          '',
+        ]
+      : []),
     ...(post.velocity.length > 0
       ? [
           '新库速度榜（建库以来日均 star）',

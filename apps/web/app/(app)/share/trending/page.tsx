@@ -4,11 +4,13 @@ import {
   buildTrendingText,
   findEnrichedRepos,
   getPool,
+  loadRepoProfile,
   loadTrendingCopy,
   rankVelocity,
   selectTrendingItems,
   templateTrendingCopy,
   trendingDateKey,
+  toTrendingDetail,
   trendingDateLabel,
   type TrendingPost,
 } from '@repo-radar/core'
@@ -36,6 +38,9 @@ export default async function ShareTrendingPage({ searchParams }: SharePageProps
   const items = selectTrendingItems(repos, 10)
   const velocity = rankVelocity(repos, Date.now(), 3)
   const cached = await loadTrendingCopy(pool, dateKey)
+  const detailItems = items.slice(0, 3)
+  const profiles = await Promise.all(detailItems.map((item) => loadRepoProfile(pool, item.fullName)))
+  const details = detailItems.map((item, index) => toTrendingDetail(item, profiles[index] ?? null))
 
   const post: TrendingPost = {
     dateKey,
@@ -46,7 +51,7 @@ export default async function ShareTrendingPage({ searchParams }: SharePageProps
     velocity,
     copy: cached?.copy ?? templateTrendingCopy(items),
   }
-  const text = buildTrendingText(post)
+  const text = buildTrendingText(post, details)
 
   return (
     <div className="page narrow">
@@ -87,7 +92,7 @@ export default async function ShareTrendingPage({ searchParams }: SharePageProps
       {items.length === 0 ? (
         <div className="notice">还没有足够的 7 天 star 快照，先积累几天数据再生成分享卡。</div>
       ) : (
-        <TrendingPoster post={post} text={text} />
+        <TrendingPoster post={post} text={text} details={details} />
       )}
     </div>
   )

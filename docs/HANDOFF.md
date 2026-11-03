@@ -28,7 +28,8 @@ pnpm test:e2e
 - 仓库页「AI 功能画像」：首次点「生成功能画像」需要 GitHub 授权和模型配置；生成后按 README hash 缓存，README 变了可以重新生成。
 - `/trends`：先展示 7 天增速/topic 动量/新项目；AI 简报由 worker 每 12 小时生成（没有模型时显示数据版）。
 - `/daily`：每日榜单（当前 star − 上一次快照 Top10），可复制文字/导出图片；worker 每天记录快照，手动补跑用 `pnpm radar snapshot`。快照不足一天时会标注为多日增量。
-- `/share/trending`：把 7 天 star 增量 Top 10 做成分享海报；可「复制文字」或「导出图片」（2x PNG），文案由 AI 生成并按天缓存。海报还带「新库速度榜」（建库以来日均 star），没有 7 天快照的新库也能出现。
+- `/share/trending`：把 7 天 star 增量 Top 10 做成分享海报，默认 4 张图（封面 + 前 3 名详情页），可逐张或全部导出；详情内容优先取 AI 功能画像。
+- 原分享卡说明：把 7 天 star 增量 Top 10 做成分享海报；可「复制文字」或「导出图片」（2x PNG），文案由 AI 生成并按天缓存。海报还带「新库速度榜」（建库以来日均 star），没有 7 天快照的新库也能出现。
 - 趋势只覆盖**已收录且已富化**的仓库；发现漏了热门项目时，可以先手动收录：
   `pnpm radar ingest --repo=owner/name && pnpm radar enrich --limit=1`，或在部署环境跑一次正常采集。
 - 三个功能都依赖模型配置（设置页）；意图搜索还依赖仓库已有的 embedding，没有 embedding 时会退化为关键词召回。

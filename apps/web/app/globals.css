@@ -4755,3 +4755,9 @@ details[open] > .advanced-summary::before {
     height: 500px;
   }
 }
+
+
+.trending-slide {
+  display: grid;
+  gap: 8px;
+}

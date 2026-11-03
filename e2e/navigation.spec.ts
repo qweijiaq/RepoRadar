@@ -83,7 +83,9 @@ test('trending share card renders copy and export actions', async ({ page }) => 
   await expect(page.getByRole('heading', { name: '生成一张可以发的 GitHub 飙升榜' })).toBeVisible()
   await expect(page.getByRole('button', { name: '复制文字' })).toBeVisible()
   await expect(page.getByRole('button', { name: '导出图片' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /导出全部图片/ })).toBeVisible()
   await expect(page.locator('.trending-text')).toContainText('GitHub 飙升榜')
+  await expect(page.getByText('它能做什么').first()).toBeVisible()
 
   const downloadPromise = page.waitForEvent('download', { timeout: 30_000 })
   await page.getByRole('button', { name: '导出图片' }).click()

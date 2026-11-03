@@ -5,7 +5,9 @@ import {
   dailyTemplateCopy,
   getPool,
   loadDailyRanking,
+  loadRepoProfile,
   loadTrendingCopy,
+  toTrendingDetail,
   type TrendingPost,
 } from '@repo-radar/core'
 import { generateDailyCopyAction } from '@/app/actions'
@@ -28,6 +30,9 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
   const pool = getPool()
   const ranking = await loadDailyRanking(pool, 10)
   const cached = await loadTrendingCopy(pool, ranking.dateKey, 'daily')
+  const detailItems = ranking.items.slice(0, 3)
+  const profiles = await Promise.all(detailItems.map((item) => loadRepoProfile(pool, item.fullName)))
+  const details = detailItems.map((item, index) => toTrendingDetail(item, profiles[index] ?? null))
 
   const post: TrendingPost = {
     dateKey: ranking.dateKey,
@@ -38,7 +43,7 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
     velocity: [],
     copy: cached?.copy ?? dailyTemplateCopy(ranking),
   }
-  const text = buildTrendingText(post)
+  const text = buildTrendingText(post, details)
 
   return (
     <div className="page narrow">
@@ -84,7 +89,7 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
           还没有可比较的快照。先运行 <code>pnpm radar snapshot</code>，明天开始就能看到真正的每日榜。
         </div>
       ) : (
-        <TrendingPoster post={post} text={text} />
+        <TrendingPoster post={post} text={text} details={details} />
       )}
     </div>
   )

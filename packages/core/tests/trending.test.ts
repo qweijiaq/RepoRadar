@@ -4,6 +4,7 @@ import {
   parseTrendingCopy,
   selectTrendingItems,
   templateTrendingCopy,
+  toTrendingDetail,
   type TrendingItem,
   type TrendingPost,
 } from '../src/trending.js'
@@ -46,6 +47,16 @@ describe('buildTrendingText', () => {
     expect(text).toContain('数据来自 RepoRadar')
     expect(text).toContain('新库速度榜')
     expect(text).toContain('a/big — 500/天')
+
+    const detail = toTrendingDetail(items[0]!, {
+      positioning: '一个用于测试的库',
+      features: [{ name: '能力 A', detail: '做 A' }],
+      useCases: ['场景 A'],
+      quickstart: ['npm i a'],
+    })
+    const detailed = buildTrendingText(post, [detail])
+    expect(detailed).toContain('详细看点')
+    expect(detailed).toContain('能力：能力 A')
   })
 })
 
@@ -67,5 +78,17 @@ describe('parseTrendingCopy', () => {
     expect(() => parseTrendingCopy(JSON.stringify({ ...valid, headline: '' }), items)).toThrow(
       /结构不符合要求|无法解析/,
     )
+  })
+})
+
+describe('toTrendingDetail', () => {
+  it('falls back to summary and topics without a profile', () => {
+    const detail = toTrendingDetail(
+      { ...items[0]!, summary: '一个很酷的库', topics: ['cli', 'nodejs'] },
+      null,
+    )
+    expect(detail.positioning).toBe('一个很酷的库')
+    expect(detail.hasProfile).toBe(false)
+    expect(detail.features.map((feature) => feature.name)).toEqual(['#cli', '#nodejs'])
   })
 })
