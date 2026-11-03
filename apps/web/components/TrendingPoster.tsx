@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { toPng } from 'html-to-image'
+import JSZip from 'jszip'
 import type { TrendingDetail, TrendingPost } from '@repo-radar/core'
 
 interface TrendingPosterProps {
@@ -196,20 +197,51 @@ export function TrendingPoster({ post, text, details, periodLabel }: TrendingPos
     link.click()
   }
 
-  async function exportAll(): Promise<void> {
+  async function exportZip(): Promise<void> {
     setBusy(true)
-    setMessage(null)
+    setMessage('正在生成 ZIP…')
     try {
+      const zip = new JSZip()
       const nodes = [coverRef.current, ...detailRefs.current].filter(
         (node): node is HTMLDivElement => Boolean(node),
       )
       for (const [index, node] of nodes.entries()) {
-        await download(node, String(index + 1))
-        await new Promise((resolve) => setTimeout(resolve, 400))
+        setMessage(`正在生成图片 ${index + 1}/${nodes.length}…`)
+        const dataUrl = await toPng(node, {
+          pixelRatio: 2,
+          backgroundColor: '#0b1020',
+          cacheBust: true,
+        })
+        const base64 = dataUrl.split(',')[1] ?? ''
+        const detail = index === 0 ? null : details[index - 1]
+        const safeName = detail
+          ? detail.fullName.replace(/[^A-Za-z0-9._-]+/g, '-')
+          : 'cover'
+        zip.file(`${String(index + 1).padStart(2, '0')}-${safeName}.png`, base64, { base64: true })
       }
-      setMessage(`已导出 ${nodes.length} 张；如果浏览器拦截多文件下载，请用每张下方的按钮逐张导出`)
+      zip.file('文案.txt', text)
+      zip.file(
+        'README.txt',
+        [
+          `RepoRadar · ${post.dateLabel}`,
+          `生成时间：${new Date().toLocaleString('zh-CN')}`,
+          '内容：封面 + Top 详情页 + 文案.txt',
+          '数据来源：RepoRadar 的 GitHub star 快照',
+          '',
+        ].join('\n'),
+      )
+
+      setMessage('正在打包…')
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.download = `repo-radar-${post.dateKey}.zip`
+      link.href = url
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 2000)
+      setMessage(`ZIP 已下载：${nodes.length} 张图片 + 文案.txt`)
     } catch {
-      setMessage('导出失败，请重试或截图保存')
+      setMessage('ZIP 生成失败，请重试或逐张导出')
     } finally {
       setBusy(false)
     }
@@ -234,8 +266,8 @@ export function TrendingPoster({ post, text, details, periodLabel }: TrendingPos
         <button className="btn solid" type="button" onClick={copyText}>
           复制文字
         </button>
-        <button className="btn" type="button" onClick={exportAll} disabled={busy}>
-          {busy ? '导出中…' : `导出全部图片（${1 + details.length} 张）`}
+        <button className="btn" type="button" onClick={exportZip} disabled={busy}>
+          {busy ? '打包中…' : `下载 ZIP（${1 + details.length} 张图 + 文案）`}
         </button>
         {message ? <span className="muted small">{message}</span> : null}
       </div>
