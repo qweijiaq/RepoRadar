@@ -8,6 +8,8 @@ interface TrendingPosterProps {
   post: TrendingPost
   text: string
   details: TrendingDetail[]
+  /** 封面右上角的时间口径，例如「近 7 天」或「今日」 */
+  periodLabel: string
 }
 
 const posterStyle: React.CSSProperties = {
@@ -81,6 +83,11 @@ function DetailSlide({ detail, index, total }: { detail: TrendingDetail; index: 
         {detail.positioning}
       </p>
 
+      {detail.topics.length === 0 ? (
+        <p style={{ fontSize: 21, color: faint, marginTop: 14 }}>
+          GitHub 上没有设置 topic，所以这里没有主题标签。
+        </p>
+      ) : null}
       {detail.topics.length > 0 ? (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
           {detail.topics.map((topic) => (
@@ -154,7 +161,7 @@ function DetailSlide({ detail, index, total }: { detail: TrendingDetail; index: 
   )
 }
 
-export function TrendingPoster({ post, text, details }: TrendingPosterProps) {
+export function TrendingPoster({ post, text, details, periodLabel }: TrendingPosterProps) {
   const coverRef = useRef<HTMLDivElement>(null)
   const detailRefs = useRef<Array<HTMLDivElement | null>>([])
   const [busy, setBusy] = useState(false)
@@ -239,7 +246,7 @@ export function TrendingPoster({ post, text, details }: TrendingPosterProps) {
         <div className="trending-preview">
           <div className="trending-preview-scale">
             <div ref={coverRef} style={posterStyle}>
-              <PosterHeader dateLabel={post.dateLabel} label="近 7 天" />
+              <PosterHeader dateLabel={post.dateLabel} label={periodLabel} />
               <h1 style={{ fontSize: 58, lineHeight: 1.18, margin: '40px 0 18px', fontWeight: 800 }}>
                 {post.copy.headline}
               </h1>

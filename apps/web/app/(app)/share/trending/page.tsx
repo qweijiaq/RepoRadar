@@ -91,7 +91,7 @@ export default async function ShareTrendingPage({ searchParams }: SharePageProps
       {items.length === 0 ? (
         <div className="notice">还没有足够的 7 天 star 快照，先积累几天数据再生成分享卡。</div>
       ) : (
-        <TrendingPoster post={post} text={text} details={details} />
+        <TrendingPoster post={post} text={text} details={details} periodLabel="近 7 天" />
       )}
     </div>
   )

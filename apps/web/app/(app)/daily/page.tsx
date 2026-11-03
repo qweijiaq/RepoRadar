@@ -90,7 +90,7 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
           还没有可比较的快照。先运行 <code>pnpm radar snapshot</code>，明天开始就能看到真正的每日榜。
         </div>
       ) : (
-        <TrendingPoster post={post} text={text} details={details} />
+        <TrendingPoster post={post} text={text} details={details} periodLabel="今日" />
       )}
     </div>
   )
