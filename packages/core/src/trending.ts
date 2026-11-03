@@ -2,10 +2,12 @@ import { z } from 'zod'
 import type { LlmConfig } from './config.js'
 import type { DbPool } from './db.js'
 import { extractJsonObjects } from './integrations.js'
+import { filterRankingRepos } from './ranking.js'
 import { chatCompletion } from './llm.js'
 
 export interface TrendingItem {
   fullName: string
+  createdAt?: string | null
   inferredTopics?: string[]
   stars: number
   stars7d: number
@@ -86,10 +88,12 @@ export function selectTrendingItems(
     summary: string | null
     topics: string[]
     inferredTopics?: string[]
+    createdAt?: string | null
   }>,
   limit = 10,
+  options: { includeOfficial?: boolean } = {},
 ): TrendingItem[] {
-  return repos
+  return filterRankingRepos(repos, options.includeOfficial ?? false)
     .filter((repo) => repo.stars7d !== null && repo.stars7d > 0 && repo.stars > repo.stars7d)
     .map((repo) => ({
       fullName: repo.fullName,
@@ -101,6 +105,7 @@ export function selectTrendingItems(
       summary: repo.summary,
       topics: repo.topics,
       inferredTopics: repo.inferredTopics ?? [],
+      createdAt: repo.createdAt ?? null,
     }))
     .sort((left, right) => right.gain - left.gain || right.growth - left.growth)
     .slice(0, Math.max(1, limit))

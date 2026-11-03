@@ -48,6 +48,7 @@ import {
   renderDraftMarkdown,
   renderIssueMarkdown,
   repoEvidence,
+  persistDailyRanking,
   recordDailySnapshots,
   risingRepos,
   runDoctor,
@@ -817,7 +818,8 @@ async function main(): Promise<void> {
       }
       case 'snapshot': {
         const count = await recordDailySnapshots(pool)
-        console.log(`已记录今日快照：${count} 个仓库`)
+        const persisted = await persistDailyRanking(pool)
+        console.log(`已记录今日快照：${count} 个仓库；榜单已持久化：${persisted} 条`)
         break
       }
       case 'doctor': {

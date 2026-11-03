@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: '分享卡 — RepoRadar' }
 
 interface SharePageProps {
-  searchParams: Promise<{ error?: string; generated?: string; profiles?: string }>
+  searchParams: Promise<{ error?: string; generated?: string; profiles?: string; all?: string }>
 }
 
 export default async function ShareTrendingPage({ searchParams }: SharePageProps) {
@@ -34,8 +34,9 @@ export default async function ShareTrendingPage({ searchParams }: SharePageProps
 
   const pool = getPool()
   const dateKey = trendingDateKey()
+  const includeOfficial = params.all === '1'
   const repos = await findEnrichedRepos(pool, 500)
-  const items = selectTrendingItems(repos, 10)
+  const items = selectTrendingItems(repos, 10, { includeOfficial })
   const velocity = rankVelocity(repos, Date.now(), 3)
   const cached = await loadTrendingCopy(pool, dateKey)
   const profiles = await loadRepoProfiles(pool, items.map((item) => item.fullName))
@@ -93,6 +94,12 @@ export default async function ShareTrendingPage({ searchParams }: SharePageProps
       {params.error === 'llm' ? <div className="notice">还没有配置 AI 模型。</div> : null}
 
       <div className="feed-actions">
+        <Link
+          className="btn quiet small"
+          href={includeOfficial ? '/share/trending' : '/share/trending?all=1'}
+        >
+          {includeOfficial ? '只看有趣项目' : '显示官方框架'}
+        </Link>
         <form action={generateTrendingPostAction}>
           <button className="btn quiet small" type="submit">
             {cached ? '重新生成文案' : 'AI 生成文案'}

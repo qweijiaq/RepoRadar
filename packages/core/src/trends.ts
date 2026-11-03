@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { LlmConfig } from './config.js'
 import { findEnrichedRepos, type DbPool } from './db.js'
 import { risingRepos, starGrowth } from './rising.js'
+import { filterRankingRepos } from './ranking.js'
 import { chatCompletion } from './llm.js'
 import { extractJsonObjects } from './integrations.js'
 
@@ -131,8 +132,12 @@ export function rankVelocity(
     .slice(0, Math.max(1, limit))
 }
 
-export async function computeTrendStats(pool: DbPool, windowDays = 7): Promise<TrendStats> {
-  const repos = await findEnrichedRepos(pool, 500)
+export async function computeTrendStats(
+  pool: DbPool,
+  windowDays = 7,
+  options: { includeOfficial?: boolean } = {},
+): Promise<TrendStats> {
+  const repos = filterRankingRepos(await findEnrichedRepos(pool, 500), options.includeOfficial ?? false)
   const risers: TrendRiser[] = risingRepos(repos, 12).map((repo) => ({
     fullName: repo.fullName,
     stars: repo.stars,

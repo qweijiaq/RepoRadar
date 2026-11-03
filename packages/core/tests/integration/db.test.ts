@@ -52,6 +52,7 @@ describe.skipIf(!hasTestDatabase)('database integration', () => {
       '0012_code_chunk_symbol',
       '0014_repo_profiles',
       '0015_inferred_topics',
+      '0016_daily_rankings',
     ])
   })
 

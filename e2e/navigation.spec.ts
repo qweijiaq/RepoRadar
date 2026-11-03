@@ -95,5 +95,5 @@ test('trending share card renders copy and export actions', async ({ page }) => 
 
 test('daily ranking page renders', async ({ page }) => {
   await page.goto('/daily', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: 'GitHub 每日飙升 Top10' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /GitHub 每日飙升 Top\d+/ })).toBeVisible()
 })

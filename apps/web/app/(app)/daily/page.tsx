@@ -4,10 +4,14 @@ import {
   buildTrendingText,
   dailyTemplateCopy,
   getPool,
+  listDailyRankingDates,
   loadDailyRanking,
+  loadPersistedDailyRanking,
   loadRepoProfiles,
   loadTrendingCopy,
   toTrendingDetail,
+  trendingDateKey,
+  type DailyRanking,
   type TrendingPost,
 } from '@repo-radar/core'
 import { generateDailyCopyAction, generateMissingProfilesAction } from '@/app/actions'
@@ -19,7 +23,13 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: '每日榜单 — RepoRadar' }
 
 interface DailyPageProps {
-  searchParams: Promise<{ error?: string; generated?: string; profiles?: string }>
+  searchParams: Promise<{
+    error?: string
+    generated?: string
+    profiles?: string
+    date?: string
+    all?: string
+  }>
 }
 
 export default async function DailyPage({ searchParams }: DailyPageProps) {
@@ -28,7 +38,38 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
   if (!sessionUser(session)) redirect('/login')
 
   const pool = getPool()
-  const ranking = await loadDailyRanking(pool, 10)
+  const includeOfficial = params.all === '1'
+  const today = trendingDateKey()
+  const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(params.date ?? '') ? params.date! : null
+  const ranking: DailyRanking | null = requestedDate
+    ? await loadPersistedDailyRanking(pool, requestedDate, { includeOfficial })
+    : await loadDailyRanking(pool, 10, { includeOfficial })
+  const dates = await listDailyRankingDates(pool, 14)
+  if (!ranking) {
+    return (
+      <div className="page narrow">
+        <p className="breadcrumb">
+          <Link href="/trends">← 返回趋势</Link>
+        </p>
+        <section className="feed-head">
+          <div>
+            <p className="eyebrow">每日榜单</p>
+            <h1>GitHub 每日飙升 Top10</h1>
+            <p className="feed-meta">{requestedDate} 还没有持久化记录。</p>
+          </div>
+        </section>
+        <div className="notice">选择最近有记录的日期：</div>
+        <div className="discover-intent">
+          {dates.map((date) => (
+            <Link className="chip subtle" href={`/daily?date=${date}`} key={date}>
+              {date}
+            </Link>
+          ))}
+        </div>
+      </div>
+    )
+  }
+  const isToday = ranking.dateKey === today
   const cached = await loadTrendingCopy(pool, ranking.dateKey, 'daily')
   const profiles = await loadRepoProfiles(pool, ranking.items.map((item) => item.fullName))
   const details = ranking.items.map((item) =>
@@ -89,17 +130,40 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
       {params.error === 'llm' ? <div className="notice">还没有配置 AI 模型。</div> : null}
 
       <div className="feed-actions">
-        <form action={generateDailyCopyAction}>
-          <button className="btn quiet small" type="submit">
-            {cached ? '重新生成文案' : 'AI 生成文案'}
-          </button>
-        </form>
+        <Link
+          className="btn quiet small"
+          href={`/daily?${new URLSearchParams({ ...(requestedDate ? { date: requestedDate } : {}), ...(includeOfficial ? {} : { all: '1' }) }).toString()}`}
+        >
+          {includeOfficial ? '只看有趣项目' : '显示官方框架'}
+        </Link>
+        {isToday ? (
+          <form action={generateDailyCopyAction}>
+            <button className="btn quiet small" type="submit">
+              {cached ? '重新生成文案' : 'AI 生成文案'}
+            </button>
+          </form>
+        ) : null}
         <span className="muted small">
           {ranking.basis === 'day'
             ? '对比昨天快照'
             : `对比 ${ranking.previousDate ?? '上一次快照'}（多日增量）`}
           {cached ? ` · 文案由 ${cached.model ?? '模型'} 生成` : ''}
         </span>
+      </div>
+
+      <div className="discover-intent">
+        <Link className={requestedDate ? 'chip subtle' : 'chip used'} href="/daily">
+          今天
+        </Link>
+        {dates.map((date) => (
+          <Link
+            className={requestedDate === date ? 'chip used' : 'chip subtle'}
+            href={`/daily?date=${date}${includeOfficial ? '&all=1' : ''}`}
+            key={date}
+          >
+            {date}
+          </Link>
+        ))}
       </div>
 
       {ranking.items.length === 0 ? (

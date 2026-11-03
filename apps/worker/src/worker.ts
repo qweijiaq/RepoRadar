@@ -25,6 +25,7 @@ import {
   loadStoredLlmConfig,
   buildTrendReport,
   loadTrendReport,
+  persistDailyRanking,
   recordDailySnapshots,
   logEvent,
   markDeliveryFailed,
@@ -288,9 +289,15 @@ async function scheduledDailySnapshots(): Promise<void> {
   const { rows } = await pool.query<{ count: string }>(
     `SELECT count(*)::text AS count FROM star_snapshots WHERE captured_on = CURRENT_DATE`,
   )
-  if (Number(rows[0]?.count ?? 0) > 0) return
-  const count = await recordDailySnapshots(pool)
-  console.log(`[worker] 每日快照已记录：${count} 个仓库`)
+  if (Number(rows[0]?.count ?? 0) === 0) {
+    const count = await recordDailySnapshots(pool)
+    console.log(`[worker] 每日快照已记录：${count} 个仓库`)
+  }
+  const persisted = await pool.query(`SELECT 1 FROM daily_rankings WHERE date_key = CURRENT_DATE`)
+  if ((persisted.rowCount ?? 0) === 0) {
+    const items = await persistDailyRanking(pool)
+    console.log(`[worker] 每日榜单已持久化：${items} 条`)
+  }
 }
 
 async function scheduledTrendBrief(): Promise<void> {

@@ -81,6 +81,14 @@ MCP server 在原有工具之外提供 `pick_library`（按任务选库）、`in
 - 批量补：`pnpm radar infer-topics`（默认 20 个，可用 `--limit`）；
 - 推断结果存在 `repos.inferred_topics`，**不覆盖** GitHub 原始 topics；分享卡/每日榜在没有 GitHub topic 时优先展示 AI 推断，并标注来源。
 
+## 榜单过滤与持久化
+
+- 飙升榜/每日榜默认**剔除官方框架**（vercel、facebook、reactjs、tailwindlabs、shadcn-ui、microsoft 等）
+  以及 **10 万 star 以上、建库超过 2 年的老牌巨无霸**，避免被 next.js / react 这类项目占满；
+- 页面上的「显示官方框架」可以切换查看全量；
+- 每日榜单会写入 `daily_rankings`（迁移 0016），支持按日期回看；worker 每天记录快照后自动持久化，
+  `pnpm radar snapshot` 也会持久化。
+
 ## 每日榜单
 
 `/daily`（导航「榜单」）按「当前 star − 上一次快照」排 Top10：
