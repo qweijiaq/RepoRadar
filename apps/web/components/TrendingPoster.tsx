@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toPng } from 'html-to-image'
 import JSZip from 'jszip'
 import type { TrendingDetail, TrendingPost } from '@repo-radar/core'
@@ -30,33 +30,31 @@ const emerald = '#6ee7a8'
 const muted = '#a9b2d0'
 const faint = '#7d87a8'
 
-function PosterHeader({ dateLabel, label }: { dateLabel: string; label: string }) {
+function PosterHeader({ dateLabel, label }: { dateLabel: string; label?: string }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <span style={{ fontSize: 26, letterSpacing: 4, color: '#9aa4ff', fontWeight: 700 }}>
         REPO RADAR
       </span>
       <span style={{ fontSize: 24, color: faint }}>
-        {dateLabel} · {label}
+        {label ? `${dateLabel} · ${label}` : dateLabel}
       </span>
     </div>
   )
 }
 
-function PosterFooter({ hashtags }: { hashtags: string[] }) {
+function PosterFooter() {
   return (
     <div
       style={{
         marginTop: 'auto',
         paddingTop: 32,
         display: 'flex',
-        justifyContent: 'space-between',
-        gap: 20,
+        justifyContent: 'flex-end',
         fontSize: 22,
         color: faint,
       }}
     >
-      <span>{hashtags.map((tag) => `#${tag}`).join(' ')}</span>
       <span>数据来自 RepoRadar</span>
     </div>
   )
@@ -164,7 +162,7 @@ function DetailSlide({ detail, index, total }: { detail: TrendingDetail; index: 
         </p>
       ) : null}
 
-      <PosterFooter hashtags={['GitHub', '开源', 'AI']} />
+      <PosterFooter />
     </div>
   )
 }
@@ -173,7 +171,11 @@ export function TrendingPoster({ post, text, details, periodLabel }: TrendingPos
   const coverRef = useRef<HTMLDivElement>(null)
   const detailRefs = useRef<Array<HTMLDivElement | null>>([])
   const [busy, setBusy] = useState(false)
+  const [ready, setReady] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+
+  // SSR 时按钮还没有事件处理器，先禁用，等 hydration 完成再允许点击。
+  useEffect(() => setReady(true), [])
 
   async function copyText(): Promise<void> {
     try {
@@ -266,7 +268,7 @@ export function TrendingPoster({ post, text, details, periodLabel }: TrendingPos
         <button className="btn solid" type="button" onClick={copyText}>
           复制文字
         </button>
-        <button className="btn" type="button" onClick={exportZip} disabled={busy}>
+        <button className="btn" type="button" onClick={exportZip} disabled={busy || !ready}>
           {busy ? '打包中…' : `下载 ZIP（${1 + details.length} 张图 + 文案）`}
         </button>
         {message ? <span className="muted small">{message}</span> : null}
@@ -363,7 +365,7 @@ export function TrendingPoster({ post, text, details, periodLabel }: TrendingPos
                 </div>
               ) : null}
 
-              <PosterFooter hashtags={post.copy.hashtags} />
+              <PosterFooter />
             </div>
           </div>
         </div>
@@ -383,7 +385,7 @@ export function TrendingPoster({ post, text, details, periodLabel }: TrendingPos
                   detailRefs.current[index] = node
                 }}
               >
-                <DetailSlide detail={detail} index={index + 1} total={details.length} />
+                <DetailSlide detail={detail} index={index} total={details.length} />
               </div>
             </div>
           </div>

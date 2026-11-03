@@ -71,11 +71,14 @@ export function trendingDateKey(now = new Date()): string {
 }
 
 export function trendingDateLabel(now = new Date()): string {
-  return new Intl.DateTimeFormat('zh-CN', {
+  const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai',
-    month: 'long',
+    month: 'numeric',
     day: 'numeric',
-  }).format(now)
+  }).formatToParts(now)
+  const month = parts.find((part) => part.type === 'month')?.value ?? ''
+  const day = parts.find((part) => part.type === 'day')?.value ?? ''
+  return `${month}.${day}`
 }
 
 /** 按 7 天 star 绝对增量排序，只保留有快照且正增长的项目。 */

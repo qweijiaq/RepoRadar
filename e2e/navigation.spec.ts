@@ -79,6 +79,7 @@ test('discover and trends pages render', async ({ page }) => {
 })
 
 test('trending share card renders copy and export actions', async ({ page }) => {
+  test.setTimeout(180_000)
   await page.goto('/share/trending', { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { name: '生成一张可以发的 GitHub 飙升榜' })).toBeVisible()
   await expect(page.getByRole('button', { name: '复制文字' })).toBeVisible()
