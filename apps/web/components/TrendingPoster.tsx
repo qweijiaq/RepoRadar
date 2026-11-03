@@ -110,6 +110,11 @@ function DetailSlide({ detail, index, total }: { detail: TrendingDetail; index: 
       ) : null}
 
       <h2 style={{ fontSize: 28, color: '#9aa4ff', margin: '34px 0 14px' }}>它能做什么</h2>
+      {detail.features.length === 0 ? (
+        <p style={{ fontSize: 24, lineHeight: 1.6, color: muted }}>
+          这个仓库还没有生成 AI 功能画像，所以暂时没有能力点。回到页面点「补全功能画像」后重新导出即可。
+        </p>
+      ) : null}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {detail.features.map((feature) => (
           <div

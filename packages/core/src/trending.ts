@@ -123,9 +123,7 @@ export function toTrendingDetail(
   return {
     fullName: item.fullName,
     positioning: profile?.positioning ?? item.summary ?? '暂无简介',
-    features:
-      profile?.features.slice(0, 4) ??
-      topics.map((topic) => ({ name: `#${topic}`, detail: '相关主题' })),
+    features: profile ? profile.features.slice(0, 4) : [],
     useCases: profile?.useCases.slice(0, 2) ?? [],
     quickstart: profile?.quickstart.slice(0, 2) ?? [],
     stars: item.stars,

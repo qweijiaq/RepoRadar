@@ -23,6 +23,10 @@ import {
   findEnrichedRepos,
   findLlmProvider,
   findRepoByFullName,
+  saveRepoProfile,
+  repoProfileSourceHash,
+  loadRepoProfiles,
+  generateRepoProfile,
   saveInferredTopics,
   inferRepoTopics,
   fetchReadme,
@@ -425,6 +429,58 @@ export async function inferRepoTopicsAction(formData: FormData): Promise<void> {
   await saveInferredTopics(pool, repo, topics)
   revalidatePath(`/r/${repo}`)
   redirect(`/r/${repo}?topics=1`)
+}
+
+export async function generateMissingProfilesAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
+
+  const target = formData.get('target') === 'daily' ? 'daily' : 'share'
+  const back = target === 'daily' ? '/daily' : '/share/trending'
+  const token = sessionAccessToken(session)
+  if (!token) redirect(`${back}?error=need-token`)
+
+  const pool = getPool()
+  const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
+  if (!llm) redirect(`${back}?error=llm`)
+
+  const items =
+    target === 'daily'
+      ? (await loadDailyRanking(pool, 10)).items
+      : selectTrendingItems(await findEnrichedRepos(pool, 500), 10)
+  const profiles = await loadRepoProfiles(pool, items.map((item) => item.fullName))
+  const missing = items.filter((item) => !profiles.has(item.fullName)).slice(0, 3)
+
+  for (const item of missing) {
+    try {
+      const context = await loadProjectContext(item.fullName, token)
+      if (!context.readme && !context.manifest) continue
+      const profile = await generateRepoProfile(
+        {
+          repo: item.fullName,
+          description: context.description,
+          readme: context.readme,
+          manifestName: context.manifestName,
+          manifest: context.manifest,
+          topics: item.topics,
+          language: item.language,
+        },
+        llm,
+      )
+      await saveRepoProfile(pool, item.fullName, profile, {
+        model: llm.model,
+        sourceHash: repoProfileSourceHash(context.readme, context.manifest),
+      })
+    } catch (error) {
+      console.error(`[profiles] 生成 ${item.fullName} 失败：`, error)
+    }
+  }
+
+  revalidatePath('/share/trending')
+  revalidatePath('/daily')
+  redirect(`${back}?profiles=1`)
 }
 
 export async function generateTrendingPostAction(): Promise<void> {

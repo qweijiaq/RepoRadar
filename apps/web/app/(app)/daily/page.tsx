@@ -10,7 +10,7 @@ import {
   toTrendingDetail,
   type TrendingPost,
 } from '@repo-radar/core'
-import { generateDailyCopyAction } from '@/app/actions'
+import { generateDailyCopyAction, generateMissingProfilesAction } from '@/app/actions'
 import { TrendingPoster } from '@/components/TrendingPoster'
 import { auth } from '@/auth'
 import { sessionUser } from '@/lib/session'
@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: '每日榜单 — RepoRadar' }
 
 interface DailyPageProps {
-  searchParams: Promise<{ error?: string; generated?: string }>
+  searchParams: Promise<{ error?: string; generated?: string; profiles?: string }>
 }
 
 export default async function DailyPage({ searchParams }: DailyPageProps) {
@@ -70,6 +70,23 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
         <div className="notice">还没有配置 AI 模型，当前使用模板文案。</div>
       ) : null}
       {params.generated ? <div className="notice success">每日文案已更新。</div> : null}
+
+      {details.some((detail) => !detail.hasProfile) ? (
+        <div className="notice">
+          有 {details.filter((detail) => !detail.hasProfile).length} 个仓库还没有功能画像，详情页会缺少「它能做什么」。
+          <form action={generateMissingProfilesAction}>
+            <input type="hidden" name="target" value="daily" />
+            <button className="btn quiet small" type="submit">
+              补全 3 个画像
+            </button>
+          </form>
+        </div>
+      ) : null}
+      {params.profiles ? <div className="notice success">功能画像已补全一部分；还有缺失可以再点一次。</div> : null}
+      {params.error === 'need-token' ? (
+        <div className="notice">补全画像需要 GitHub 授权，请重新登录后再试。</div>
+      ) : null}
+      {params.error === 'llm' ? <div className="notice">还没有配置 AI 模型。</div> : null}
 
       <div className="feed-actions">
         <form action={generateDailyCopyAction}>

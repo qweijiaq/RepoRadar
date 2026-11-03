@@ -89,6 +89,7 @@ describe('toTrendingDetail', () => {
     )
     expect(detail.positioning).toBe('一个很酷的库')
     expect(detail.hasProfile).toBe(false)
-    expect(detail.features.map((feature) => feature.name)).toEqual(['#cli', '#nodejs'])
+    expect(detail.features).toEqual([])
+    expect(detail.topicsSource).toBe('github')
   })
 })

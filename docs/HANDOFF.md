@@ -30,6 +30,7 @@ pnpm test:e2e
 - `/daily`：每日榜单（当前 star − 上一次快照 Top10），可复制文字/导出图片；worker 每天记录快照，手动补跑用 `pnpm radar snapshot`。快照不足一天时会标注为多日增量。
 - `/share/trending`：把 7 天 star 增量 Top 10 做成分享海报，默认 11 张图（封面 + Top 10 详情页），可逐张或全部导出；详情内容优先取 AI 功能画像。
 - 原分享卡说明：把 7 天 star 增量 Top 10 做成分享海报；可「复制文字」或「导出图片」（2x PNG），文案由 AI 生成并按天缓存。海报还带「新库速度榜」（建库以来日均 star），没有 7 天快照的新库也能出现。
+- 分享卡/每日榜里如果某仓库没有功能画像，「它能做什么」会显示提示而不是主题标签；页面上的「补全 3 个画像」可以现场生成。
 - 没有 GitHub topic 的仓库可以在仓库页点「AI 推断主题」，或批量跑 `pnpm radar infer-topics`；推断结果不会覆盖 GitHub 原始 topic。
 - 趋势只覆盖**已收录且已富化**的仓库；发现漏了热门项目时，可以先手动收录：
   `pnpm radar ingest --repo=owner/name && pnpm radar enrich --limit=1`，或在部署环境跑一次正常采集。
