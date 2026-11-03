@@ -15,7 +15,7 @@ import {
   type EnrichedRepoRecord,
   getPool,
 } from '@repo-radar/core'
-import { addToCollectionAction } from '@/app/actions'
+import { addToCollectionAction, inferRepoTopicsAction } from '@/app/actions'
 import { generateRepoProfileAction } from '@/app/(app)/jobs/enqueue'
 import { auth } from '@/auth'
 import { StarChart } from '@/components/StarChart'
@@ -32,7 +32,7 @@ export const dynamic = 'force-dynamic'
 
 interface RepoPageProps {
   params: Promise<{ owner: string; name: string }>
-  searchParams: Promise<{ error?: string }>
+  searchParams: Promise<{ error?: string; topics?: string }>
 }
 
 export async function generateMetadata({ params }: RepoPageProps) {
@@ -367,7 +367,31 @@ export default async function RepoPage({ params, searchParams }: RepoPageProps) 
               </span>
             ))}
           </div>
+        ) : repo.inferredTopics && repo.inferredTopics.length > 0 ? (
+          <div className="chips">
+            <span className="muted small">AI 推断主题：</span>
+            {repo.inferredTopics.map((topic) => (
+              <span className="chip subtle" key={topic}>
+                {topic}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="feed-actions">
+            <span className="muted small">GitHub 上没有设置 topic，可以让 AI 推断：</span>
+            <form action={inferRepoTopicsAction}>
+              <input type="hidden" name="repo" value={repo.fullName} />
+              <button className="btn quiet small" type="submit">
+                AI 推断主题
+              </button>
+            </form>
+          </div>
+        )}
+
+        {query.topics === 'llm' ? (
+          <div className="notice">推断主题需要先配置 AI 模型。</div>
         ) : null}
+        {query.topics === '1' ? <div className="notice success">AI 主题已生成。</div> : null}
 
         <div className="hero-actions">
           <a className="btn solid" href={repo.htmlUrl} target="_blank" rel="noreferrer">

@@ -87,6 +87,8 @@ function DetailSlide({ detail, index, total }: { detail: TrendingDetail; index: 
         <p style={{ fontSize: 21, color: faint, marginTop: 14 }}>
           GitHub 上没有设置 topic，所以这里没有主题标签。
         </p>
+      ) : detail.topicsSource === 'ai' ? (
+        <p style={{ fontSize: 20, color: faint, marginTop: 10 }}>主题由 AI 从 README 推断。</p>
       ) : null}
       {detail.topics.length > 0 ? (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>

@@ -73,6 +73,14 @@ MCP server 在原有工具之外提供 `pick_library`（按任务选库）、`in
 
 这三个功能复用已有的 enrichment、embedding、任务队列和模型配置，不需要额外服务。
 
+## AI 推断主题
+
+有些仓库没有在 GitHub 上设置 topic。此时可以：
+
+- 在仓库页点「AI 推断主题」，从 README/摘要生成 3-5 个 GitHub topic 风格标签；
+- 批量补：`pnpm radar infer-topics`（默认 20 个，可用 `--limit`）；
+- 推断结果存在 `repos.inferred_topics`，**不覆盖** GitHub 原始 topics；分享卡/每日榜在没有 GitHub topic 时优先展示 AI 推断，并标注来源。
+
 ## 每日榜单
 
 `/daily`（导航「榜单」）按「当前 star − 上一次快照」排 Top10：

@@ -23,6 +23,9 @@ import {
   findEnrichedRepos,
   findLlmProvider,
   findRepoByFullName,
+  saveInferredTopics,
+  inferRepoTopics,
+  fetchReadme,
   generateTrendingCopy,
   loadDailyRanking,
   saveTrendingCopy,
@@ -388,6 +391,40 @@ export async function clearLlmConfigAction(): Promise<void> {
   await clearStoredLlmConfig(getPool())
   revalidatePath('/settings')
   redirect('/settings?llm=cleared')
+}
+
+export async function inferRepoTopicsAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
+
+  const repo = String(formData.get('repo') ?? '').trim()
+  if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repo)) redirect('/feed')
+
+  const pool = getPool()
+  const record = await findRepoByFullName(pool, repo)
+  if (!record) redirect(`/r/${repo}`)
+
+  const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
+  if (!llm) redirect(`/r/${repo}?topics=llm`)
+
+  const token = sessionAccessToken(session)
+  const readme = token ? await fetchReadme(repo, token).catch(() => null) : null
+  const topics = await inferRepoTopics(
+    {
+      repo,
+      summary: record.summary,
+      description: record.description,
+      language: record.language,
+      existingTopics: record.topics,
+      readme,
+    },
+    llm,
+  )
+  await saveInferredTopics(pool, repo, topics)
+  revalidatePath(`/r/${repo}`)
+  redirect(`/r/${repo}?topics=1`)
 }
 
 export async function generateTrendingPostAction(): Promise<void> {

@@ -88,6 +88,7 @@ interface RepoRow {
   homepage: string | null
   language: string | null
   topics: string[] | null
+  inferred_topics: string[] | null
   stars: number
   forks: number
   open_issues: number
@@ -113,7 +114,7 @@ interface EnrichedRepoRow extends RepoRow {
 }
 
 const REPO_COLUMNS = `repos.id, repos.github_id, repos.full_name, repos.owner, repos.name,
-  repos.description, repos.html_url, repos.homepage, repos.language, repos.topics,
+  repos.description, repos.html_url, repos.homepage, repos.language, repos.topics, repos.inferred_topics,
   repos.stars, repos.forks, repos.open_issues, repos.license, repos.archived, repos.is_fork,
   repos.pushed_at, repos.created_at`
 
@@ -134,6 +135,7 @@ function mapRepoRow(row: RepoRow): RepoRecord {
     homepage: row.homepage,
     language: row.language,
     topics: row.topics ?? [],
+    inferredTopics: row.inferred_topics ?? [],
     stars: row.stars,
     forks: row.forks,
     openIssues: row.open_issues,

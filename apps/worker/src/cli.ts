@@ -6,6 +6,9 @@ import {
   fetchGitHubRepo,
   buildFeedbackContext,
   buildSearchQueries,
+  saveInferredTopics,
+  listReposNeedingTopics,
+  inferRepoTopics,
   createPool,
   diversifyRanking,
   enrichRepo,
@@ -108,6 +111,7 @@ const HELP = `RepoRadar CLI（M2）
   mcp                  以 MCP server（stdio）方式运行，供 agent 调用
   pipeline             依次执行 ingest → enrich → list
   doctor               检查数据库、迁移、模型、GitHub 授权、邮件和任务队列
+  infer-topics         为没有 GitHub topic 的已富化仓库推断 AI 主题
   snapshot             记录所有已富化仓库的今日 star 快照（每日榜单用）
   backfill-identities  为已有仓库回填 GitHub 稳定 ID（用于改名/转移去重）
   demo-seed            写入演示数据（仓库、画像、收藏、订阅、维护项目；可重复执行）
@@ -777,6 +781,38 @@ async function main(): Promise<void> {
         console.log(
           `演示数据已写入：${result.repos} 个仓库，用户 ${result.user}，${result.projects} 个维护项目`,
         )
+        break
+      }
+      case 'infer-topics': {
+        if (!effectiveConfig.llm) {
+          console.error('需要配置模型才能推断主题')
+          process.exitCode = 1
+          break
+        }
+        const repos = await listReposNeedingTopics(pool, intArg(values.limit, 20))
+        console.log(`待推断主题 ${repos.length} 个仓库`)
+        for (const repo of repos) {
+          const readme = effectiveConfig.githubToken
+            ? await fetchReadme(repo.fullName, effectiveConfig.githubToken).catch(() => null)
+            : null
+          try {
+            const topics = await inferRepoTopics(
+              {
+                repo: repo.fullName,
+                summary: repo.summary,
+                description: repo.description,
+                language: repo.language,
+                existingTopics: [],
+                readme,
+              },
+              effectiveConfig.llm,
+            )
+            await saveInferredTopics(pool, repo.fullName, topics)
+            console.log(`  ✓ ${repo.fullName} → ${topics.join(', ')}`)
+          } catch (error) {
+            console.error(`  ✗ ${repo.fullName}：${error instanceof Error ? error.message : error}`)
+          }
+        }
         break
       }
       case 'snapshot': {

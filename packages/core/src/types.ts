@@ -23,6 +23,8 @@ export interface RepoInput {
 
 export interface RepoRecord extends RepoInput {
   id: number
+  /** GitHub 没有 topic 时由 AI 推断的标签；不覆盖 GitHub 原始 topics。 */
+  inferredTopics?: string[]
 }
 
 export interface EnrichedRepoRecord extends RepoRecord {

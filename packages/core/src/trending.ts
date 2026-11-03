@@ -6,6 +6,7 @@ import { chatCompletion } from './llm.js'
 
 export interface TrendingItem {
   fullName: string
+  inferredTopics?: string[]
   stars: number
   stars7d: number
   gain: number
@@ -35,6 +36,7 @@ export interface TrendingDetail {
   growth: number
   language: string | null
   topics: string[]
+  topicsSource: 'github' | 'ai' | null
   hasProfile: boolean
 }
 
@@ -83,6 +85,7 @@ export function selectTrendingItems(
     language: string | null
     summary: string | null
     topics: string[]
+    inferredTopics?: string[]
   }>,
   limit = 10,
 ): TrendingItem[] {
@@ -97,6 +100,7 @@ export function selectTrendingItems(
       language: repo.language,
       summary: repo.summary,
       topics: repo.topics,
+      inferredTopics: repo.inferredTopics ?? [],
     }))
     .sort((left, right) => right.gain - left.gain || right.growth - left.growth)
     .slice(0, Math.max(1, limit))
@@ -111,7 +115,11 @@ export function toTrendingDetail(
     quickstart: string[]
   } | null,
 ): TrendingDetail {
-  const topics = item.topics.slice(0, 4)
+  const githubTopics = item.topics
+  const inferredTopics = item.inferredTopics ?? []
+  const topics = (githubTopics.length > 0 ? githubTopics : inferredTopics).slice(0, 4)
+  const topicsSource: 'github' | 'ai' | null =
+    githubTopics.length > 0 ? 'github' : inferredTopics.length > 0 ? 'ai' : null
   return {
     fullName: item.fullName,
     positioning: profile?.positioning ?? item.summary ?? '暂无简介',
@@ -125,6 +133,7 @@ export function toTrendingDetail(
     growth: item.growth,
     language: item.language,
     topics,
+    topicsSource,
     hasProfile: Boolean(profile),
   }
 }
