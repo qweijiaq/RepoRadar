@@ -106,6 +106,17 @@ describe.skipIf(!hasTestDatabase)('feed snapshots', () => {
     expect(await loadFeedSnapshotPage(pool, userId, 10)).toBeNull()
   })
 
+  it('旧版本快照会被忽略并触发重建', async () => {
+    if (!pool) throw new Error('pool 未初始化')
+    await enrich('acme/versioned', 0.8)
+    const snapshot = await refreshFeedSnapshot(pool, userId)
+    expect(snapshot?.version).toBeTruthy()
+
+    await pool.query(`UPDATE feed_snapshots SET version = 'legacy' WHERE user_id = $1`, [userId])
+    expect(await loadFeedSnapshot(pool, userId)).toBeNull()
+    expect(await listUsersNeedingFeedSnapshot(pool, 10)).toContain(userId)
+  })
+
   it('没有画像的用户不会生成快照', async () => {
     if (!pool) throw new Error('pool 未初始化')
     const otherId = await ensureUser(pool, {

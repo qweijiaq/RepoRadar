@@ -11,6 +11,7 @@ import {
   findLlmProvider,
   loadDiscoveryStatus,
   loadMailStatus,
+  runDoctor,
   loadQuotaConfig,
   loadQuotaUsage,
   loadRetentionConfig,
@@ -18,6 +19,7 @@ import {
   loadStoredLlmStatus,
   loadSubscriptions,
   loadUsageSummary,
+  listRadarSnapshots,
   resolveBaseUrlStatus,
   getPool,
   countPushSubscriptions,
@@ -30,6 +32,7 @@ import {
   loadDemoTasteAction,
   removeSubscriptionAction,
   resyncStarsAction,
+  revokeRadarShareAction,
   clearMailConfigAction,
   clearGithubWebhookSecretAction,
   resetQuotaConfigAction,
@@ -48,6 +51,8 @@ import {
 import { auth } from '@/auth'
 import { isAdminUser } from '@/lib/admin'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { CopyButton } from '@/components/ui/CopyButton'
+import { QueryToastGroup } from '@/components/ui/QueryToast'
 import { maskClientId, resolveGithubCredentials } from '@/lib/oauth-config'
 import { resolveGithubWebhookSecret } from '@/lib/webhook-config'
 import { sessionAccessToken, sessionGithubScope, sessionUser } from '@/lib/session'
@@ -88,6 +93,8 @@ interface SettingsPageProps {
     account?: string
     retention?: string
     pool?: string
+    share?: string
+    doctor?: string
     test?: string
     code?: string
   }>
@@ -101,7 +108,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 
   const user = await findUserById(Number(sessionInfo.id))
   const admin = await isAdminUser(sessionInfo)
-  const token = sessionAccessToken(session)
+  const token = await sessionAccessToken(session)
   const githubScope = sessionGithubScope(session)
   const actualGithubScopes = token ? await fetchTokenScopes(token).catch(() => null) : null
   const effectiveScope = actualGithubScopes ? actualGithubScopes.join(' ') : githubScope
@@ -156,12 +163,110 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     ...(provider.baseUrlOptions ? { baseUrlOptions: provider.baseUrlOptions } : {}),
     models: provider.models,
   }))
+  const shareLinks = await listRadarSnapshots(getPool(), Number(sessionInfo.id), 8)
   const topics = Object.entries(user?.profile?.topicWeights ?? {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 12)
   const languages = Object.entries(user?.profile?.languageWeights ?? {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8)
+
+  const checklist: Array<{
+    id: string
+    level: 'ok' | 'warn' | 'error'
+    title: string
+    detail: string
+    href: string
+  }> = [
+    {
+      id: 'github',
+      level:
+        token && githubTokenState === 'ok' && repoScope === true
+          ? 'ok'
+          : token && githubTokenState === 'invalid'
+            ? 'error'
+            : 'warn',
+      title: 'GitHub 授权',
+      detail:
+        token && githubTokenState === 'ok'
+          ? repoScope === true
+            ? 'token 有效，已具备仓库读写权限。'
+            : 'token 有效，但只有基础权限；仓库管理和私有仓库不可用。'
+          : token && githubTokenState === 'invalid'
+            ? 'token 已失效，需要重新登录。'
+            : '还没有可用的 GitHub token。',
+      href: '#github-status',
+    },
+    {
+      id: 'profile',
+      level: (user?.profile?.starredCount ?? 0) > 0 ? 'ok' : 'warn',
+      title: '口味画像',
+      detail:
+        (user?.profile?.starredCount ?? 0) > 0
+          ? `已同步 ${user?.profile?.starredCount} 个 star。`
+          : '还没有建立画像；同步 GitHub 后推荐会更准确。',
+      href: '#sync',
+    },
+    {
+      id: 'notify-email',
+      level: notificationEmail || fallbackEmail ? 'ok' : 'warn',
+      title: '通知邮箱',
+      detail: notificationEmail || fallbackEmail || '还没有填写通知邮箱。',
+      href: '#notifications',
+    },
+    {
+      id: 'push',
+      level: pushDevices > 0 ? 'ok' : 'warn',
+      title: '浏览器推送',
+      detail: pushDevices > 0 ? `已授权 ${pushDevices} 台设备。` : '还没有授权浏览器推送设备。',
+      href: '#notifications',
+    },
+  ]
+
+  if (admin) {
+    checklist.push(
+      {
+        id: 'llm',
+        level: currentLlm ? 'ok' : 'error',
+        title: 'AI 模型',
+        detail: currentLlm
+          ? `${currentLlmProvider?.name ?? currentLlm.providerId ?? '自定义'} · ${currentLlm.model}`
+          : '还没有配置模型；所有 AI 功能不可用。',
+        href: '#ai',
+      },
+      {
+        id: 'pool',
+        level: discovery.enrichedRepos > 0 ? 'ok' : 'warn',
+        title: '候选池',
+        detail: `已收录 ${discovery.totalRepos} 个，已富化 ${discovery.enrichedRepos} 个。`,
+        href: '#pool',
+      },
+      {
+        id: 'mail',
+        level: mailStatus.summary ? 'ok' : 'warn',
+        title: '邮件通道',
+        detail: mailStatus.summary ? `已配置（${mailStatus.source === 'env' ? '环境变量' : '页面设置'}）。` : '未配置，邮件通知不会发送。',
+        href: '#mail',
+      },
+      {
+        id: 'site',
+        level: /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(siteStatus.url) ? 'warn' : 'ok',
+        title: '站点地址',
+        detail: siteStatus.url,
+        href: '#site',
+      },
+      {
+        id: 'webhook',
+        level: webhook ? 'ok' : 'warn',
+        title: 'GitHub Webhook',
+        detail: webhook ? '已配置 Webhook Secret。' : '未配置；动态同步会回退到轮询。',
+        href: '#notifications',
+      },
+    )
+  }
+
+  const checklistTodo = checklist.filter((item) => item.level !== 'ok').length
+  const doctorChecks = admin && params.doctor === '1' ? await runDoctor(getPool()) : null
 
   return (
     <div className="page narrow">
@@ -179,6 +284,8 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       </div>
 
       <nav className="settings-toc" aria-label="设置导航">
+        <a href="#checklist">配置检查</a>
+        {admin ? <a href="#deep-check">深度检查</a> : null}
         <a href="#github-status">GitHub 授权</a>
         {admin ? <a href="#ai">AI 模型</a> : null}
         <a href="#automation">后台自动化</a>
@@ -196,6 +303,70 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         {admin ? <a href="#oauth">GitHub OAuth</a> : null}
         {devMode ? <a href="#demo">演示数据</a> : null}
       </nav>
+
+      <section className="panel" id="checklist">
+        <h2>配置检查</h2>
+        <p className="muted small">
+          {checklistTodo === 0 ? '当前配置完整，没有需要处理的项。' : `${checklistTodo} 项可以优化；点击条目跳到对应设置。`}
+        </p>
+        <ul className="settings-checklist">
+          {checklist.map((item) => (
+            <li key={item.id} className={`settings-check ${item.level}`}>
+              <span
+                className={
+                  item.level === 'ok'
+                    ? 'chip verified'
+                    : item.level === 'error'
+                      ? 'chip release'
+                      : 'chip subtle'
+                }
+              >
+                {item.level === 'ok' ? '正常' : item.level === 'error' ? '缺失' : '建议'}
+              </span>
+              <a href={item.href}>{item.title}</a>
+              <span className="muted small">{item.detail}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {admin ? (
+        <section className="panel" id="deep-check">
+          <h2>深度检查</h2>
+          <p className="muted small">
+            检查数据库、迁移、pgvector、候选池、模型、Embedding、GitHub 授权、邮件、站点地址和任务队列。
+            会读取 token scope，但不会发送邮件或调用模型。
+          </p>
+          <div className="feed-actions">
+            <Link className="btn small" href="/settings?doctor=1#deep-check">
+              {doctorChecks ? '重新运行深度检查' : '运行深度检查'}
+            </Link>
+          </div>
+          {doctorChecks ? (
+            <ul className="settings-checklist">
+              {doctorChecks.map((check) => (
+                <li key={check.id} className={`settings-check ${check.level}`}>
+                  <span
+                    className={
+                      check.level === 'ok'
+                        ? 'chip verified'
+                        : check.level === 'error'
+                          ? 'chip release'
+                          : 'chip subtle'
+                    }
+                  >
+                    {check.level === 'ok' ? '正常' : check.level === 'error' ? '错误' : '建议'}
+                  </span>
+                  <strong>{check.title}</strong>
+                  <span className="muted small">{check.detail}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted small">还没有运行；点击上方按钮生成一份检查结果。</p>
+          )}
+        </section>
+      ) : null}
 
       <section className="panel" id="github-status">
         <h2>GitHub 授权</h2>
@@ -254,60 +425,148 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         ) : null}
       </section>
 
-      {params.oauth === 'saved' ? <div className="notice success">OAuth 凭据已更新。</div> : null}
-      {params.oauth === 'cleared' ? <div className="notice success">OAuth 配置已清除。</div> : null}
-      {params.oauth === 'invalid' ? <div className="notice">Client ID 或 Client Secret 格式不正确。</div> : null}
-      {params.sub === 'invalid' ? <div className="notice">订阅值格式不正确，请检查后重试。</div> : null}
-      {params.llm === 'saved' ? <div className="notice success">模型配置已保存。</div> : null}
-      {params.llm === 'cleared' ? <div className="notice success">模型配置已清除。</div> : null}
-      {params.llm === 'invalid' ? <div className="notice">模型配置不完整或格式不正确。</div> : null}
-      {params.llm === 'key-required' ? <div className="notice">更换服务商后需要重新填写 API Key。</div> : null}
-      {params.llm === 'env' ? <div className="notice">当前使用环境变量配置，页面修改不会生效。</div> : null}
-      {params.llm === 'missing' ? <div className="notice">生成周报前需要先在下方配置 AI 模型。</div> : null}
+      <QueryToastGroup
+        toasts={[
+          {
+            paramKey: 'oauth',
+            code: params.oauth,
+            messages: {
+              saved: 'OAuth 凭据已更新。',
+              cleared: 'OAuth 配置已清除。',
+              invalid: 'Client ID 或 Client Secret 格式不正确。',
+            },
+            tones: { saved: 'success', cleared: 'success' },
+          },
+          {
+            paramKey: 'sub',
+            code: params.sub,
+            messages: { invalid: '订阅值格式不正确，请检查后重试。' },
+          },
+          {
+            paramKey: 'llm',
+            code: params.llm,
+            messages: {
+              saved: '模型配置已保存。',
+              cleared: '模型配置已清除。',
+              invalid: '模型配置不完整或格式不正确。',
+              'key-required': '更换服务商后需要重新填写 API Key。',
+              env: '当前使用环境变量配置，页面修改不会生效。',
+              missing: '生成周报前需要先在下方配置 AI 模型。',
+            },
+            tones: { saved: 'success', cleared: 'success' },
+          },
+          {
+            paramKey: 'sync',
+            code: params.sync,
+            messages: {
+              ok: '口味画像已更新。',
+              error: '画像同步失败，请检查 GitHub 授权范围或稍后重试。',
+            },
+            tones: { ok: 'success' },
+          },
+          {
+            paramKey: 'notify',
+            code: params.notify,
+            messages: {
+              saved: '通知偏好已保存。',
+              'email-saved': '通知邮箱已保存。',
+              'email-invalid': '通知邮箱格式不正确。',
+            },
+            tones: { saved: 'success', 'email-saved': 'success' },
+          },
+          {
+            paramKey: 'webhook',
+            code: params.webhook,
+            messages: {
+              saved: 'Webhook Secret 已保存。',
+              cleared: 'Webhook Secret 已清除。',
+              invalid: 'Webhook Secret 需要 8-256 个字符。',
+              'key-required': '还没有保存 Secret，请先填写一个。',
+              env: '当前使用环境变量 GITHUB_WEBHOOK_SECRET，页面修改不会生效。',
+            },
+            tones: { saved: 'success', cleared: 'success' },
+          },
+          {
+            paramKey: 'mail',
+            code: params.mail,
+            messages: {
+              saved: '邮件通道已保存。',
+              cleared: '邮件通道已清除。',
+              invalid: '邮件配置不完整或格式不正确，请检查服务器、端口和邮箱。',
+              env: '当前使用环境变量 SMTP_URL，页面修改不会生效。',
+            },
+            tones: { saved: 'success', cleared: 'success' },
+          },
+          {
+            paramKey: 'site',
+            code: params.site,
+            messages: {
+              saved: '站点地址已保存。',
+              invalid: '站点地址需要是 http:// 或 https:// 开头的完整地址。',
+              env: '当前使用环境变量 RADAR_BASE_URL，页面修改不会生效。',
+            },
+            tones: { saved: 'success' },
+          },
+          {
+            paramKey: 'admin',
+            code: params.admin,
+            messages: { denied: '只有管理员可以修改全局配置。' },
+          },
+          {
+            paramKey: 'quota',
+            code: params.quota,
+            messages: { saved: '限流配置已保存。', reset: '限流配置已恢复默认。' },
+            tones: { saved: 'success', reset: 'success' },
+          },
+          {
+            paramKey: 'account',
+            code: params.account,
+            messages: {
+              confirm: '请输入完整登录名以确认删除账号。',
+              'last-admin': '当前是唯一管理员，不能删除自己。请先在 ADMIN_LOGINS 增加另一位管理员。',
+              error: '账号删除失败，请稍后重试或联系管理员。',
+            },
+          },
+          {
+            paramKey: 'share',
+            code: params.share,
+            messages: { revoked: '分享链接已撤销。' },
+            tones: { revoked: 'success' },
+          },
+          {
+            paramKey: 'retention',
+            code: params.retention,
+            messages: {
+              saved: '数据保留策略已保存。',
+              reset: '数据保留策略已恢复默认。',
+              ran: '清理已完成。',
+              error: '清理失败，请查看 worker/web 日志。',
+            },
+            tones: { saved: 'success', reset: 'success', ran: 'success' },
+          },
+          {
+            paramKey: 'pool',
+            code: params.pool,
+            messages: {
+              queued: '候选池刷新任务已排队，进度见任务中心。',
+              updated: '候选池已更新。',
+              enriched: '候选池富化已完成。',
+            },
+            tones: { queued: 'success', updated: 'success', enriched: 'success' },
+          },
+        ]}
+      />
       {storedStatus?.state === 'unreadable' ? (
         <div className="notice">
           检测到已保存的模型配置，但当前服务无法解密（通常是 AUTH_SECRET 发生变化）。请重新填写一次 API
           Key，之后同步画像不会再清除它。
         </div>
       ) : null}
-      {params.sync === 'ok' ? <div className="notice success">口味画像已更新。</div> : null}
-      {params.notify === 'saved' ? <div className="notice success">通知偏好已保存。</div> : null}
-      {params.webhook === 'saved' ? <div className="notice success">Webhook Secret 已保存。</div> : null}
-      {params.webhook === 'cleared' ? <div className="notice success">Webhook Secret 已清除。</div> : null}
-      {params.webhook === 'invalid' ? <div className="notice">Webhook Secret 需要 8-256 个字符。</div> : null}
-      {params.webhook === 'key-required' ? <div className="notice">还没有保存 Secret，请先填写一个。</div> : null}
-      {params.webhook === 'env' ? <div className="notice">当前使用环境变量 GITHUB_WEBHOOK_SECRET，页面修改不会生效。</div> : null}
-      {params.notify === 'email-saved' ? <div className="notice success">通知邮箱已保存。</div> : null}
-      {params.notify === 'email-invalid' ? <div className="notice">通知邮箱格式不正确。</div> : null}
-      {params.mail === 'saved' ? <div className="notice success">邮件通道已保存。</div> : null}
-      {params.mail === 'cleared' ? <div className="notice success">邮件通道已清除。</div> : null}
-      {params.mail === 'invalid' ? <div className="notice">邮件配置不完整或格式不正确，请检查服务器、端口和邮箱。</div> : null}
-      {params.mail === 'env' ? <div className="notice">当前使用环境变量 SMTP_URL，页面修改不会生效。</div> : null}
-      {params.site === 'saved' ? <div className="notice success">站点地址已保存。</div> : null}
-      {params.site === 'invalid' ? <div className="notice">站点地址需要是 http:// 或 https:// 开头的完整地址。</div> : null}
-      {params.site === 'env' ? <div className="notice">当前使用环境变量 RADAR_BASE_URL，页面修改不会生效。</div> : null}
-      {params.admin === 'denied' ? <div className="notice">只有管理员可以修改全局配置。</div> : null}
-      {params.quota === 'saved' ? <div className="notice success">限流配置已保存。</div> : null}
-      {params.quota === 'reset' ? <div className="notice success">限流配置已恢复默认。</div> : null}
-      {params.account === 'confirm' ? <div className="notice">请输入完整登录名以确认删除账号。</div> : null}
-      {params.account === 'last-admin' ? <div className="notice">当前是唯一管理员，不能删除自己。请先在 ADMIN_LOGINS 增加另一位管理员。</div> : null}
-      {params.account === 'error' ? <div className="notice">账号删除失败，请稍后重试或联系管理员。</div> : null}
-      {params.retention === 'saved' ? <div className="notice success">数据保留策略已保存。</div> : null}
-      {params.retention === 'reset' ? <div className="notice success">数据保留策略已恢复默认。</div> : null}
-      {params.retention === 'ran' ? <div className="notice success">清理已完成。</div> : null}
-      {params.retention === 'error' ? <div className="notice">清理失败，请查看 worker/web 日志。</div> : null}
-      {params.pool === 'queued' ? <div className="notice success">候选池刷新任务已排队，进度见任务中心。</div> : null}
-      {params.pool === 'updated' ? <div className="notice success">候选池已更新。</div> : null}
-      {params.pool === 'enriched' ? <div className="notice success">候选池富化已完成。</div> : null}
       {!admin ? (
         <div className="notice">
           当前账号不是管理员。AI 模型、邮件通道、站点地址、GitHub OAuth 和 Webhook 属于全局配置，只有管理员可以修改；通知偏好、通知邮箱和订阅仍可自行设置。
         </div>
       ) : null}
-      {params.sync === 'error' ? (
-        <div className="notice">画像同步失败，请检查 GitHub 授权范围或稍后重试。</div>
-      ) : null}
-
       {admin ? (
       <section className="panel" id="ai">
         <h2>AI 模型</h2>
@@ -764,6 +1023,18 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
         </form>
       ) : null}
 
+      <section className="panel" id="teams">
+        <h2>团队工作区</h2>
+        <p className="muted small">
+          创建团队、邀请成员并分配所有者 / 管理员 / 成员 / 只读角色。团队共享资源会在此基础上逐步接入。
+        </p>
+        <div className="feed-actions">
+          <Link className="btn small" href="/teams">
+            打开团队工作区
+          </Link>
+        </div>
+      </section>
+
       <section className="panel" id="privacy">
         <h2>隐私与数据</h2>
         <p className="muted small">
@@ -780,6 +1051,54 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             服务条款
           </Link>
         </div>
+        {shareLinks.length > 0 ? (
+          <div className="webhook-box">
+            <h3 className="maintain-subhead">分享链接</h3>
+            <p className="muted small">分享雷达默认保留 90 天。撤销后链接会立即失效。</p>
+            <ul className="share-link-list">
+              {shareLinks.map((share) => {
+                const expired = Boolean(share.expiresAt && Date.parse(share.expiresAt) <= Date.now())
+                const status = share.revokedAt ? '已撤销' : expired ? '已过期' : '有效'
+                return (
+                  <li className="share-link-row" key={share.token}>
+                    <div className="share-link-main">
+                      <div className="share-link-title">
+                        {!share.revokedAt && !expired ? (
+                          <Link href={`/radar/${share.token}`}>{share.login} · {share.mode}</Link>
+                        ) : (
+                          <span>{share.login} · {share.mode}</span>
+                        )}
+                        <span className="chip subtle">{status}</span>
+                      </div>
+                      <span className="share-link-meta">
+                        {new Date(share.createdAt).toLocaleDateString('zh-CN')}
+                        {share.expiresAt ? ` · ${new Date(share.expiresAt).toLocaleDateString('zh-CN')} 到期` : ''}
+                        {share.viewCount > 0 ? ` · ${share.viewCount} 次浏览` : ''}
+                      </span>
+                    </div>
+                    <div className="share-link-actions">
+                      {!share.revokedAt && !expired ? (
+                        <CopyButton
+                          value={`${siteStatus.url.replace(/\/+$/, '')}/radar/${share.token}`}
+                          label="复制"
+                          className="btn quiet small"
+                        />
+                      ) : null}
+                      {!share.revokedAt ? (
+                        <form action={revokeRadarShareAction}>
+                          <input type="hidden" name="token" value={share.token} />
+                          <button className="btn quiet danger small" type="submit">
+                            撤销
+                          </button>
+                        </form>
+                      ) : null}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ) : null}
         <DeleteAccountForm login={sessionInfo.login} />
       </section>
 

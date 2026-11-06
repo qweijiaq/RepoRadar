@@ -2,6 +2,8 @@
 
 > A personalized radar for open-source projects: discover what is worth using, understand why it fits, and see what to do next.
 
+> **Self-hosted open source**: RepoRadar does not provide an official hosted service and does not host your data. You manage GitHub OAuth, Postgres, model keys and backups yourself.
+
 [![CI](https://github.com/qweijiaq/RepoRadar/actions/workflows/ci.yml/badge.svg)](https://github.com/qweijiaq/RepoRadar/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](package.json)
@@ -41,16 +43,37 @@
 
 ## Quick start
 
+### Requirements
+
+- Docker + Docker Compose
+- A GitHub OAuth App for sign-in
+- Recommended: `GITHUB_TOKEN`, to avoid GitHub Search rate limits and collection timeouts
+- Optional: any OpenAI-compatible model key (without it, collection, lists and the basic radar still work)
+- Local development also needs Node.js 22+ and pnpm 11.9+
+
 ### Docker
 
 ```bash
 cp .env.example .env
 # set AUTH_SECRET, ADMIN_LOGINS and SETUP_TOKEN
+# also strongly recommended: GITHUB_TOKEN, to avoid Search rate limits and timeouts
 docker compose up -d --build
 curl -fsS http://localhost:3000/api/health
 ```
 
 Open `http://localhost:3000/setup` to configure GitHub OAuth, then add a model API key in Settings. The radar works without a model key, but report generation does not.
+
+Optional: seed demo data so the full UI is visible before collection has run:
+
+```bash
+docker compose --profile demo run --rm demo-seed
+```
+
+Check the background worker:
+
+```bash
+docker compose logs -f worker
+```
 
 ### Local development
 
@@ -66,6 +89,20 @@ pnpm dev:web        # http://localhost:3000
 
 Detailed setup, commands and environment variables are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The detailed docs are currently in Chinese.
 
+### Backup and upgrade
+
+```bash
+bash scripts/db-backup.sh
+# after pulling code
+docker compose up -d --build
+```
+
+Restore overwrites the current database and requires explicit confirmation:
+
+```bash
+CONFIRM=YES bash scripts/db-restore.sh backups/xxx.dump
+```
+
 ## Documentation
 
 | Document | Contents |
@@ -80,7 +117,7 @@ Detailed setup, commands and environment variables are in [docs/DEVELOPMENT.md](
 ## Known limitations
 
 - Early-stage project: interfaces and report formats will change.
-- No hosted demo yet; use the screenshots above or run Docker locally.
+- Self-hosted only: there is no official hosted service or hosted demo; use the screenshots above or run Docker locally.
 - AI features need your own model key and consume tokens.
 - Sandbox verification executes untrusted build scripts; isolate the worker in production.
 - Deleting repositories requires the separate `delete_repo` scope; RepoRadar never deletes anything automatically.
@@ -89,7 +126,7 @@ Detailed setup, commands and environment variables are in [docs/DEVELOPMENT.md](
 
 ## Roadmap
 
-Next up: a hosted demo, more signal sources (HN / Reddit / steadier GitHub trends), and a team radar. See [docs/ROADMAP.md](docs/ROADMAP.md).
+Next up: v0.1 documentation and self-hosted reliability, more signal sources (HN / Reddit / steadier GitHub trends), and a team radar. RepoRadar does not plan to offer an official hosted service. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License
 

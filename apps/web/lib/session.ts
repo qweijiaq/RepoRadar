@@ -33,9 +33,18 @@ export function sessionUser(session: Session | null): SessionUser | null {
   }
 }
 
-export function sessionAccessToken(session: Session | null): string | null {
-  const token = (session as (Session & { accessToken?: string }) | null)?.accessToken
-  return typeof token === 'string' && token.length > 0 ? token : null
+/**
+ * OAuth token 只从加密的用户凭据表读取，不放在 session payload 里，
+ * 避免 /api/auth/session 把 token 下发到浏览器。
+ */
+export async function sessionAccessToken(session: Session | null): Promise<string | null> {
+  const user = sessionUser(session)
+  if (!user) return null
+  try {
+    return await loadUserGithubToken(getPool(), Number(user.id))
+  } catch {
+    return null
+  }
 }
 
 export function sessionGithubScope(session: Session | null): string | null {
@@ -46,10 +55,12 @@ export function sessionGithubScope(session: Session | null): string | null {
 export type GithubTokenSource = 'session' | 'env'
 
 /**
- * 优先使用登录用户的 OAuth token；自托管时允许用 GITHUB_TOKEN 兜底。
+ * 优先使用登录用户保存在数据库里的 OAuth token；自托管时允许用 GITHUB_TOKEN 兜底。
  */
-export function resolveGithubToken(session: Session | null): { token: string; source: GithubTokenSource } | null {
-  const token = sessionAccessToken(session)
+export async function resolveGithubToken(
+  session: Session | null,
+): Promise<{ token: string; source: GithubTokenSource } | null> {
+  const token = await sessionAccessToken(session)
   if (token) return { token, source: 'session' }
   const envToken = loadConfig().githubToken
   if (envToken) return { token: envToken, source: 'env' }
@@ -108,7 +119,7 @@ export async function resolveRepoAccess(
   options: RepoAccessOptions = {},
 ): Promise<RepoAccessResult> {
   const requireRepoScope = options.requireRepoScope !== false
-  const resolved = resolveGithubToken(session)
+  const resolved = await resolveGithubToken(session)
   if (!resolved) {
     const stored = await storedTokenFor(login)
     if (!stored) return { access: null, reason: 'none' }

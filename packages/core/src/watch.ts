@@ -3,6 +3,7 @@ import type { LlmConfig } from './config.js'
 import type { DbPool } from './db.js'
 import { extractJsonObjects } from './integrations.js'
 import { chatCompletion } from './llm.js'
+import { isTeamRole, type TeamRole } from './teams.js'
 
 export interface WatchCandidate {
   repo: string
@@ -25,10 +26,16 @@ export const watchReportSchema = z.object({
 export type WatchMatch = z.infer<typeof watchMatchSchema>
 export type WatchReport = z.infer<typeof watchReportSchema>
 
+export type WatchAccess = 'owner' | 'write' | 'read'
+
 export interface WatchIntentRecord {
   id: number
   text: string
   active: boolean
+  teamId: number | null
+  teamName: string | null
+  teamRole: TeamRole | null
+  access: WatchAccess
   createdAt: string
 }
 
@@ -267,35 +274,77 @@ export async function createWatchIntent(
   pool: DbPool,
   userId: number,
   text: string,
+  teamId: number | null = null,
 ): Promise<number> {
   const { rows } = await pool.query<{ id: string }>(
-    `INSERT INTO watch_intents (user_id, text) VALUES ($1, $2) RETURNING id`,
-    [userId, text],
+    `INSERT INTO watch_intents (user_id, text, team_id) VALUES ($1, $2, $3) RETURNING id`,
+    [userId, text, teamId],
   )
   return Number(rows[0]?.id ?? 0)
 }
 
+/** 个人意图本人可删；团队意图需要 owner/admin/member。 */
 export async function deleteWatchIntent(pool: DbPool, userId: number, id: number): Promise<void> {
-  await pool.query(`DELETE FROM watch_intents WHERE id = $1 AND user_id = $2`, [id, userId])
+  await pool.query(
+    `DELETE FROM watch_intents wi
+     WHERE wi.id = $1
+       AND (
+         wi.user_id = $2
+         OR EXISTS (
+           SELECT 1 FROM team_members tm
+           WHERE tm.team_id = wi.team_id AND tm.user_id = $2 AND tm.role <> 'viewer'
+         )
+       )`,
+    [id, userId],
+  )
 }
 
-export async function listWatchIntents(pool: DbPool, userId: number): Promise<WatchIntentRecord[]> {
-  const { rows } = await pool.query<{
-    id: string
-    text: string
-    active: boolean
-    created_at: Date | string
-  }>(
-    `SELECT id, text, active, created_at FROM watch_intents
-     WHERE user_id = $1 ORDER BY created_at DESC`,
-    [userId],
-  )
-  return rows.map((row) => ({
+interface WatchIntentRow {
+  id: string
+  text: string
+  active: boolean
+  team_id: string | null
+  team_name?: string | null
+  team_role?: string | null
+  created_at: Date | string
+}
+
+const WATCH_INTENT_SELECT = `SELECT wi.id, wi.text, wi.active, wi.team_id, wi.created_at,
+  t.name AS team_name, tm.role AS team_role
+  FROM watch_intents wi
+  LEFT JOIN teams t ON t.id = wi.team_id
+  LEFT JOIN team_members tm ON tm.team_id = wi.team_id AND tm.user_id = $1`
+
+function mapWatchIntent(row: WatchIntentRow, _userId: number): WatchIntentRecord {
+  const teamRole = row.team_role && isTeamRole(row.team_role) ? row.team_role : null
+  const access: WatchAccess =
+    Number(row.id) > 0 && teamRole === null && row.team_id === null
+      ? 'owner'
+      : teamRole === 'viewer'
+        ? 'read'
+        : teamRole
+          ? 'write'
+          : 'read'
+  return {
     id: Number(row.id),
     text: row.text,
     active: row.active,
+    teamId: row.team_id ? Number(row.team_id) : null,
+    teamName: row.team_name ?? null,
+    teamRole,
+    access,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
-  }))
+  }
+}
+
+export async function listWatchIntents(pool: DbPool, userId: number): Promise<WatchIntentRecord[]> {
+  const { rows } = await pool.query<WatchIntentRow>(
+    `${WATCH_INTENT_SELECT}
+     WHERE wi.user_id = $1 OR tm.user_id IS NOT NULL
+     ORDER BY wi.created_at DESC`,
+    [userId],
+  )
+  return rows.map((row) => mapWatchIntent(row, userId))
 }
 
 export async function findWatchIntent(
@@ -303,23 +352,14 @@ export async function findWatchIntent(
   userId: number,
   id: number,
 ): Promise<WatchIntentRecord | null> {
-  const { rows } = await pool.query<{
-    id: string
-    text: string
-    active: boolean
-    created_at: Date | string
-  }>(
-    `SELECT id, text, active, created_at FROM watch_intents WHERE id = $1 AND user_id = $2`,
-    [id, userId],
+  const { rows } = await pool.query<WatchIntentRow>(
+    `${WATCH_INTENT_SELECT}
+     WHERE wi.id = $2 AND (wi.user_id = $1 OR tm.user_id IS NOT NULL)
+     LIMIT 1`,
+    [userId, id],
   )
   const row = rows[0]
-  if (!row) return null
-  return {
-    id: Number(row.id),
-    text: row.text,
-    active: row.active,
-    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
-  }
+  return row ? mapWatchIntent(row, userId) : null
 }
 
 export async function saveWatchMatches(

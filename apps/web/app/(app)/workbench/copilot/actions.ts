@@ -4,12 +4,14 @@ import { createCopilotThread, deleteCopilotThread, getCopilotThread, getPool } f
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
+import { assertWritable } from '@/lib/readonly'
 import { sessionUser } from '@/lib/session'
 
 export async function newCopilotThreadAction(): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const thread = await createCopilotThread(getPool(), Number(currentUser.id))
   revalidatePath('/workbench/copilot')
@@ -20,6 +22,7 @@ export async function clearCopilotAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const threadId = Number(formData.get('threadId'))
   if (Number.isFinite(threadId)) {

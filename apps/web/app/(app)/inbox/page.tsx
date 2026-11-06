@@ -1,7 +1,12 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { listNotifications, loadNotificationCounts, getPool } from '@repo-radar/core'
-import { markInboxReadAction, markNotificationReadAction } from '@/app/actions'
+import {
+  markInboxCategoryReadAction,
+  markInboxReadAction,
+  markNotificationReadAction,
+  markSelectedNotificationsReadAction,
+} from '@/app/actions'
 import { enqueueActivitySyncAction } from '@/app/(app)/jobs/enqueue'
 import { auth } from '@/auth'
 import { maybeQueueActivitySync } from '@/lib/activity-sync'
@@ -114,12 +119,26 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
             </button>
           </form>
           {unread > 0 ? (
-            <form action={markInboxReadAction}>
-              <input type="hidden" name="returnTo" value={inboxHref(category, unreadOnly, page)} />
-              <button className="btn small" type="submit">
-                全部标记已读
+            <>
+              {category !== 'all' ? (
+                <form action={markInboxCategoryReadAction}>
+                  <input type="hidden" name="category" value={category} />
+                  <input type="hidden" name="returnTo" value={inboxHref(category, unreadOnly, page)} />
+                  <button className="btn quiet small" type="submit">
+                    本分类已读
+                  </button>
+                </form>
+              ) : null}
+              <button className="btn quiet small" type="submit" form="bulk-notifications">
+                标记选中已读
               </button>
-            </form>
+              <form action={markInboxReadAction}>
+                <input type="hidden" name="returnTo" value={inboxHref(category, unreadOnly, page)} />
+                <button className="btn small" type="submit">
+                  全部标记已读
+                </button>
+              </form>
+            </>
           ) : null}
         </div>
       </section>
@@ -133,6 +152,10 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
       <p className="muted small">
         同步会检查维护中仓库的新 star、fork、打开的 Issue / PR 和 release。第一次同步只建立基线，不会补发历史动态。
       </p>
+
+      <form id="bulk-notifications" action={markSelectedNotificationsReadAction}>
+        <input type="hidden" name="returnTo" value={inboxHref(category, unreadOnly, page)} />
+      </form>
 
       <div className="filter-bar notification-filter">
         {CATEGORIES.map((item) => (
@@ -164,6 +187,15 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
         <ul className="notification-list">
           {notifications.map((item) => (
             <li key={item.id} id={`notification-${item.id}`} className={item.readAt ? '' : 'unread'}>
+              <label className="notification-select">
+                <input
+                  type="checkbox"
+                  name="ids"
+                  value={item.id}
+                  form="bulk-notifications"
+                  aria-label={`选择通知：${item.title}`}
+                />
+              </label>
               <div className="notification-head">
                 <span className="chip subtle">{KIND_LABELS[item.kind] ?? item.kind}</span>
                 <span className="notification-time">{new Date(item.createdAt).toLocaleString('zh-CN')}</span>

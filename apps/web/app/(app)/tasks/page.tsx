@@ -4,6 +4,7 @@ import { countActiveJobs, listJobs, recoverStaleJobs, type JobKind, type JobStat
 import { auth } from '@/auth'
 import { sessionUser } from '@/lib/session'
 import { JobAutoRefresh } from './auto-refresh'
+import { BulkJobActions } from './bulk-actions'
 import { cancelJobAction, retryJobAction } from './actions'
 
 export const dynamic = 'force-dynamic'
@@ -110,6 +111,8 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
         <span className="filter-count">第 {page} 页 · {jobs.length} 条</span>
       </div>
 
+      {jobs.length > 0 ? <BulkJobActions /> : null}
+
       {jobs.length === 0 ? (
         <div className="empty">
           <p>{status ? '这个状态下还没有任务。' : '还没有后台任务。'}</p>
@@ -122,6 +125,9 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
               className={`job-row${job.id === highlight ? ' highlight' : ''}`}
               key={job.id}
             >
+              <label className="job-select">
+                <input type="checkbox" name="jobIds" value={job.id} aria-label={`选择任务：${job.title}`} />
+              </label>
               <div className="job-main">
                 <div className="job-head">
                   <span className="chip subtle">{KIND_LABEL[job.kind]}</span>

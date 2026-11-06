@@ -45,6 +45,20 @@ export interface ActivityItem {
   actor: string
 }
 
+/**
+ * Webhook 的 delivery id 和轮询的事件 id 不同，不能直接作为去重键。
+ * 用仓库、类型、actor、标题和 URL 组成稳定键，保证同一事件只会通知一次。
+ */
+export function activityDedupeKey(fullName: string, activity: ActivityItem): string {
+  return [
+    fullName.toLowerCase(),
+    activity.kind,
+    activity.actor.toLowerCase(),
+    activity.title,
+    activity.url,
+  ].join('|')
+}
+
 function headers(token: string): Record<string, string> {
   return {
     accept: 'application/vnd.github+json',
@@ -174,7 +188,7 @@ export async function syncRepoActivity(
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (user_id, repo_full_name, kind, external_id) DO NOTHING
          RETURNING external_id`,
-        [userId, fullName, activity.kind, activity.key, activity.actor, activity.title, activity.url],
+        [userId, fullName, activity.kind, activityDedupeKey(fullName, activity), activity.actor, activity.title, activity.url],
       )
       if (!inserted.rows[0]) continue
 

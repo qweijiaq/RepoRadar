@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getPool, listPatchDrafts, listUserProjects } from '@repo-radar/core'
 import { enqueueSwapTrialAction } from '@/app/(app)/jobs/enqueue'
+import { QueryToast } from '@/components/ui/QueryToast'
 import { auth } from '@/auth'
 import { sessionUser } from '@/lib/session'
 
@@ -44,12 +45,13 @@ export default async function SwapPage({ searchParams }: SwapPageProps) {
         </div>
       </section>
 
-      {params.error === 'invalid' ? (
-        <div className="notice">项目或包名格式不正确。</div>
-      ) : null}
-      {params.error === 'need-token' ? (
-        <div className="notice">换库预演需要 GitHub 授权来读取仓库，请重新登录后再试。</div>
-      ) : null}
+      <QueryToast
+        code={params.error}
+        messages={{
+          invalid: '项目或包名格式不正确。',
+          'need-token': '换库预演需要 GitHub 授权来读取仓库，请重新登录后再试。',
+        }}
+      />
 
       <section className="panel" id="swap-form">
         <h2>新建换库预演</h2>

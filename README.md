@@ -3,6 +3,8 @@
 > 一个懂你口味的开源项目雷达：按你的技术栈、star 画像和正在维护的项目，发现值得用的新项目，并告诉你下一步能做什么。
 >
 > [English](README.en.md) · 中文
+>
+> **自托管开源项目**：RepoRadar 不提供官方在线服务，也不托管用户数据。GitHub OAuth、Postgres、模型 Key 和备份都由部署者自己管理。
 
 [![CI](https://github.com/qweijiaq/RepoRadar/actions/workflows/ci.yml/badge.svg)](https://github.com/qweijiaq/RepoRadar/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
@@ -41,16 +43,37 @@
 
 ## 快速开始
 
+### 前置条件
+
+- Docker + Docker Compose
+- 一个 GitHub OAuth App（用于登录）
+- 推荐：`GITHUB_TOKEN`，避免 GitHub Search 限流和采集超时
+- 可选：任意 OpenAI 兼容模型 Key（不配置时只能使用采集、列表和基础雷达）
+- 本地开发还需要 Node.js 22+、pnpm 11.9+
+
 ### 只想先跑起来（Docker）
 
 ```bash
 cp .env.example .env
 # 至少设置 AUTH_SECRET、ADMIN_LOGINS、SETUP_TOKEN
+# 强烈建议同时设置 GITHUB_TOKEN，避免 GitHub Search 限流和采集超时
 docker compose up -d --build
 curl -fsS http://localhost:3000/api/health
 ```
 
 打开 `http://localhost:3000/setup` 配置 GitHub OAuth，然后登录、在设置页填入模型 API Key。没有模型 Key 也能使用采集、列表和基础雷达。
+
+可选：先写入一份演示数据，未采集前也能看到完整界面：
+
+```bash
+docker compose --profile demo run --rm demo-seed
+```
+
+检查后台 worker：
+
+```bash
+docker compose logs -f worker
+```
 
 完整部署、TLS、备份与安全边界见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
 
@@ -68,6 +91,20 @@ pnpm dev:web        # http://localhost:3000
 
 命令、环境变量、模型配置和测试方式见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
+### 备份与升级
+
+```bash
+bash scripts/db-backup.sh
+# 升级代码后重新构建并应用迁移
+docker compose up -d --build
+```
+
+恢复会覆盖当前数据库，必须显式确认：
+
+```bash
+CONFIRM=YES bash scripts/db-restore.sh backups/xxx.dump
+```
+
 ## 文档
 
 | 文档 | 内容 |
@@ -83,7 +120,7 @@ pnpm dev:web        # http://localhost:3000
 ## 已知限制
 
 - 项目仍在早期，接口、报告格式和页面会继续调整；欢迎提 Issue，但不建议直接用于关键生产流程。
-- 暂时没有托管在线 demo；可以先看上面的截图，或用 Docker 在本机启动。只读分享快照 `/radar/[token]` 已可用。
+- 仅支持自托管，不提供官方在线服务或托管 demo；可以先看上面的截图，或用 Docker 在本机启动。只读分享快照 `/radar/[token]` 已可用。
 - AI 功能需要自己配置模型 Key，会消耗 token；不配模型时只能使用采集、列表和基础雷达。
 - 沙箱验证会执行仓库里的构建脚本，属于不可信代码；生产环境请把 worker 隔离部署，不要和数据库共用主机。
 - 删除仓库需要单独授权 `delete_repo`；RepoRadar 不会自动删除任何仓库。
@@ -92,7 +129,7 @@ pnpm dev:web        # http://localhost:3000
 
 ## Roadmap
 
-下一阶段聚焦三件事：托管 demo、更多信号源（HN / Reddit / 更稳定的 GitHub 趋势）、团队技术雷达。详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+下一阶段聚焦自托管可靠性：v0.1 发布与文档完善、worker 与备份/升级路径、更多信号源（HN / Reddit / 更稳定的 GitHub 趋势）、团队技术雷达。RepoRadar 不计划提供官方托管服务。详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
 ## 许可证
 

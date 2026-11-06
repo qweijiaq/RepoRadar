@@ -4,10 +4,7 @@ import {
   GITHUB_DELETE_REPO_SCOPES,
   GITHUB_REPO_SCOPES,
   addCollectionItem,
-  addNotification,
   addSubscription,
-  buildDiscoveryQueries,
-  buildFeedbackContext,
   chatCompletion,
   clearIntegrationOutcome,
   clearMailConfig,
@@ -19,40 +16,37 @@ import {
   createCollection,
   deleteCollection,
   deleteUserAccount,
-  findCollection,
+  findCollectionAccess,
   findEnrichedRepos,
   findLlmProvider,
   findRepoByFullName,
+  findTeamForUser,
   saveRepoProfile,
   repoProfileSourceHash,
   loadRepoProfiles,
   generateRepoProfile,
   saveInferredTopics,
   inferRepoTopics,
+  invalidateFeedSnapshot,
   fetchReadme,
   generateTrendingCopy,
   loadDailyRanking,
   saveTrendingCopy,
   selectTrendingItems,
   trendingDateKey,
-  generateIntegrationReport,
   evaluateSetupAccess,
-  isDependencyUsed,
   isValidGithubClientId,
   isValidGithubClientSecret,
   isValidSubscriptionValue,
-  listFeedbackSignals,
-  listIntegrationOutcomes,
-  listUserProjects,
+  isNotificationCategory,
   loadConfig,
   loadFeedback,
   loadMailStatus,
   loadStoredLlmConfig,
   saveLlmPrices,
-  loadSubscriptions,
   markNotificationRead,
   markNotificationsRead,
-  rankForUser,
+  markNotificationsReadMatching,
   resolveBaseUrlStatus,
   resolveMailConfig,
   resolveNotificationEmail,
@@ -60,8 +54,8 @@ import {
   removeCollectionItem,
   removeSubscription,
   removeUserProject,
+  revokeRadarSnapshot,
   saveBaseUrl,
-  saveIntegrationReport,
   saveMailConfig,
   saveNotificationEmail,
   saveOpsConfig,
@@ -69,19 +63,17 @@ import {
   saveRetentionConfig,
   saveNotificationPrefs,
   saveStoredLlmConfig,
-  searchRepos,
   setCollectionPublic,
   setFeedback,
   setIntegrationOutcome,
   setUserProjectActive,
   isValidMailAddress,
+  canManageTeam,
+  canWriteTeam,
   upsertRepo,
   upsertUserProject,
-  type IntegrationCandidate,
   type SubscriptionKind,
   getPool,
-  saveIssueDraft,
-  generateIssueForUser,
   fetchGitHubRepo,
   loadProjectContext,
   sendMail,
@@ -97,8 +89,7 @@ import {
   resolveGithubWebhookSecret,
   saveGithubWebhookSecret,
 } from '@/lib/webhook-config'
-import { adminLogins, requireAdmin } from '@/lib/admin'
-import { guardAiQuota } from '@/lib/quota-guard'
+import { adminLogins, isAdminUser, requireAdmin } from '@/lib/admin'
 import { assertWritable } from '@/lib/readonly'
 import { sessionAccessToken, sessionUser } from '@/lib/session'
 import { rebuildProfile, syncUserTaste } from '@/lib/sync'
@@ -203,6 +194,7 @@ export async function savePrefsAction(formData: FormData): Promise<void> {
     excludedLanguages: parseList(formData.get('excludedLanguages')),
   })
   await rebuildProfile(Number(currentUser.id))
+  await invalidateFeedSnapshot(getPool(), Number(currentUser.id))
   revalidatePath('/settings')
   revalidatePath('/feed')
 }
@@ -213,11 +205,12 @@ export async function resyncStarsAction(): Promise<void> {
   if (!currentUser) redirect('/login')
   assertWritable(currentUser.login)
 
-  const token = sessionAccessToken(session)
+  const token = await sessionAccessToken(session)
   let failed = false
   if (token) {
     try {
       await syncUserTaste(Number(currentUser.id), currentUser.login, token)
+      await invalidateFeedSnapshot(getPool(), Number(currentUser.id))
     } catch (error) {
       failed = true
       console.error('[settings] 重新同步画像失败：', error)
@@ -248,6 +241,7 @@ export async function loadDemoTasteAction(): Promise<void> {
     [Number(currentUser.id)],
   )
   await rebuildProfile(Number(currentUser.id))
+  await invalidateFeedSnapshot(getPool(), Number(currentUser.id))
   revalidatePath('/settings')
   revalidatePath('/feed')
 }
@@ -266,6 +260,7 @@ export async function submitFeedbackAction(formData: FormData): Promise<void> { 
   const current = await loadFeedback(pool, userId)
   // 再次点击同一个按钮表示取消
   await setFeedback(pool, userId, repoFullName, current.get(repoFullName) === kind ? null : kind)
+  await invalidateFeedSnapshot(pool, userId)
   revalidatePath('/feed')
 }
 
@@ -287,6 +282,7 @@ export async function addSubscriptionAction(formData: FormData): Promise<void> {
   if (!kind || !isValidSubscriptionValue(kind, value)) redirect('/settings?sub=invalid')
 
   await addSubscription(getPool(), Number(currentUser.id), kind, value)
+  await invalidateFeedSnapshot(getPool(), Number(currentUser.id))
   revalidatePath('/settings')
   revalidatePath('/feed')
 }
@@ -302,6 +298,7 @@ export async function removeSubscriptionAction(formData: FormData): Promise<void
   if (!kind || !value) return
 
   await removeSubscription(getPool(), Number(currentUser.id), kind, value)
+  await invalidateFeedSnapshot(getPool(), Number(currentUser.id))
   revalidatePath('/settings')
   revalidatePath('/feed')
 }
@@ -413,7 +410,7 @@ export async function inferRepoTopicsAction(formData: FormData): Promise<void> {
   const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
   if (!llm) redirect(`/r/${repo}?topics=llm`)
 
-  const token = sessionAccessToken(session)
+  const token = await sessionAccessToken(session)
   const readme = token ? await fetchReadme(repo, token).catch(() => null) : null
   const topics = await inferRepoTopics(
     {
@@ -439,7 +436,7 @@ export async function generateMissingProfilesAction(formData: FormData): Promise
 
   const target = formData.get('target') === 'daily' ? 'daily' : 'share'
   const back = target === 'daily' ? '/daily' : '/share/trending'
-  const token = sessionAccessToken(session)
+  const token = await sessionAccessToken(session)
   if (!token) redirect(`${back}?error=need-token`)
 
   const pool = getPool()
@@ -530,40 +527,6 @@ export async function generateDailyCopyAction(): Promise<void> {
   redirect('/daily?generated=1')
 }
 
-export async function generateIssueAction(): Promise<void> {
-  const session = await auth()
-  const currentUser = sessionUser(session)
-  if (!currentUser) redirect('/login')
-  assertWritable(currentUser.login)
-
-  await guardAiQuota(getPool(), Number(currentUser.id))
-  const llm = loadConfig().llm ?? (await loadStoredLlmConfig(getPool()))
-  if (!llm) redirect('/settings?llm=missing')
-
-  let draftId = 0
-  try {
-    const generated = await generateIssueForUser(Number(currentUser.id), llm)
-    draftId = await saveIssueDraft(getPool(), {
-      userId: Number(currentUser.id),
-      ...generated,
-      model: llm.model,
-      providerId: llm.providerId ?? null,
-    })
-    await addNotification(getPool(), Number(currentUser.id), {
-      kind: 'issue',
-      title: '新一期周报已生成',
-      body: generated.title,
-      url: `/workbench/issue?draft=${draftId}`,
-    })
-  } catch (error) {
-    console.error('[issue] 生成周报失败：', error)
-    redirect('/workbench/issue?error=1')
-  }
-
-  revalidatePath('/workbench/issue')
-  redirect(`/workbench/issue?draft=${draftId}`)
-}
-
 export async function markInboxReadAction(): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
@@ -576,6 +539,55 @@ export async function markInboxReadAction(): Promise<void> {
   redirect('/inbox')
 }
 
+export async function markSelectedNotificationsReadAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
+
+  const ids = [
+    ...new Set(
+      formData
+        .getAll('ids')
+        .map((value) => Number(value))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    ),
+  ]
+  for (const id of ids) {
+    await markNotificationRead(getPool(), Number(currentUser.id), id)
+  }
+  const requested = String(formData.get('returnTo') ?? '')
+  revalidatePath('/inbox')
+  revalidatePath('/', 'layout')
+  redirect(requested.startsWith('/inbox') ? requested : '/inbox')
+}
+
+export async function markInboxCategoryReadAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
+
+  const category = String(formData.get('category') ?? 'all')
+  const aiKinds = ['integration', 'maintainer', 'watch', 'comparison', 'discoverability', 'issue-plan']
+  const filter =
+    category === 'github'
+      ? { prefixes: ['github-'] }
+      : category === 'ai'
+        ? { kinds: aiKinds }
+        : category === 'release'
+          ? { kinds: ['release'] }
+          : category === 'system'
+            ? { excludePrefixes: ['github-'], excludeKinds: [...aiKinds, 'release'] }
+            : {}
+
+  await markNotificationsReadMatching(getPool(), Number(currentUser.id), filter)
+  const requested = String(formData.get('returnTo') ?? '')
+  revalidatePath('/inbox')
+  revalidatePath('/', 'layout')
+  redirect(requested.startsWith('/inbox') ? requested : '/inbox')
+}
+
 export async function createCollectionAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
@@ -585,19 +597,35 @@ export async function createCollectionAction(formData: FormData): Promise<void> 
   const name = String(formData.get('name') ?? '').trim()
   if (!name) redirect('/feed?tab=collections&error=name')
   const description = String(formData.get('description') ?? '').trim()
+  const requestedTeam = Number(formData.get('teamId'))
+  const teamId = Number.isFinite(requestedTeam) && requestedTeam > 0 ? requestedTeam : null
+  if (teamId) {
+    const team = await findTeamForUser(getPool(), Number(currentUser.id), teamId)
+    if (!team || !canWriteTeam(team.role)) redirect('/feed?tab=collections&error=team')
+  }
+
   const id = await createCollection(
     getPool(),
     Number(currentUser.id),
     name.slice(0, 80),
     description ? description.slice(0, 300) : null,
+    teamId,
   )
   revalidatePath('/feed?tab=collections')
   redirect(`/collections/${id}`)
 }
 
-async function ownedCollection(collectionId: number, userId: number) {
-  const collection = await findCollection(getPool(), collectionId)
-  return collection && collection.userId === userId ? collection : null
+async function editableCollection(collectionId: number, userId: number) {
+  const collection = await findCollectionAccess(getPool(), userId, collectionId)
+  return collection && collection.access !== 'read' ? collection : null
+}
+
+async function deletableCollection(collectionId: number, userId: number) {
+  const collection = await findCollectionAccess(getPool(), userId, collectionId)
+  if (!collection) return null
+  if (collection.access === 'owner') return collection
+  if (collection.teamRole && canManageTeam(collection.teamRole)) return collection
+  return null
 }
 
 function safeReturnTo(value: FormDataEntryValue | null, fallback: string): string {
@@ -616,7 +644,7 @@ export async function addToCollectionAction(formData: FormData): Promise<void> {
   const note = String(formData.get('note') ?? '').trim()
   const returnTo = safeReturnTo(formData.get('returnTo'), '/feed?tab=collections')
 
-  if (repoFullName && (await ownedCollection(collectionId, Number(currentUser.id)))) {
+  if (repoFullName && (await editableCollection(collectionId, Number(currentUser.id)))) {
     await addCollectionItem(getPool(), collectionId, repoFullName, note || null)
     revalidatePath(`/collections/${collectionId}`)
   }
@@ -633,7 +661,7 @@ export async function removeCollectionItemAction(formData: FormData): Promise<vo
   const repoFullName = String(formData.get('repo') ?? '').trim()
   const returnTo = safeReturnTo(formData.get('returnTo'), `/collections/${collectionId}`)
 
-  if (repoFullName && (await ownedCollection(collectionId, Number(currentUser.id)))) {
+  if (repoFullName && (await editableCollection(collectionId, Number(currentUser.id)))) {
     await removeCollectionItem(getPool(), collectionId, repoFullName)
     revalidatePath(`/collections/${collectionId}`)
   }
@@ -647,7 +675,7 @@ export async function toggleCollectionPublicAction(formData: FormData): Promise<
   assertWritable(currentUser.login)
 
   const collectionId = Number(formData.get('collectionId'))
-  const collection = await ownedCollection(collectionId, Number(currentUser.id))
+  const collection = await editableCollection(collectionId, Number(currentUser.id))
   if (collection) {
     await setCollectionPublic(getPool(), collectionId, !collection.isPublic)
     revalidatePath(`/collections/${collectionId}`)
@@ -662,7 +690,7 @@ export async function deleteCollectionAction(formData: FormData): Promise<void> 
   assertWritable(currentUser.login)
 
   const collectionId = Number(formData.get('collectionId'))
-  if (await ownedCollection(collectionId, Number(currentUser.id))) {
+  if (await deletableCollection(collectionId, Number(currentUser.id))) {
     await deleteCollection(getPool(), collectionId)
     revalidatePath('/feed?tab=collections')
   }
@@ -696,7 +724,7 @@ export async function addUserProjectAction(formData: FormData): Promise<void> {
   const pool = getPool()
   let repo = await findRepoByFullName(pool, fullName)
   if (!repo) {
-    const token = sessionAccessToken(session)
+    const token = await sessionAccessToken(session)
     if (!token) redirect('/workbench/integrations?error=need-token')
     const fetched = await fetchGitHubRepo(fullName, token)
     if (!fetched) redirect('/workbench/integrations?error=not-found')
@@ -726,131 +754,6 @@ export async function removeUserProjectAction(formData: FormData): Promise<void>
     revalidatePath('/workbench/integrations')
   }
   redirect('/workbench/integrations')
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-export async function generateIntegrationAction(formData: FormData): Promise<void> {
-  const session = await auth()
-  const currentUser = sessionUser(session)
-  if (!currentUser) redirect('/login')
-  assertWritable(currentUser.login)
-  await guardAiQuota(getPool(), Number(currentUser.id))
-
-  const pool = getPool()
-  const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool))
-  if (!llm) redirect('/settings?llm=missing')
-
-  const focus = String(formData.get('focus') ?? '').trim().slice(0, 200) || null
-  const userId = Number(currentUser.id)
-  const projects = await listUserProjects(pool, userId)
-  let selected = projects.filter((project) => project.active)
-  let auto = false
-  if (selected.length === 0) {
-    selected = projects.filter((project) => project.source === 'owned').slice(0, 3)
-    auto = selected.length > 0
-  }
-  if (selected.length === 0) redirect('/workbench/integrations?error=no-projects')
-  selected = selected.slice(0, 3)
-
-  let reportId = 0
-  try {
-    const token = sessionAccessToken(session)
-    const contexts = await Promise.all(      selected.map((project) => loadProjectContext(project.repoFullName, token)),
-    )
-    const [feedback, signals, subscriptions, user, repos, outcomes] = await Promise.all([
-      loadFeedback(pool, userId),
-      listFeedbackSignals(pool, userId),
-      loadSubscriptions(pool, userId),
-      findUserById(userId),
-      findEnrichedRepos(pool, 500),
-      listIntegrationOutcomes(pool, userId),
-    ])
-    const context = buildFeedbackContext(feedback, signals)
-    const projectNames = new Set(selected.map((project) => project.repoFullName))
-    const dependencies = [...new Set(contexts.flatMap((item) => item.dependencies))]
-    const ranked = rankForUser(
-      user?.profile ?? null,
-      repos.filter((repo) => !projectNames.has(repo.fullName)),
-      Date.now(),
-      context,
-      subscriptions,
-    ).slice(0, 40)
-
-    const candidateMap = new Map<string, IntegrationCandidate>()
-    for (const repo of ranked) {
-      candidateMap.set(repo.fullName, {
-        repo: repo.fullName,
-        summary: repo.summary ?? repo.description ?? '',
-        language: repo.language,
-        topics: repo.topics,
-        stars: repo.stars,
-        verified: repo.verifyStatus === 'verified',
-        reason: repo.reason,
-        alreadyUsed: isDependencyUsed(repo.fullName, dependencies),
-      })
-    }
-
-    // 候选池按项目主题现场扩召；失败不阻塞精选候选。
-    if (token) {
-      for (const query of buildDiscoveryQueries(contexts)) {
-        if (candidateMap.size >= 60) break
-        try {
-          const found = await searchRepos(query, { token, perPage: 10 })
-          for (const repo of found) {
-            if (projectNames.has(repo.fullName) || candidateMap.has(repo.fullName)) continue
-            await upsertRepo(pool, repo)
-            candidateMap.set(repo.fullName, {
-              repo: repo.fullName,
-              summary: repo.description ?? '',
-              language: repo.language,
-              topics: repo.topics,
-              stars: repo.stars,
-              verified: false,
-              reason: 'GitHub 搜索发现',
-              alreadyUsed: isDependencyUsed(repo.fullName, dependencies),
-            })
-            if (candidateMap.size >= 60) break
-          }
-        } catch (error) {
-          console.error('[integrations] 候选搜索失败：', error)
-        }
-        await sleep(350)
-      }
-    }
-
-    const candidates = [...candidateMap.values()]
-    if (candidates.length === 0) throw new Error('没有可用的候选仓库')
-
-    const report = await generateIntegrationReport(contexts, candidates, llm, focus, outcomes)
-    reportId = await saveIntegrationReport(pool, userId, {
-      report,
-      usedProjects: selected.map((project) => project.repoFullName),
-      auto,
-      focus,
-      generatedAt: new Date().toISOString(),
-      model: llm.model,
-      providerId: llm.providerId ?? null,
-      candidateCount: candidates.length,
-      candidateRepos: candidates.map((candidate) => candidate.repo),
-    })
-    await addNotification(pool, userId, {
-      kind: 'integration',
-      title: '接入建议已生成',
-      body: report.projects.map((project) => project.repo).join('、'),
-      url: `/workbench/integrations?report=${reportId}`,
-    })
-  } catch (error) {
-    console.error('[integrations] 生成接入建议失败：', error)
-    const detail = error instanceof Error ? error.message : ''
-    const code = /JSON|结构不符合/.test(detail) ? 'format' : 'generate'
-    redirect(`/workbench/integrations?error=${code}`)
-  }
-
-  revalidatePath('/workbench/integrations')
-  redirect(`/workbench/integrations?report=${reportId}`)
 }
 
 export async function setIntegrationOutcomeAction(formData: FormData): Promise<void> {
@@ -923,6 +826,16 @@ export async function saveNotificationPrefsAction(formData: FormData): Promise<v
   if (!currentUser) redirect('/login')
   assertWritable(currentUser.login)
 
+  const emailKinds = formData
+    .getAll('emailKinds')
+    .map(String)
+    .filter(isNotificationCategory)
+  const pushKinds = formData
+    .getAll('pushKinds')
+    .map(String)
+    .filter(isNotificationCategory)
+  const routingConfigured = formData.get('routingConfigured') === '1'
+
   await saveNotificationPrefs(getPool(), Number(currentUser.id), {
     githubStar: formData.get('githubStar') === '1',
     githubFork: formData.get('githubFork') === '1',
@@ -932,6 +845,7 @@ export async function saveNotificationPrefsAction(formData: FormData): Promise<v
     emailNotifications: formData.get('emailNotifications') === '1',
     pushNotifications: formData.get('pushNotifications') === '1',
     weeklyDigest: formData.get('weeklyDigest') === '1',
+    ...(routingConfigured ? { emailKinds, pushKinds } : {}),
   })
   revalidatePath('/settings')
   revalidatePath('/inbox')
@@ -1003,6 +917,20 @@ export async function saveBaseUrlAction(formData: FormData): Promise<void> {
   redirect('/settings?site=saved')
 }
 
+export async function revokeRadarShareAction(formData: FormData): Promise<void> {
+  const session = await auth()
+  const currentUser = sessionUser(session)
+  if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
+
+  const token = String(formData.get('token') ?? '').trim()
+  if (token) {
+    await revokeRadarSnapshot(getPool(), Number(currentUser.id), token)
+  }
+  revalidatePath('/settings')
+  redirect('/settings?share=revoked')
+}
+
 export async function deleteAccountAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
@@ -1017,6 +945,13 @@ export async function deleteAccountAction(formData: FormData): Promise<void> {
   const admins = adminLogins()
   if (admins.length === 1 && admins[0] === currentUser.login.toLowerCase()) {
     redirect('/settings?account=last-admin')
+  }
+  // 未配置 ADMIN_LOGINS 时，管理员身份按“最早注册用户”继承。
+  // 如果当前用户是实际管理员且还有其他用户，删除会静默把管理员身份转给下一位，
+  // 这里要求先显式配置 ADMIN_LOGINS 再删除。
+  if (admins.length === 0 && (await isAdminUser(currentUser))) {
+    const { rows } = await getPool().query<{ count: string }>('SELECT count(*)::text AS count FROM users')
+    if (Number(rows[0]?.count ?? 0) > 1) redirect('/settings?account=last-admin')
   }
 
   const deleted = await deleteUserAccount(getPool(), Number(currentUser.id))

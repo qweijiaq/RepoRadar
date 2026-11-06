@@ -1,6 +1,7 @@
 import { getPool } from '@repo-radar/core'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
+import { isDemoLogin } from './readonly'
 import { sessionUser, type SessionUser } from './session'
 
 export function adminLogins(): string[] {
@@ -16,6 +17,8 @@ export function adminLogins(): string[] {
  */
 export async function isAdminUser(user: SessionUser | null): Promise<boolean> {
   if (!user) return false
+  // 演示账号永远不是管理员，即使它是空库里最早注册的用户。
+  if (isDemoLogin(user.login)) return false
   const configured = adminLogins()
   if (configured.length > 0) return configured.includes(user.login.toLowerCase())
   try {

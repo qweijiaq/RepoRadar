@@ -76,7 +76,10 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
     if (handled.done.has(key)) return 'adopted'
     return null
   }
-  const remainingCandidates = latest.report.candidates.filter(
+  const reportCandidates = latest.report.candidates ?? []
+  const capabilities = latest.report.capabilities ?? []
+  const nextSteps = latest.report.nextSteps ?? []
+  const remainingCandidates = reportCandidates.filter(
     (candidate) => candidateStatus(candidate.repo) === null,
   )
   const recommendedHandled = remainingCandidates.every(
@@ -177,7 +180,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
       </section>
 
       <div className="compare-grid">
-        {latest.report.candidates.map((candidate) => (
+        {reportCandidates.map((candidate) => (
           <article
             className={
               candidate.repo === latest.report.recommendation.repo
@@ -204,15 +207,15 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
             <p className="muted">{candidate.reason}</p>
             <h3 className="maintain-subhead">优势</h3>
             <ul className="maintain-list">
-              {candidate.strengths.map((strength) => (
+              {(candidate.strengths ?? []).map((strength) => (
                 <li key={strength}>{strength}</li>
               ))}
             </ul>
-            {candidate.weaknesses.length > 0 ? (
+            {(candidate.weaknesses ?? []).length > 0 ? (
               <>
                 <h3 className="maintain-subhead">弱点</h3>
                 <ul className="maintain-list">
-                  {candidate.weaknesses.map((weakness) => (
+                  {(candidate.weaknesses ?? []).map((weakness) => (
                     <li key={weakness}>{weakness}</li>
                   ))}
                 </ul>
@@ -222,7 +225,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
         ))}
       </div>
 
-      {latest.report.capabilities.length > 0 ? (
+      {capabilities.length > 0 ? (
         <section className="panel">
           <h2>能力差异</h2>
           <div className="capability-table-wrap">
@@ -231,20 +234,20 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
                 <tr>
                   <th>能力</th>
                   <th>{project}</th>
-                  {latest.report.candidates.map((candidate) => (
+                  {reportCandidates.map((candidate) => (
                     <th key={candidate.repo}>{candidate.repo}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {latest.report.capabilities.map((row) => (
+                {capabilities.map((row) => (
                   <tr key={row.name}>
                     <th scope="row">
                       {row.name}
                       {row.note ? <span className="muted small"> {row.note}</span> : null}
                     </th>
                     <td>{SUPPORT_LABEL[row.support[project] ?? 'unknown']}</td>
-                    {latest.report.candidates.map((candidate) => (
+                    {reportCandidates.map((candidate) => (
                       <td key={candidate.repo}>
                         {SUPPORT_LABEL[row.support[candidate.repo] ?? 'unknown']}
                       </td>
@@ -260,11 +263,11 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
         </section>
       ) : null}
 
-      {latest.report.nextSteps.length > 0 ? (
+      {nextSteps.length > 0 ? (
         <section className="panel">
           <h2>验证步骤</h2>
           <ol className="maintain-actions">
-            {latest.report.nextSteps.map((step) => (
+            {nextSteps.map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ol>

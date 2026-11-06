@@ -1,7 +1,13 @@
 import type { DbPool } from './db.js'
 import { deliveryAllowed } from './quotas.js'
 import { appendUnsubscribeFooter } from './unsubscribe.js'
-import { findUserById, loadNotificationPrefs, resolveNotificationEmail } from './users.js'
+import {
+  findUserById,
+  loadNotificationPrefs,
+  notificationCategory,
+  notificationChannelEnabled,
+  resolveNotificationEmail,
+} from './users.js'
 
 export type DeliveryChannel = 'email' | 'push'
 
@@ -33,7 +39,7 @@ export interface DeliveryResult {
   reason?: string
 }
 
-function isoWeekKey(date: Date): string {
+export function isoWeekKey(date: Date): string {
   const utc = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
   const day = utc.getUTCDay() || 7
   utc.setUTCDate(utc.getUTCDate() + 4 - day)
@@ -68,17 +74,26 @@ export async function enqueueDelivery(pool: DbPool, input: DeliveryInput): Promi
 export async function queueNotificationDeliveries(
   pool: DbPool,
   userId: number,
-  notification: { id: number; title: string; body?: string | null; url?: string | null },
+  notification: {
+    id: number
+    kind: string
+    title: string
+    body?: string | null
+    url?: string | null
+  },
 ): Promise<DeliveryResult> {
   const user = await findUserById(pool, userId)
   const email = resolveNotificationEmail(user)
   const prefs = await loadNotificationPrefs(pool, userId)
-  if ((prefs.emailNotifications || prefs.pushNotifications) && !(await deliveryAllowed(pool, userId))) {
+  const category = notificationCategory(notification.kind)
+  const emailEnabled = notificationChannelEnabled(prefs, category, 'email')
+  const pushEnabled = notificationChannelEnabled(prefs, category, 'push')
+  if ((emailEnabled || pushEnabled) && !(await deliveryAllowed(pool, userId))) {
     return { queued: 0, reason: 'delivery-quota' }
   }
 
   let queued = 0
-  if (prefs.emailNotifications && email) {
+  if (emailEnabled && email) {
     const inserted = await enqueueDelivery(pool, {
       userId,
       channel: 'email',
@@ -90,7 +105,7 @@ export async function queueNotificationDeliveries(
     if (inserted) queued += 1
   }
 
-  if (prefs.pushNotifications) {
+  if (pushEnabled) {
     const subscriptions = await pool.query(`SELECT 1 FROM push_subscriptions WHERE user_id = $1 LIMIT 1`, [userId])
     if ((subscriptions.rowCount ?? 0) > 0) {
       const inserted = await enqueueDelivery(pool, {

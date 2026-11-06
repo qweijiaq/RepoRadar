@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { DbPool } from './db.js'
 import { addNotification } from './notifications.js'
-import { toActivity, type ActivityItem, type RepoEvent } from './activity.js'
+import { activityDedupeKey, toActivity, type ActivityItem, type RepoEvent } from './activity.js'
 import { loadNotificationPrefs, type NotificationPrefs } from './users.js'
 
 export interface GitHubWebhookPayload {
@@ -147,7 +147,7 @@ export async function handleGitHubWebhook(
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (user_id, repo_full_name, kind, external_id) DO NOTHING
        RETURNING external_id`,
-      [userId, repo, activity.kind, deliveryId, activity.actor, activity.title, activity.url],
+      [userId, repo, activity.kind, activityDedupeKey(repo, activity), activity.actor, activity.title, activity.url],
     )
     if (!inserted.rows[0]) continue
     if (activity.actor.toLowerCase() === row.login.toLowerCase()) continue

@@ -162,8 +162,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
           user.login = typeof token.login === 'string' ? token.login : ''
           user.avatarUrl = typeof token.avatarUrl === 'string' ? token.avatarUrl : null
         }
-        ;(session as Session & { accessToken?: string }).accessToken =
-          typeof token.accessToken === 'string' ? token.accessToken : undefined
+        // 不要把 accessToken 挂到 session 上：/api/auth/session 会序列化整个 session。
+        // 服务端需要 token 时统一从加密的用户凭据表读取。
         ;(session as Session & { githubScope?: string }).githubScope =
           typeof token.githubScope === 'string' ? token.githubScope : undefined
         return session

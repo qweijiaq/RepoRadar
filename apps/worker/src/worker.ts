@@ -3,12 +3,15 @@ import { fileURLToPath } from 'node:url'
 import {
   alertRecipients,
   checkIntegrationImpacts,
+  buildTeamDigest,
   buildWeeklyDigest,
   claimAlert,
   createPool,
+  enqueueDelivery,
   enqueueWeeklyDigest,
   evaluateAlerts,
   fetchLatestRelease,
+  findUserById,
   findUserByLogin,
   getAuthenticatedLogin,
   hasAuthSecret,
@@ -19,6 +22,9 @@ import {
   listUsersNeedingFeedSnapshot,
   listUserGithubTokens,
   listUsersWithProfiles,
+  isoWeekKey,
+  listTeamMembers,
+  listTeamsWithDigest,
   loadConfig,
   loadDiscoveryStatus,
   loadOpsConfig,
@@ -72,6 +78,9 @@ let lastDigestCheck = 0
 let lastRetentionCheck = 0
 let lastAlertCheck = 0
 let lastDiscoveryCheck = 0
+let lastDailySnapshotCheck = 0
+let lastTrendBriefCheck = 0
+let lastTeamDigestCheck = 0
 let discoveryRunning = false
 let discoveryRetryAt = 0
 const ACTIVITY_INTERVAL = 15 * 60 * 1000
@@ -81,6 +90,9 @@ const RETENTION_CHECK_INTERVAL = 30 * 60 * 1000
 const ALERT_CHECK_INTERVAL = 5 * 60 * 1000
 const DELIVERY_INTERVAL = 5 * 1000
 const DISCOVERY_CHECK_INTERVAL = 10 * 60 * 1000
+const DAILY_SNAPSHOT_CHECK_INTERVAL = 10 * 60 * 1000
+const TREND_BRIEF_CHECK_INTERVAL = 30 * 60 * 1000
+const TEAM_DIGEST_CHECK_INTERVAL = 30 * 60 * 1000
 const DISCOVERY_INTERVAL = 6 * 60 * 60 * 1000
 const DISCOVERY_LOCK_KEY = 728413
 let lastDeliveryDrain = 0
@@ -187,6 +199,45 @@ async function scheduledWeeklyDigest(): Promise<void> {
   }
 }
 
+/** 每周给开启团队周报的团队成员发一封维护摘要；同一团队同一周只入队一次。 */
+async function scheduledTeamDigests(): Promise<void> {
+  if (Date.now() - lastTeamDigestCheck < TEAM_DIGEST_CHECK_INTERVAL) return
+  lastTeamDigestCheck = Date.now()
+  try {
+    const teams = await listTeamsWithDigest(pool)
+    if (teams.length === 0) return
+    const siteUrl = await resolveBaseUrl(pool)
+    const week = isoWeekKey(new Date())
+    for (const team of teams) {
+      if (stopping) break
+      const digest = await buildTeamDigest(pool, team.id, team.name, siteUrl)
+      if (!digest) continue
+      const members = await listTeamMembers(pool, team.id)
+      for (const member of members) {
+        if (stopping) break
+        const user = await findUserById(pool, member.userId)
+        if (!user) continue
+        const prefs = user.prefs.notificationPrefs
+        if (!prefs?.emailNotifications) continue
+        const email = resolveNotificationEmail(user)
+        if (!email) continue
+        await enqueueDelivery(pool, {
+          userId: member.userId,
+          channel: 'email',
+          subject: digest.subject,
+          body: digest.text,
+          bodyHtml: digest.html,
+          url: `/teams/${team.id}/maintain`,
+          dedupeKey: `team-digest:${team.id}:${week}`,
+        })
+      }
+      console.log(`[worker] team digest queued: ${team.name}`)
+    }
+  } catch (error) {
+    console.error('[worker] team digest failed:', error)
+  }
+}
+
 async function runScheduledDiscovery(): Promise<void> {
   // advisory lock 是连接级的，必须和 unlock 使用同一个连接。
   const client = await pool.connect()
@@ -286,6 +337,8 @@ let lastImpactCheckAt = 0
 
 /** 已接入的库发新版本时，写一条回访并通知用户。 */
 async function scheduledDailySnapshots(): Promise<void> {
+  if (Date.now() - lastDailySnapshotCheck < DAILY_SNAPSHOT_CHECK_INTERVAL) return
+  lastDailySnapshotCheck = Date.now()
   const { rows } = await pool.query<{ count: string }>(
     `SELECT count(*)::text AS count FROM star_snapshots WHERE captured_on = CURRENT_DATE`,
   )
@@ -301,6 +354,8 @@ async function scheduledDailySnapshots(): Promise<void> {
 }
 
 async function scheduledTrendBrief(): Promise<void> {
+  if (Date.now() - lastTrendBriefCheck < TREND_BRIEF_CHECK_INTERVAL) return
+  lastTrendBriefCheck = Date.now()
   const latest = await loadTrendReport(pool)
   if (latest && Date.now() - Date.parse(latest.generatedAt) < 12 * 60 * 60 * 1000) return
   const llm = loadConfig().llm ?? (await loadStoredLlmConfig(pool).catch(() => null))
@@ -434,6 +489,7 @@ async function loop(): Promise<void> {
       await scheduledActivity()
       await scheduledReleases()
       await scheduledWeeklyDigest()
+      await scheduledTeamDigests()
       await scheduledDiscovery()
       await scheduledRetention()
       await scheduledFeedSnapshots()

@@ -53,6 +53,15 @@ describe.skipIf(!hasTestDatabase)('database integration', () => {
       '0014_repo_profiles',
       '0015_inferred_topics',
       '0016_daily_rankings',
+      '0017_radar_snapshot_lifecycle',
+      '0018_collection_public_slug',
+      '0019_teams',
+      '0020_team_collections',
+      '0021_team_watch_intents',
+      '0022_share_view_stats',
+      '0023_team_project_shares',
+      '0024_feed_snapshot_version',
+      '0025_team_digest',
     ])
   })
 

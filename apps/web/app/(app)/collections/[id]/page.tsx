@@ -1,6 +1,18 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { findCollection, findRepoByFullName, listCollectionItems, loadHandledState, getPool } from '@repo-radar/core'
+import {
+  canManageTeam,
+  findCollection,
+  findCollectionAccess,
+  findPublicCollectionBySlug,
+  findRepoByFullName,
+  listCollectionItems,
+  loadHandledState,
+  getPool,
+  recordPublicCollectionView,
+  resolveBaseUrl,
+} from '@repo-radar/core'
+import { CopyButton } from '@/components/ui/CopyButton'
 import {
   deleteCollectionAction,
   removeCollectionItemAction,
@@ -20,19 +32,37 @@ export default async function CollectionDetailPage({ params, searchParams }: Col
   const { id } = await params
   const search = await searchParams
   const query = (search.q ?? '').trim().slice(0, 80)
-  const collectionId = Number(id)
-  if (!Number.isFinite(collectionId)) notFound()
+  const numericId = Number(id)
+  const collectionId = Number.isFinite(numericId) && numericId > 0 ? numericId : null
 
   const pool = getPool()
-  const collection = await findCollection(pool, collectionId)
-  if (!collection) notFound()
-
   const session = await auth()
   const currentUser = sessionUser(session)
-  const isOwner = currentUser?.id === String(collection.userId)
-  if (!collection.isPublic && !isOwner) notFound()
+  const collection = collectionId
+    ? (currentUser
+        ? await findCollectionAccess(pool, Number(currentUser.id), collectionId)
+        : null) ?? (await findCollection(pool, collectionId))
+    : await findPublicCollectionBySlug(pool, id)
+  if (!collection) notFound()
 
-  const items = await listCollectionItems(pool, collectionId)
+  const isMember =
+    Boolean(currentUser) &&
+    (collection.userId === Number(currentUser?.id ?? 0) || collection.teamRole !== null)
+  const canEdit = Boolean(currentUser) && collection.access !== 'read'
+  const canDelete =
+    collection.access === 'owner' ||
+    Boolean(collection.teamRole && canManageTeam(collection.teamRole))
+  if (!collection.isPublic && !isMember) notFound()
+
+  const viewCount =
+    !canEdit && collection.isPublic && collection.publicSlug
+      ? (await recordPublicCollectionView(pool, collection.publicSlug)) ?? collection.viewCount
+      : collection.viewCount
+  const items = await listCollectionItems(pool, collection.id)
+  const publicUrl =
+    collection.isPublic && collection.publicSlug
+      ? `${(await resolveBaseUrl(pool)).replace(/\/+$/, '')}/collections/${collection.publicSlug}`
+      : null
   const repos = await Promise.all(items.map((item) => findRepoByFullName(pool, item.repoFullName)))
   const handled = currentUser ? await loadHandledState(pool, Number(currentUser.id)) : null
   function itemStatus(repoFullName: string): 'adopted' | 'rejected' | null {
@@ -73,11 +103,20 @@ export default async function CollectionDetailPage({ params, searchParams }: Col
           <h1>{collection.name}</h1>
           <p className="feed-meta">
             {collection.itemCount} 个项目 · {collection.isPublic ? '公开' : '私密'} ·{' '}
+            {collection.teamName ? `团队 · ${collection.teamName} · ` : ''}
+            {collection.access === 'read' ? '只读 · ' : ''}
+            {collection.isPublic ? `${viewCount} 次浏览 · ` : ''}
             {new Date(collection.createdAt).toLocaleDateString('zh-CN')}
           </p>
           {collection.description ? <p className="muted">{collection.description}</p> : null}
+          {publicUrl ? (
+            <p className="muted small">
+              公开链接：<code>/collections/{collection.publicSlug}</code>{' '}
+              <CopyButton value={publicUrl} label="复制" className="btn quiet small" />
+            </p>
+          ) : null}
         </div>
-        {isOwner ? (
+        {canEdit ? (
           <div className="feed-actions">
             <form action={toggleCollectionPublicAction}>
               <input type="hidden" name="collectionId" value={collection.id} />
@@ -85,18 +124,20 @@ export default async function CollectionDetailPage({ params, searchParams }: Col
                 {collection.isPublic ? '设为私密' : '设为公开'}
               </button>
             </form>
-            <form action={deleteCollectionAction}>
-              <input type="hidden" name="collectionId" value={collection.id} />
-              <button className="btn small danger" type="submit">
-                删除
-              </button>
-            </form>
+            {canDelete ? (
+              <form action={deleteCollectionAction}>
+                <input type="hidden" name="collectionId" value={collection.id} />
+                <button className="btn small danger" type="submit">
+                  删除
+                </button>
+              </form>
+            ) : null}
           </div>
         ) : null}
       </section>
 
       {items.length > 0 ? (
-        <form action={`/collections/${collection.id}`} method="get" className="feed-search">
+        <form action={`/collections/${id}`} method="get" className="feed-search">
           <input
             className="input"
             type="search"
@@ -109,7 +150,7 @@ export default async function CollectionDetailPage({ params, searchParams }: Col
             搜索
           </button>
           {query ? (
-            <Link className="btn quiet small" href={`/collections/${collection.id}`}>
+            <Link className="btn quiet small" href={`/collections/${id}`}>
               清除
             </Link>
           ) : null}
@@ -124,7 +165,7 @@ export default async function CollectionDetailPage({ params, searchParams }: Col
       ) : rows.length === 0 ? (
         <div className="empty">
           <p>没有匹配的项目。</p>
-          <Link className="btn small" href={`/collections/${collection.id}`}>
+          <Link className="btn small" href={`/collections/${id}`}>
             清除搜索
           </Link>
         </div>
@@ -160,11 +201,11 @@ export default async function CollectionDetailPage({ params, searchParams }: Col
                   <p className="muted small">{repo?.summary ?? repo?.description ?? '暂无摘要'}</p>
                   {item.note ? <p className="repo-reason">备注：{item.note}</p> : null}
                 </div>
-                {isOwner ? (
+                {canEdit ? (
                   <form action={removeCollectionItemAction}>
                     <input type="hidden" name="collectionId" value={collection.id} />
                     <input type="hidden" name="repo" value={item.repoFullName} />
-                    <input type="hidden" name="returnTo" value={`/collections/${collection.id}#items`} />
+                    <input type="hidden" name="returnTo" value={`/collections/${id}#items`} />
                     <button className="btn quiet small" type="submit">
                       移除
                     </button>

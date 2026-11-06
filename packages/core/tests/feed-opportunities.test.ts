@@ -77,6 +77,10 @@ const intent: WatchIntentRecord = {
   id: 1,
   text: 'TypeScript 缓存项目',
   active: true,
+  teamId: null,
+  teamName: null,
+  teamRole: null,
+  access: 'owner',
   createdAt: '2026-10-31T00:00:00Z',
 }
 const matches: StoredWatchMatch[] = [

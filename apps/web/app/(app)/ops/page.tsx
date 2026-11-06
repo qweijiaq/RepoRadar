@@ -89,7 +89,7 @@ export default async function OpsPage({ searchParams }: OpsPageProps) {
           <p className="feed-meta">任务、投递、token 用量和最近失败记录。仅管理员可见。</p>
         </div>
         <div className="feed-actions">
-          <a className="btn small" href="/api/metrics">
+          <a className="btn small" href="#prometheus">
             Prometheus 指标
           </a>
           <Link className="btn quiet small" href="/settings">
@@ -114,7 +114,7 @@ export default async function OpsPage({ searchParams }: OpsPageProps) {
         <span>心跳超时任务 {metrics.staleRunningJobs}</span>
       </div>
 
-      <section className="panel">
+      <section className="panel" id="prometheus">
         <h2>Prometheus</h2>
         <p className="muted small">
           {process.env.METRICS_TOKEN

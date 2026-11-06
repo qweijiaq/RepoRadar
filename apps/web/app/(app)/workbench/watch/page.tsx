@@ -1,7 +1,17 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { listWatchIntents, listWatchMatches, loadHandledState, watchMatchHandled, getPool } from '@repo-radar/core'
+import {
+  canWriteTeam,
+  listTeamsForUser,
+  listWatchIntents,
+  listWatchMatches,
+  loadHandledState,
+  watchMatchHandled,
+  getPool,
+} from '@repo-radar/core'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { FormSelect } from '@/components/ui/FormSelect'
+import { QueryToast } from '@/components/ui/QueryToast'
 import { auth } from '@/auth'
 import { sessionUser } from '@/lib/session'
 import { markFeedItemDoneAction } from '@/app/(app)/feed/actions'
@@ -22,10 +32,12 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
   if (!currentUser) redirect('/login')
 
   const pool = getPool()
-  const [intents, handled] = await Promise.all([
+  const [intents, handled, teams] = await Promise.all([
     listWatchIntents(pool, Number(currentUser.id)),
     loadHandledState(pool, Number(currentUser.id)),
+    listTeamsForUser(pool, Number(currentUser.id)),
   ])
+  const writableTeams = teams.filter((team) => canWriteTeam(team.role))
   const withMatches = await Promise.all(
     intents.map(async (intent) => ({
       intent,
@@ -55,13 +67,18 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
         </div>
       </section>
 
-      {params.error === 'invalid' ? <div className="notice">描述需要 5-300 个字符。</div> : null}
-      {params.error === 'limit' ? <div className="notice">最多同时保留 10 个关注意图。</div> : null}
-      {params.error === 'not-found' ? <div className="notice">关注意图不存在或已被删除。</div> : null}
-      {params.error === 'run' ? <div className="notice">运行失败，请稍后重试。</div> : null}
-      {params.error === 'format' ? (
-        <div className="notice">模型返回格式异常，已自动重试；仍然失败请换一个模型。</div>
-      ) : null}
+      <QueryToast
+        code={params.error}
+        messages={{
+          invalid: '描述需要 5-300 个字符。',
+          limit: '最多同时保留 10 个关注意图。',
+          'not-found': '关注意图不存在或已被删除。',
+          team: '团队不存在或你没有写入权限。',
+          forbidden: '当前角色只能查看，不能运行或修改这个意图。',
+          run: '运行失败，请稍后重试。',
+          format: '模型返回格式异常，已自动重试；仍然失败请换一个模型。',
+        }}
+      />
       {params.created === '1' ? <div className="notice success">关注意图已创建，点「运行匹配」开始找。</div> : null}
       {params.run === 'ok' ? (
         <div className="notice success">这次找到 {params.count ?? 0} 个匹配，已写入下方列表。</div>
@@ -78,6 +95,20 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
             placeholder="例如：MIT 许可证、TypeScript 写的、能做 agent 长期记忆、最近三个月有 release 的项目"
             required
           />
+          {writableTeams.length > 0 ? (
+            <label className="field">
+              <span>归属</span>
+              <FormSelect
+                name="teamId"
+                defaultValue=""
+                options={[
+                  { value: '', label: '个人意图' },
+                  ...writableTeams.map((team) => ({ value: String(team.id), label: team.name })),
+                ]}
+                ariaLabel="关注意图归属"
+              />
+            </label>
+          ) : null}
           <div className="form-actions">
             <WatchSubmitButton label="创建关注" pendingLabel="创建中…" />
           </div>
@@ -100,23 +131,27 @@ export default async function WatchPage({ searchParams }: WatchPageProps) {
                 <p className="watch-intent">{intent.text}</p>
                 <span className="integration-auto">
                   创建于 {new Date(intent.createdAt).toLocaleDateString('zh-CN')}
+                  {intent.teamName ? ` · 团队 · ${intent.teamName}` : ''}
+                  {intent.access === 'read' ? ' · 只读' : ''}
                 </span>
               </div>
-              <div className="integration-head-actions">
-                <form action={enqueueWatchRunAction}>
-                  <input type="hidden" name="id" value={intent.id} />
-                  <WatchSubmitButton label="运行匹配" pendingLabel="匹配中…" />
-                </form>
-                <ConfirmDialog
-                  action={deleteWatchIntentAction}
-                  fields={{ id: String(intent.id) }}
-                  triggerLabel="删除"
-                  triggerClassName="btn quiet danger small"
-                  title="删除关注意图"
-                  description="删除后这个意图的历史匹配也会一并删除，不影响已收藏的仓库。"
-                  confirmLabel="确认删除"
-                />
-              </div>
+              {intent.access !== 'read' ? (
+                <div className="integration-head-actions">
+                  <form action={enqueueWatchRunAction}>
+                    <input type="hidden" name="id" value={intent.id} />
+                    <WatchSubmitButton label="运行匹配" pendingLabel="匹配中…" />
+                  </form>
+                  <ConfirmDialog
+                    action={deleteWatchIntentAction}
+                    fields={{ id: String(intent.id) }}
+                    triggerLabel="删除"
+                    triggerClassName="btn quiet danger small"
+                    title="删除关注意图"
+                    description="删除后这个意图的历史匹配也会一并删除，不影响已收藏的仓库。"
+                    confirmLabel="确认删除"
+                  />
+                </div>
+              ) : null}
             </header>
 
             {matches.length > 0 ? (

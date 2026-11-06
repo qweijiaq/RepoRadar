@@ -86,9 +86,12 @@ function LibraryTabs({
     { value: 'discoverability', label: '曝光优化' },
     { value: 'history', label: '历史报告' },
   ]
+  const suggestionTabs = tabs.filter((item) => item.value !== 'history')
+  const historyTab = tabs.find((item) => item.value === 'history')
   return (
     <div className="library-tabs">
-      {tabs.map((item) => (
+      <span className="library-tab-group">建议</span>
+      {suggestionTabs.map((item) => (
         <Link
           key={item.value}
           className={active === item.value ? 'feed-tab active' : 'feed-tab'}
@@ -98,6 +101,19 @@ function LibraryTabs({
           {counts?.[item.value] !== undefined ? ` · ${counts[item.value]}` : ''}
         </Link>
       ))}
+      {historyTab ? (
+        <>
+          <span className="library-tab-divider" aria-hidden="true" />
+          <span className="library-tab-group">记录</span>
+          <Link
+            className={active === historyTab.value ? 'feed-tab active' : 'feed-tab'}
+            href={`/library?tab=${historyTab.value}`}
+          >
+            {historyTab.label}
+            {counts?.[historyTab.value] !== undefined ? ` · ${counts[historyTab.value]}` : ''}
+          </Link>
+        </>
+      ) : null}
     </div>
   )
 }

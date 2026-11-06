@@ -386,6 +386,7 @@ export async function enqueueWatchRunAction(formData: FormData): Promise<void> {
   if (!Number.isFinite(intentId)) redirect('/workbench/watch?error=not-found')
   const intent = await findWatchIntent(pool, userId, intentId)
   if (!intent) redirect('/workbench/watch?error=not-found')
+  if (intent.access === 'read') redirect('/workbench/watch?error=forbidden')
 
   await enqueueAndGo(pool, userId, 'watch', `关注代理 · ${intent.text.slice(0, 60)}`, {
     intentId,

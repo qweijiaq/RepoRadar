@@ -2,6 +2,27 @@ import type { DbPool } from './db.js'
 import type { TasteProfile } from './personalize.js'
 import { isRadarMode, type RadarMode } from './radar.js'
 
+export type NotificationCategory =
+  | 'githubStar'
+  | 'githubFork'
+  | 'githubIssue'
+  | 'githubPull'
+  | 'githubRelease'
+  | 'release'
+  | 'ai'
+  | 'system'
+
+export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
+  'githubStar',
+  'githubFork',
+  'githubIssue',
+  'githubPull',
+  'githubRelease',
+  'release',
+  'ai',
+  'system',
+]
+
 export interface NotificationPrefs {
   githubStar: boolean
   githubFork: boolean
@@ -11,6 +32,48 @@ export interface NotificationPrefs {
   emailNotifications: boolean
   pushNotifications: boolean
   weeklyDigest: boolean
+  /** 为空表示沿用旧行为：总开关打开时所有类别都投递。 */
+  emailKinds?: NotificationCategory[]
+  pushKinds?: NotificationCategory[]
+}
+
+const AI_NOTIFICATION_KINDS = new Set([
+  'job',
+  'integration',
+  'maintainer',
+  'issue',
+  'discoverability',
+  'comparison',
+  'issue-plan',
+  'watch',
+  'similar',
+])
+
+/** 把具体通知 kind 映射成用户可配置的类别。 */
+export function notificationCategory(kind: string): NotificationCategory {
+  if (kind === 'github-star') return 'githubStar'
+  if (kind === 'github-fork') return 'githubFork'
+  if (kind === 'github-issue') return 'githubIssue'
+  if (kind === 'github-pr') return 'githubPull'
+  if (kind === 'github-release') return 'githubRelease'
+  if (kind === 'release') return 'release'
+  if (AI_NOTIFICATION_KINDS.has(kind)) return 'ai'
+  return 'system'
+}
+
+export function isNotificationCategory(value: string): value is NotificationCategory {
+  return (NOTIFICATION_CATEGORIES as string[]).includes(value)
+}
+
+export function notificationChannelEnabled(
+  prefs: NotificationPrefs,
+  category: NotificationCategory,
+  channel: 'email' | 'push',
+): boolean {
+  const master = channel === 'email' ? prefs.emailNotifications : prefs.pushNotifications
+  if (!master) return false
+  const kinds = channel === 'email' ? prefs.emailKinds : prefs.pushKinds
+  return !kinds || kinds.includes(category)
 }
 
 export interface UserPrefs {

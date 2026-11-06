@@ -102,6 +102,14 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
             可以复制文字或导出图片。
           </p>
         </div>
+        <div className="feed-actions">
+          <a className="btn quiet small" href="/rss.xml">
+            RSS
+          </a>
+          <a className="btn quiet small" href="/api/public/daily">
+            JSON
+          </a>
+        </div>
       </section>
 
       {params.error === 'empty' ? (

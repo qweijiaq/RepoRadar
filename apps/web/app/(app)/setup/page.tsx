@@ -6,7 +6,7 @@ import { auth } from '@/auth'
 import { isAdminUser } from '@/lib/admin'
 import { maskClientId, resolveGithubCredentials } from '@/lib/oauth-config'
 import { sessionUser } from '@/lib/session'
-import { CopyButton } from './copy-button'
+import { CopyButton } from '@/components/ui/CopyButton'
 
 export const dynamic = 'force-dynamic'
 

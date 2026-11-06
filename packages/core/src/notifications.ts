@@ -1,6 +1,7 @@
 import type { DbPool } from './db.js'
 import type { ReleaseEvent } from './releases.js'
 import { queueNotificationDeliveries } from './deliveries.js'
+import { loadNotificationPrefs } from './users.js'
 
 export interface NotificationRecord {
   id: number
@@ -53,6 +54,7 @@ export async function addNotification(
   if (id > 0) {
     await queueNotificationDeliveries(pool, userId, {
       id,
+      kind: input.kind,
       title: input.title,
       body: input.body ?? null,
       url: input.url ?? null,
@@ -160,26 +162,63 @@ export async function markNotificationsRead(pool: DbPool, userId: number): Promi
   await pool.query(`UPDATE notifications SET read_at = now() WHERE user_id = $1 AND read_at IS NULL`, [userId])
 }
 
+/** 按分类/前缀批量标记已读，参数与 listNotifications 的筛选条件一致。 */
+export async function markNotificationsReadMatching(
+  pool: DbPool,
+  userId: number,
+  options: Omit<NotificationListOptions, 'offset' | 'unreadOnly'> = {},
+): Promise<number> {
+  const params: unknown[] = [userId]
+  const where = ['user_id = $1', 'read_at IS NULL']
+  if (options.kinds?.length) {
+    params.push(options.kinds)
+    where.push(`kind = ANY($${params.length}::text[])`)
+  }
+  if (options.prefixes?.length) {
+    params.push(options.prefixes.map((prefix) => `${prefix}%`))
+    where.push(`kind LIKE ANY($${params.length}::text[])`)
+  }
+  if (options.excludeKinds?.length) {
+    params.push(options.excludeKinds)
+    where.push(`NOT (kind = ANY($${params.length}::text[]))`)
+  }
+  if (options.excludePrefixes?.length) {
+    params.push(options.excludePrefixes.map((prefix) => `${prefix}%`))
+    where.push(`NOT (kind LIKE ANY($${params.length}::text[]))`)
+  }
+  const { rowCount } = await pool.query(
+    `UPDATE notifications SET read_at = now() WHERE ${where.join(' AND ')}`,
+    params,
+  )
+  return rowCount ?? 0
+}
+
 export async function notifyReleaseSubscribers(pool: DbPool, event: ReleaseEvent): Promise<number> {
   const title = `${event.repoFullName} 发布 ${event.tag}`
   const body = event.name ?? '新版本已发布'
-  const { rows } = await pool.query<{ id: string; user_id: string }>(
-    `INSERT INTO notifications (user_id, kind, title, body, url)
-     SELECT user_id, 'release', $1, $2, $3
-     FROM subscriptions
-     WHERE kind = 'release' AND value = $4
-     RETURNING id, user_id`,
-    [title, body, event.url, event.repoFullName],
+  const { rows } = await pool.query<{ user_id: string }>(
+    `SELECT user_id FROM subscriptions WHERE kind = 'release' AND value = $1`,
+    [event.repoFullName],
   )
+
+  let notified = 0
   for (const row of rows) {
-    await queueNotificationDeliveries(pool, Number(row.user_id), {
-      id: Number(row.id),
-      title,
-      body,
-      url: event.url,
-    })
+    const userId = Number(row.user_id)
+    const prefs = await loadNotificationPrefs(pool, userId)
+    if (!prefs.githubRelease) continue
+
+    const inserted = await pool.query<{ id: string }>(
+      `INSERT INTO notifications (user_id, kind, title, body, url)
+       VALUES ($1, 'release', $2, $3, $4)
+       RETURNING id`,
+      [userId, title, body, event.url],
+    )
+    const id = Number(inserted.rows[0]?.id ?? 0)
+    if (id <= 0) continue
+    await queueNotificationDeliveries(pool, userId, { id, kind: 'release', title, body, url: event.url })
+    notified++
   }
-  return rows.length
+  return notified
 }
 
 export async function markNotificationRead(pool: DbPool, userId: number, id: number): Promise<void> {

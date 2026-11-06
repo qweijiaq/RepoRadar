@@ -87,7 +87,7 @@ export default async function RepoPage({ params, searchParams }: RepoPageProps) 
       listCollections(pool, Number(currentUser.id)),
       loadHandledState(pool, Number(currentUser.id)),
     ])
-    collections = userCollections
+    collections = userCollections.filter((collection) => collection.access !== 'read')
     const repoKey = repo.fullName.toLowerCase()
     for (const [pair, status] of handled.outcomes) {
       if (!pair.endsWith(`|${repoKey}`)) continue
@@ -357,6 +357,11 @@ export default async function RepoPage({ params, searchParams }: RepoPageProps) 
               还没有验证记录。运行 <code>pnpm radar verify</code> 后会在这里出现。
             </p>
           )}
+          <div className="feed-actions">
+            <Link className="btn quiet small" href={`/evidence/${repo.owner}/${repo.name}`}>
+              公开证据页与徽章
+            </Link>
+          </div>
         </section>
 
         {repo.topics.length > 0 ? (

@@ -1,10 +1,15 @@
 import Link from 'next/link'
-import { listCollections, getPool } from '@repo-radar/core'
+import { canWriteTeam, listCollections, listTeamsForUser, getPool } from '@repo-radar/core'
 import { createCollectionAction } from '@/app/actions'
+import { FormSelect } from '@/components/ui/FormSelect'
 
 /** 收藏集列表，嵌入雷达页的「收藏」标签；详情页仍使用 /collections/[id]。 */
 export async function CollectionsView({ userId }: { userId: number }) {
-  const collections = await listCollections(getPool(), userId)
+  const [collections, teams] = await Promise.all([
+    listCollections(getPool(), userId),
+    listTeamsForUser(getPool(), userId),
+  ])
+  const writableTeams = teams.filter((team) => canWriteTeam(team.role))
 
   return (
     <>
@@ -19,6 +24,20 @@ export async function CollectionsView({ userId }: { userId: number }) {
             <span>描述（可选）</span>
             <input name="description" placeholder="一句话说明这个集合的用途" />
           </label>
+          {writableTeams.length > 0 ? (
+            <label className="field">
+              <span>归属</span>
+              <FormSelect
+                name="teamId"
+                defaultValue=""
+                options={[
+                  { value: '', label: '个人收藏集' },
+                  ...writableTeams.map((team) => ({ value: String(team.id), label: team.name })),
+                ]}
+                ariaLabel="收藏集归属"
+              />
+            </label>
+          ) : null}
           <button className="btn solid" type="submit">
             创建
           </button>
@@ -39,9 +58,15 @@ export async function CollectionsView({ userId }: { userId: number }) {
                 <span className={collection.isPublic ? 'chip verified' : 'chip subtle'}>
                   {collection.isPublic ? '公开' : '私密'}
                 </span>
+                {collection.teamName ? (
+                  <span className="chip subtle">团队 · {collection.teamName}</span>
+                ) : null}
               </div>
               {collection.description ? <p className="muted small">{collection.description}</p> : null}
-              <p className="collection-meta">{collection.itemCount} 个项目</p>
+              <p className="collection-meta">
+                {collection.itemCount} 个项目
+                {collection.access === 'read' ? ' · 只读' : ''}
+              </p>
             </Link>
           ))}
         </div>

@@ -53,6 +53,14 @@ export default async function TrendsPage() {
             <Link href="/share/trending">生成分享卡</Link>，每日 Top10 在 <Link href="/daily">每日榜单</Link>。
           </p>
         </div>
+        <div className="feed-actions">
+          <a className="btn quiet small" href="/rss.xml">
+            RSS
+          </a>
+          <a className="btn quiet small" href="/api/public/daily">
+            每日 JSON
+          </a>
+        </div>
       </section>
 
       {repos.length === 0 ? (

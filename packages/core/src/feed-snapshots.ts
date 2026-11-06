@@ -5,6 +5,7 @@ import { buildFeedbackContext, rankForUser } from './personalize.js'
 import { loadSubscriptions } from './subscriptions.js'
 import type { EnrichedRepoRecord } from './types.js'
 import { findUserById } from './users.js'
+import { SCORING_VERSION } from './versions.js'
 
 /** 一次预计算保留多少个排名结果，作为「加载更多」的上限。 */
 export const FEED_SNAPSHOT_LIMIT = 300
@@ -12,10 +13,16 @@ export const FEED_SNAPSHOT_LIMIT = 300
 /** 超过这个时间的快照视为过期，页面会回退到实时排名并触发重建。 */
 export const FEED_SNAPSHOT_MAX_AGE_MINUTES = 60
 
+/** 快照结构版本；修改 ids 语义或排序输入时需要递增。 */
+export const FEED_SNAPSHOT_SCHEMA_VERSION = 2
+
+export const FEED_SNAPSHOT_VERSION = `${SCORING_VERSION}:snapshot-v${FEED_SNAPSHOT_SCHEMA_VERSION}`
+
 export interface FeedSnapshot {
   userId: number
   ids: number[]
   poolSize: number
+  version: string
   builtAt: string
 }
 
@@ -23,6 +30,7 @@ interface FeedSnapshotRow {
   user_id: string
   ids: Array<string | number>
   pool_size: number
+  version: string
   built_at: Date | string
 }
 
@@ -36,11 +44,13 @@ export async function loadFeedSnapshot(
   maxAgeMinutes: number = FEED_SNAPSHOT_MAX_AGE_MINUTES,
 ): Promise<FeedSnapshot | null> {
   const { rows } = await pool.query<FeedSnapshotRow>(
-    `SELECT user_id, ids, pool_size, built_at
+    `SELECT user_id, ids, pool_size, version, built_at
      FROM feed_snapshots
-     WHERE user_id = $1 AND built_at > now() - ($2::int * INTERVAL '1 minute')
+     WHERE user_id = $1
+       AND built_at > now() - ($2::int * INTERVAL '1 minute')
+       AND version = $3
      LIMIT 1`,
-    [userId, Math.max(1, maxAgeMinutes)],
+    [userId, Math.max(1, maxAgeMinutes), FEED_SNAPSHOT_VERSION],
   )
   const row = rows[0]
   if (!row) return null
@@ -48,8 +58,14 @@ export async function loadFeedSnapshot(
     userId: Number(row.user_id),
     ids: row.ids.map((id) => Number(id)),
     poolSize: row.pool_size,
+    version: row.version,
     builtAt: toIso(row.built_at),
   }
+}
+
+/** 用户反馈、偏好或订阅变化后，让下一次 feed 重新取实时排名。 */
+export async function invalidateFeedSnapshot(pool: DbPool, userId: number): Promise<void> {
+  await pool.query(`DELETE FROM feed_snapshots WHERE user_id = $1`, [userId])
 }
 
 export async function saveFeedSnapshot(
@@ -59,11 +75,14 @@ export async function saveFeedSnapshot(
   poolSize: number,
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO feed_snapshots (user_id, ids, pool_size, built_at)
-     VALUES ($1, $2::bigint[], $3, now())
+    `INSERT INTO feed_snapshots (user_id, ids, pool_size, version, built_at)
+     VALUES ($1, $2::bigint[], $3, $4, now())
      ON CONFLICT (user_id) DO UPDATE SET
-       ids = EXCLUDED.ids, pool_size = EXCLUDED.pool_size, built_at = now()`,
-    [userId, ids, poolSize],
+       ids = EXCLUDED.ids,
+       pool_size = EXCLUDED.pool_size,
+       version = EXCLUDED.version,
+       built_at = now()`,
+    [userId, ids, poolSize, FEED_SNAPSHOT_VERSION],
   )
 }
 
@@ -92,7 +111,13 @@ export async function refreshFeedSnapshot(pool: DbPool, userId: number): Promise
   if (ids.length === 0) return null
 
   await saveFeedSnapshot(pool, userId, ids, repos.length)
-  return { userId, ids, poolSize: repos.length, builtAt: new Date().toISOString() }
+  return {
+    userId,
+    ids,
+    poolSize: repos.length,
+    version: FEED_SNAPSHOT_VERSION,
+    builtAt: new Date().toISOString(),
+  }
 }
 
 /**
@@ -124,11 +149,11 @@ export async function listUsersNeedingFeedSnapshot(pool: DbPool, limit = 20): Pr
   const { rows } = await pool.query<{ id: string }>(
     `SELECT u.id
      FROM users u
-     LEFT JOIN feed_snapshots s ON s.user_id = u.id
+     LEFT JOIN feed_snapshots s ON s.user_id = u.id AND s.version = $2
      WHERE u.profile IS NOT NULL
      ORDER BY s.built_at ASC NULLS FIRST
      LIMIT $1`,
-    [Math.max(1, Math.min(200, limit))],
+    [Math.max(1, Math.min(200, limit)), FEED_SNAPSHOT_VERSION],
   )
   return rows.map((row) => Number(row.id))
 }

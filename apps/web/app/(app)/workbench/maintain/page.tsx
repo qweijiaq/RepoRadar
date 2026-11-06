@@ -13,6 +13,7 @@ import {
 import { auth } from '@/auth'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 import { CopyIntegrationButton } from '@/app/(app)/workbench/integrations/copy-button'
+import { QueryToast } from '@/components/ui/QueryToast'
 import { markFeedItemDoneAction } from '@/app/(app)/feed/actions'
 import { enqueueIssuePlanAction, enqueueMaintainerAction, enqueueUpgradeAction } from '@/app/(app)/jobs/enqueue'
 import { signInGithubRepoAction } from '@/app/actions'
@@ -80,6 +81,12 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
           <Link className="btn quiet small" href="/workbench/maintain/similar">
             相似项目对比
           </Link>
+          <Link className="btn quiet small" href="/workbench/dependencies">
+            依赖与安全
+          </Link>
+          <Link className="btn quiet small" href="/workbench/contribute">
+            贡献机会
+          </Link>
           <Link className="btn small" href="/library?tab=history&kind=maintainer">
             历史生成
           </Link>
@@ -89,23 +96,20 @@ export default async function MaintainPage({ searchParams }: MaintainPageProps) 
         </div>
       </section>
 
-      {params.error === 'no-projects' ? (
-        <div className="notice">还没有可分析的项目。先在接入页添加或同步 GitHub 画像。</div>
-      ) : null}
-      {params.error === 'need-token' ? (
-        <div className="notice">生成维护周报需要 GitHub 授权，请重新登录后再试。</div>
-      ) : null}
-      {params.error === 'env-mismatch' ? (
-        <div className="notice">GITHUB_TOKEN 与当前登录账户不一致，无法读取你的仓库数据。</div>
-      ) : null}
-      {params.error === 'generate' ? <div className="notice">生成失败，请检查模型配置或稍后重试。</div> : null}
-      {params.error === 'format' ? (
-        <div className="notice">模型返回的内容不是合法 JSON，已自动重试；仍然失败请换一个模型再试。</div>
-      ) : null}
-      {params.error === 'issue-invalid' ? <div className="notice">Issue 参数不正确。</div> : null}
-      {params.error === 'issue-not-found' ? <div className="notice">没有找到这个 Issue。</div> : null}
-      {params.error === 'issue-generate' ? <div className="notice">生成修复方案失败，请稍后重试。</div> : null}
-      {params.error === 'issue-format' ? <div className="notice">修复方案格式异常，已自动重试；仍然失败请换一个模型。</div> : null}
+      <QueryToast
+        code={params.error}
+        messages={{
+          'no-projects': '还没有可分析的项目。先在接入页添加或同步 GitHub 画像。',
+          'need-token': '生成维护周报需要 GitHub 授权，请重新登录后再试。',
+          'env-mismatch': 'GITHUB_TOKEN 与当前登录账户不一致，无法读取你的仓库数据。',
+          generate: '生成失败，请检查模型配置或稍后重试。',
+          format: '模型返回的内容不是合法 JSON，已自动重试；仍然失败请换一个模型再试。',
+          'issue-invalid': 'Issue 参数不正确。',
+          'issue-not-found': '没有找到这个 Issue。',
+          'issue-generate': '生成修复方案失败，请稍后重试。',
+          'issue-format': '修复方案格式异常，已自动重试；仍然失败请换一个模型。',
+        }}
+      />
       {!access.access && activeProjects.length > 0 ? (
         <div className="notice">
           {access.reason === 'need-repo-scope'

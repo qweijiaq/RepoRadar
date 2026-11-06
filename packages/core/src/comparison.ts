@@ -284,7 +284,7 @@ export function buildComparisonBrief(payload: StoredComparisonReport): string {
     '',
   ]
 
-  for (const candidate of report.candidates) {
+  for (const candidate of report.candidates ?? []) {
     lines.push(
       `### ${candidate.repo}`,
       '',
@@ -292,28 +292,30 @@ export function buildComparisonBrief(payload: StoredComparisonReport): string {
       `- 迁移成本：${candidate.migrationEffort}`,
       `- 结论：${candidate.reason}`,
       '- 优势：',
-      ...candidate.strengths.map((strength) => `  - ${strength}`),
+      ...(candidate.strengths ?? []).map((strength) => `  - ${strength}`),
     )
-    if (candidate.weaknesses.length > 0) {
-      lines.push('- 弱点：', ...candidate.weaknesses.map((weakness) => `  - ${weakness}`))
+    if ((candidate.weaknesses ?? []).length > 0) {
+      lines.push('- 弱点：', ...(candidate.weaknesses ?? []).map((weakness) => `  - ${weakness}`))
     }
     lines.push('')
   }
 
-  if (report.capabilities.length > 0) {
-    const repos = [report.project, ...report.candidates.map((candidate) => candidate.repo)]
+  const capabilities = report.capabilities ?? []
+  if (capabilities.length > 0) {
+    const repos = [report.project, ...(report.candidates ?? []).map((candidate) => candidate.repo)]
     lines.push('## 能力差异', '', `| 能力 | ${repos.join(' | ')} |`, `| --- | ${repos.map(() => '---').join(' | ')} |`)
-    for (const row of report.capabilities) {
-      const cells = repos.map((repo) => row.support[repo] ?? 'unknown')
+    for (const row of capabilities) {
+      const cells = repos.map((repo) => row.support?.[repo] ?? 'unknown')
       lines.push(`| ${row.name} | ${cells.join(' | ')} |`)
       if (row.note) lines.push(`| ${row.name} 说明 | ${row.note} |`)
     }
     lines.push('')
   }
 
-  if (report.nextSteps.length > 0) {
+  const nextSteps = report.nextSteps ?? []
+  if (nextSteps.length > 0) {
     lines.push('## 验证步骤', '')
-    report.nextSteps.forEach((step, index) => lines.push(`${index + 1}. ${step}`))
+    nextSteps.forEach((step, index) => lines.push(`${index + 1}. ${step}`))
     lines.push('')
   }
 

@@ -28,3 +28,7 @@ test-results/
 backups/
 
 eval-results/
+
+# local acceptance / release evidence
+acceptance-report-*/
+release-check-*/

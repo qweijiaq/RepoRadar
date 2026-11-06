@@ -19,6 +19,7 @@ import {
 } from '@repo-radar/core'
 import { auth } from '@/auth'
 import { loadCopilotContext } from '@/lib/copilot-context'
+import { isDemoLogin } from '@/lib/readonly'
 import { sessionUser } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
@@ -27,6 +28,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (isDemoLogin(currentUser.login)) {
+    return NextResponse.json({ error: 'demo-readonly' }, { status: 403 })
+  }
 
   let body: { message?: unknown; threadId?: unknown; regenerate?: unknown }
   try {

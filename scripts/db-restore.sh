@@ -28,7 +28,7 @@ if [[ -f "$file.sha256" ]]; then
 fi
 
 if [[ -f .env && -z "${DATABASE_URL:-}" ]]; then
-  DATABASE_URL="$(grep -E '^DATABASE_URL=' .env | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+  DATABASE_URL="$(grep -E '^DATABASE_URL=' .env | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//" || true)"
 fi
 
 if command -v pg_restore >/dev/null 2>&1 && [[ -n "${DATABASE_URL:-}" ]]; then

@@ -27,9 +27,30 @@
   （10 次/分钟限流）上报。
 - SEO 与分享：`/sitemap.xml`、`/robots.txt`、站点和项目页的 OpenGraph 分享卡（`next/og`），
   以及各页面的 `openGraph` / `twitter` 元数据。
+- **团队工作区**（迁移 `0019`）：团队、成员和 owner / admin / member / viewer 角色；所有者不可被移除或降级。
+- **团队共享资源**：收藏集（`0020`）、关注意图（`0021`）和共享维护项目（`0023`）可以归属团队，
+  并按团队角色控制读写；团队维护汇总页展示共享项目的健康、依赖和 Issue/PR 待办。
+- **团队维护摘要邮件**（`0025`）：团队所有者/管理员可开启，worker 按 ISO 周去重发送。
+- **依赖与安全中心**：`/workbench/dependencies` 聚合维护周报中的依赖版本、风险、安全公告和接入回访。
+- **公开验证证据与徽章**：`/evidence/[owner]/[name]` 展示验证状态、命令和耗时；`/api/badge/[owner]/[name]`
+  输出可嵌入 README 的 SVG 徽章。
+- **公开 RSS / JSON**：`/rss.xml` 输出每日 Top10 RSS，`/api/public/daily` 输出公开 JSON。
+- **分享生命周期与访问统计**（`0017` / `0022`）：分享雷达默认 90 天过期、支持撤销，并记录浏览次数。
+- **公开收藏集 slug**（`0018`）：公开收藏集使用随机 slug，避免自增 ID 被枚举。
+- **通知类别 × 渠道矩阵**：邮件和推送可分别选择 GitHub、版本订阅、AI 工作和系统通知。
+- **通知与任务批量操作**：收件箱支持选中/分类批量已读；任务中心支持批量取消和批量重试。
+- **Feed 快照版本**（`0024`）：评分或快照结构变化后旧快照自动失效，并支持反馈/偏好变更后重建。
+- **配置检查与深度检查**：设置页展示配置清单，管理员可按需运行 `runDoctor`。
 
 ### Changed
 
+- **UI 收口**：统一面板、卡片和列表行间距；设置页顶部导航改为 12px 圆角并支持桌面端换行；
+  团队角色、关注归属和收藏集归属改用自定义 `UiSelect`；原生输入框、数字框和复选框统一视觉状态。
+- 设置页和主要工作台页面的一次性提示改为 `QueryToast`，显示后清理 URL 查询参数。
+- 删除未被页面引用的旧同步 AI action（`compare/actions.ts`、`issue-plan/actions.ts`、
+  `maintain/actions.ts` 以及 `app/actions.ts` 中的旧函数），统一走后台任务队列。
+- 顶部导航移除重复的“榜单”入口，每日榜仍可从趋势页进入；工作台移除独立“贡献”tab，
+  入口放到维护周报页。
 - TypeScript 7 与工具链采用官方推荐的并行别名：`typescript` 指向 `@typescript/typescript6`
   提供 Compiler API，`@typescript/native` 指向 `typescript@7` 提供 `tsc`。
 - `tsconfig.json` 纳入 `packages/core/eval` 和 `playwright.config.ts`，此前这两处不受类型检查。
@@ -108,6 +129,13 @@
 
 ### Fixed
 
+- 旧版选型对比报告缺少 `capabilities` / `nextSteps` / `strengths` / `weaknesses` 时页面崩溃；
+  `buildComparisonBrief` 和对比页已兼容空字段。
+- 旧维护报告的依赖项缺少 `vulnerabilities` 时团队维护汇总页崩溃；聚合时已默认空数组。
+- 干净 `.env` 不含 `DATABASE_URL` 时备份/恢复脚本在 `set -e` 下直接退出；已允许回退到
+  `docker compose exec postgres`。
+- 数据库集成测试的迁移清单未覆盖 `0017–0025`；已补齐并通过。
+- E2E 对“干净 demo 账号”有隐式依赖；验收预置数据会污染测试，现已通过验收后清理数据避免误报。
 - 设置页 LLM 测试失败时，用于提取 HTTP 状态码的正则里包含真实的退格字符（`\x08`），导致
   `code` 参数永远为空。
 - `job-worker` 中两个未使用的导入，以及若干无效赋值（`verify.ts`、`sync.ts`、`cli.ts`）。

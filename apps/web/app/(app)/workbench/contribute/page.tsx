@@ -26,7 +26,7 @@ export default async function ContributePage() {
   const projects = (await listUserProjects(pool, userId))
     .filter((project) => project.active)
     .slice(0, 3)
-  const token = resolveGithubToken(session)?.token ?? null
+  const token = (await resolveGithubToken(session))?.token ?? null
 
   const allRepos = await findEnrichedRepos(pool, 500)
   const targets = await Promise.all(

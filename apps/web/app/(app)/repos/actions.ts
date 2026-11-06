@@ -28,6 +28,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
 import { guardAiQuota } from '@/lib/quota-guard'
+import { assertWritable } from '@/lib/readonly'
 import { resolveRepoAccess, sessionUser } from '@/lib/session'
 import { initialRepoActionState, type RepoActionResult } from './types'
 
@@ -66,6 +67,7 @@ export async function createReposAction(
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) return failure('登录状态已失效，请重新登录')
+  assertWritable(currentUser.login)
   const access = await resolveRepoAccess(session, currentUser.login)
   if (!access.access) {
     return failure(
@@ -146,6 +148,7 @@ export async function updateReposAction(
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) return failure('登录状态已失效，请重新登录')
+  assertWritable(currentUser.login)
   const access = await resolveRepoAccess(session, currentUser.login)
   if (!access.access) {
     return failure(
@@ -221,6 +224,7 @@ export async function deleteReposAction(
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) return failure('登录状态已失效，请重新登录')
+  assertWritable(currentUser.login)
   const access = await resolveRepoAccess(session, currentUser.login)
   if (!access.access) {
     return failure(
@@ -260,6 +264,7 @@ export async function generateDiscoverabilityAction(formData: FormData): Promise
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const repo = String(formData.get('repo') ?? '').trim()
   if (!validFullName(repo)) redirect('/repos?error=invalid')
@@ -327,6 +332,7 @@ export async function applyDiscoverabilityAction(formData: FormData): Promise<vo
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const repo = String(formData.get('repo') ?? '').trim()
   if (!validFullName(repo)) redirect('/repos?error=invalid')

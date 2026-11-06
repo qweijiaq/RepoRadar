@@ -29,6 +29,7 @@ import {
 import { auth } from '@/auth'
 import { sessionUser } from '@/lib/session'
 import { CopyIntegrationButton } from './copy-button'
+import { QueryToast } from '@/components/ui/QueryToast'
 import { GenerateIntegrationButton } from './generate-button'
 
 export const dynamic = 'force-dynamic'
@@ -161,31 +162,22 @@ export default async function IntegrationsPage({ searchParams }: IntegrationsPag
         </div>
       </section>
 
-      {params.error === 'no-projects' ? (
-        <div className="notice">还没有可用的项目。先在下面添加一个，或去设置页同步 GitHub 画像。</div>
-      ) : null}
-      {params.error === 'need-token' ? (
-        <div className="notice">添加新项目需要 GitHub 登录授权，请重新登录后再试。</div>
-      ) : null}
-      {params.error === 'not-found' ? <div className="notice">没有找到这个仓库。</div> : null}
-      {params.error === 'invalid' ? <div className="notice">仓库格式应为 owner/name。</div> : null}
-      {params.error === 'generate' ? <div className="notice">生成失败，请检查模型配置或稍后重试。</div> : null}
-      {params.error === 'format' ? (
-        <div className="notice">
-          模型调用成功，但返回的内容不是合法 JSON（常见于输出被截断）。系统已自动重试；仍然失败时请换一个模型，或把「本轮关注」写得更具体后重试。
-        </div>
-      ) : null}
-      {params.error === 'compare-candidates' ? (
-        <div className="notice">对比至少需要 2 个候选，这份报告里的建议不够。</div>
-      ) : null}
-      {params.error === 'compare-token' ? (
-        <div className="notice">生成对比需要 GitHub 授权，请重新登录后再试。</div>
-      ) : null}
-      {params.error === 'compare' || params.error === 'compare-format' ? (
-        <div className="notice">
-          对比生成失败{params.error === 'compare-format' ? '：模型返回格式异常，已自动重试' : ''}，请稍后再试。
-        </div>
-      ) : null}
+      <QueryToast
+        code={params.error}
+        messages={{
+          'no-projects': '还没有可用的项目。先在下面添加一个，或去设置页同步 GitHub 画像。',
+          'need-token': '添加新项目需要 GitHub 登录授权，请重新登录后再试。',
+          'not-found': '没有找到这个仓库。',
+          invalid: '仓库格式应为 owner/name。',
+          generate: '生成失败，请检查模型配置或稍后重试。',
+          format:
+            '模型调用成功，但返回的内容不是合法 JSON（常见于输出被截断）。系统已自动重试；仍然失败时请换一个模型，或把「本轮关注」写得更具体后重试。',
+          'compare-candidates': '对比至少需要 2 个候选，这份报告里的建议不够。',
+          'compare-token': '生成对比需要 GitHub 授权，请重新登录后再试。',
+          compare: '对比生成失败，请稍后再试。',
+          'compare-format': '对比生成失败：模型返回格式异常，已自动重试，请稍后再试。',
+        }}
+      />
 
       {impacts.length > 0 ? (
         <section className="panel" id="impact-radar">

@@ -203,7 +203,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   const opportunityReturnTo = `${returnTo}#radar-opportunities`
   const gemReturnTo = `${returnTo}#radar-gems`
   const pool = getPool()
-  const githubToken = resolveGithubToken(session)?.token ?? null
+  const githubToken = (await resolveGithubToken(session))?.token ?? null
   // 先取用户画像，才能把向量相似度下推到 pgvector，避免把 500×1536 个浮点数传到应用层。
   const user = await findUserById(userId)
   const profile = user?.profile ?? null
@@ -247,8 +247,9 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   const pageLimit = isLibrary ? libraryLimit : 30
   const plainFeed =
     !filters.release && !filters.rising && !filters.language && !filters.verified && !query
+  // 多取一些再过滤，避免用户隐藏项目后第一页被抽空。
   const snapshotPage = plainFeed
-    ? await loadFeedSnapshotPage(pool, userId, pageLimit, {
+    ? await loadFeedSnapshotPage(pool, userId, Math.min(300, Math.max(pageLimit, pageLimit * 3)), {
         profileEmbedding: profile?.embedding ?? null,
       })
     : null
@@ -260,6 +261,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
     diversified = snapshotPage
       .map((repo) => byName.get(repo.fullName))
       .filter((repo): repo is (typeof scored)[number] => Boolean(repo))
+      .slice(0, pageLimit)
   }
   // 快照缺失、过期，或者页面上的项全被反馈过滤掉时，回退到实时排名。
   if (diversified.length === 0) {

@@ -3,6 +3,7 @@
 import { isRadarMode, saveRadarSnapshot, getPool } from '@repo-radar/core'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
+import { assertWritable } from '@/lib/readonly'
 import { sessionUser } from '@/lib/session'
 
 interface RawSnapshot {
@@ -20,6 +21,7 @@ export async function createRadarShareAction(formData: FormData): Promise<void> 
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   let raw: RawSnapshot
   try {

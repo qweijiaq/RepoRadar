@@ -4,6 +4,7 @@ import {
   dismissFeedItem,
   dismissOnboarding,
   isFeedDismissReason,
+  invalidateFeedSnapshot,
   isRadarMode,
   markFeedItemDone,
   saveRadarMode,
@@ -13,12 +14,14 @@ import {
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { auth } from '@/auth'
+import { assertWritable } from '@/lib/readonly'
 import { sessionUser } from '@/lib/session'
 
 export async function dismissFeedItemAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const key = String(formData.get('itemKey') ?? '').trim().slice(0, 240)
   const kind = String(formData.get('kind') ?? '').trim().slice(0, 40)
@@ -30,6 +33,7 @@ export async function dismissFeedItemAction(formData: FormData): Promise<void> {
   if (!key || !kind || !isFeedDismissReason(reason)) redirect(returnTo)
 
   await dismissFeedItem(getPool(), Number(currentUser.id), key, kind, reason, note || null)
+  await invalidateFeedSnapshot(getPool(), Number(currentUser.id))
   revalidatePath('/feed')
   redirect(returnTo)
 }
@@ -38,6 +42,7 @@ export async function dismissOnboardingAction(formData: FormData): Promise<void>
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
   await dismissOnboarding(getPool(), Number(currentUser.id))
   revalidatePath('/feed')
   const requested = String(formData.get('returnTo') ?? '')
@@ -48,6 +53,7 @@ export async function markFeedItemDoneAction(formData: FormData): Promise<void> 
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const key = String(formData.get('itemKey') ?? '').trim().slice(0, 240)
   const kind = String(formData.get('kind') ?? '').trim().slice(0, 40)
@@ -59,6 +65,7 @@ export async function markFeedItemDoneAction(formData: FormData): Promise<void> 
   const pool = getPool()
   const userId = Number(currentUser.id)
   await markFeedItemDone(pool, userId, key, kind, note || null)
+  await invalidateFeedSnapshot(pool, userId)
 
   if (kind === 'integration' && key.startsWith('integration:')) {
     const rest = key.slice('integration:'.length)
@@ -81,6 +88,7 @@ export async function setRadarModeAction(formData: FormData): Promise<void> {
   const session = await auth()
   const currentUser = sessionUser(session)
   if (!currentUser) redirect('/login')
+  assertWritable(currentUser.login)
 
   const mode = String(formData.get('mode') ?? '')
   if (!isRadarMode(mode)) redirect('/feed')

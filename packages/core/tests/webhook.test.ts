@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { activityDedupeKey, toActivity } from '../src/activity.js'
 import { parseGitHubWebhookPayload, webhookToActivity } from '../src/webhook.js'
 
 describe('parseGitHubWebhookPayload', () => {
@@ -62,5 +63,22 @@ describe('webhookToActivity', () => {
     })
     expect(release?.kind).toBe('github-release')
     expect(release?.title).toContain('v2.0.0')
+  })
+})
+
+describe('activityDedupeKey', () => {
+  it('is stable across webhook delivery ids and polling event ids', () => {
+    const webhook = webhookToActivity('watch', 'delivery-1', {
+      repository: { full_name: 'me/app' },
+      sender: { login: 'alice' },
+    })
+    const polling = toActivity('me/app', {
+      id: 'event-999',
+      type: 'WatchEvent',
+      actor: { login: 'alice' },
+    })
+    expect(webhook).not.toBeNull()
+    expect(polling).not.toBeNull()
+    expect(activityDedupeKey('me/app', webhook!)).toBe(activityDedupeKey('me/app', polling!))
   })
 })

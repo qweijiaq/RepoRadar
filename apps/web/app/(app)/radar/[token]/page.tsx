@@ -1,6 +1,13 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { findRadarSnapshot, RADAR_MODES, getPool } from '@repo-radar/core'
+import {
+  findRadarSnapshot,
+  RADAR_MODES,
+  getPool,
+  recordRadarSnapshotView,
+  resolveBaseUrl,
+} from '@repo-radar/core'
+import { CopyButton } from '@/components/ui/CopyButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +33,9 @@ export default async function SharedRadarPage({ params }: SharedRadarPageProps) 
   const snapshot = await findRadarSnapshot(getPool(), token)
   if (!snapshot) notFound()
   const mode = RADAR_MODES.find((item) => item.value === snapshot.mode)
+  const baseUrl = await resolveBaseUrl(getPool())
+  const shareUrl = `${baseUrl.replace(/\/+$/, '')}/radar/${token}`
+  const viewCount = await recordRadarSnapshotView(getPool(), token)
 
   return (
     <div className="page">
@@ -35,10 +45,12 @@ export default async function SharedRadarPage({ params }: SharedRadarPageProps) 
           <h1>{snapshot.login} 的雷达</h1>
           <p className="feed-meta">
             {mode?.label ?? snapshot.mode} · {snapshot.persona.name} · {snapshot.persona.detail}
+            {viewCount ? ` · 浏览 ${viewCount} 次` : ''}
           </p>
         </div>
         <div className="feed-actions">
-          <Link className="btn small" href="/feed">
+          <CopyButton value={shareUrl} label="复制分享链接" />
+          <Link className="btn quiet small" href="/feed">
             打开我的雷达
           </Link>
         </div>
