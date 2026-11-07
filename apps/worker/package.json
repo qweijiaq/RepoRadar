@@ -10,7 +10,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@repo-radar/core": "workspace:*",
-    "nodemailer": "^10.3.0",
+    "nodemailer": "^10.3.1",
     "tree-sitter-wasms": "^0.1.13",
     "tsx": "^4.21.0",
     "web-tree-sitter-020": "npm:web-tree-sitter@0.20.8",
