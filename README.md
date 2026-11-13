@@ -1,136 +1,178 @@
-# RepoRadar
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="RepoRadar — a maintainer copilot for open source" width="100%">
+</p>
 
-> 一个懂你口味的开源项目雷达：按你的技术栈、star 画像和正在维护的项目，发现值得用的新项目，并告诉你下一步能做什么。
->
-> [English](README.en.md) · 中文
->
-> **自托管开源项目**：RepoRadar 不提供官方在线服务，也不托管用户数据。GitHub OAuth、Postgres、模型 Key 和备份都由部署者自己管理。
+<h1 align="center">RepoRadar</h1>
 
-[![CI](https://github.com/qweijiaq/RepoRadar/actions/workflows/ci.yml/badge.svg)](https://github.com/qweijiaq/RepoRadar/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](package.json)
-[![pnpm](https://img.shields.io/badge/pnpm-11.9-F69220?logo=pnpm&logoColor=white)](package.json)
+<p align="center">
+  <a href="https://github.com/qweijiaq/RepoRadar/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/qweijiaq/RepoRadar/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/badge/License-Apache--2.0-blue.svg"></a>
+  <a href="package.json"><img alt="node" src="https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&amp;logoColor=white"></a>
+  <a href="package.json"><img alt="pnpm" src="https://img.shields.io/badge/pnpm-11.9-F69220?logo=pnpm&amp;logoColor=white"></a>
+</p>
 
-<img src="docs/assets/landing.png" alt="RepoRadar 首页：让好项目自己找上门" width="860">
+<p align="center">
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-- **为谁做**：每天刷 GitHub、手里又维护着 1–2 个项目，想把「发现项目」变成稳定工作流的开发者。
-- **解决什么**：不再只看 star 榜单，而是知道一个项目和你现在做的事有什么关系、值不值得接入、下一步该做什么。
-- **和推荐器的区别**：它会读你的 star 画像和维护项目，也能在 Docker 沙箱里真实 clone / install / build，给出带日志的验证结果。
-- **怎么用**：支持 Docker Compose 自托管，数据、GitHub token 和模型 Key 都留在自己的数据库里。
+> A maintainer copilot for open-source projects: start from a project you maintain, find libraries worth integrating, verify them in a sandbox, and keep the decision.
 
-## 30 秒了解
+> **Self-hosted open source**: RepoRadar does not provide an official hosted service and does not host your data. You manage GitHub OAuth, Postgres, model keys and backups yourself.
 
-- **每日雷达**：机会卡 + 隐藏宝石 + 工具库，按你的口味排序；工具库卡片可以展开看分数由哪些维度组成。
-- **接入建议**：选中正在维护的项目，AI 找可以补位的开源库，给出理由、步骤和风险，生成能直接交给 Claude Code / Cursor 的接入工作流。
-- **相似项目对比**：找同赛道项目，对比双方强弱、可以借鉴的设计和直接照搬的风险。
-- **维护周报**：健康度、依赖升级、Issue/PR 待办合成一张周报，依赖升级会查真实 lockfile、npm/PyPI/Go/crates.io 和 OSV。
-- **建议库**：历史接入、关注、维护、对比和曝光建议按库归档，显示出现次数、已接入、不感兴趣和待处理状态。
+<img src="docs/assets/landing.png" alt="RepoRadar landing page" width="860">
 
-## 和同类工具的区别
+- **Who it is for**: developers maintaining one or two projects who need to decide whether the next library is worth integrating.
+- **What it solves**: it replaces star-ranked lists with a project-first decision: what to add, why it fits, what the risk is, and what to do next.
+- **How it is different**: it reads your project context and real dependencies, and can clone / install / build candidates in a Docker sandbox with logs kept as evidence.
+- **How to run it**: Docker Compose self-hosting; repository data, GitHub tokens and model keys stay in your own database.
 
-| | 推荐依据 | 能否验证可构建 | 自托管 |
+## At a glance
+
+- **Integration suggestions**: pick a project you maintain; the AI finds libraries that fill real gaps and produces an implementation brief for Claude Code or Cursor.
+- **Sandbox verification**: real clone / install / build in Docker, with diff, commands, duration and failure reasons. It never touches the remote repository.
+- **Similar-project comparison**: compare direct competitors, target advantages, borrowable ideas and copy-paste risks.
+- **Maintainer weekly**: health, dependency upgrades and issue/PR triage in one report, backed by real lockfiles, npm/PyPI/Go/crates.io and OSV.
+- **Recommendation library**: every historical suggestion is grouped by repository with adopted, rejected and pending states.
+- **Daily radar**: opportunity cards, hidden gems and a tool library as a secondary entry point.
+
+## How it compares
+
+| | Ranking signal | Can verify builds | Self-hosted |
 | --- | --- | --- | --- |
-| **RepoRadar** | 你的 star、订阅、维护项目和反馈 | 可以在 Docker 沙箱里 clone / install / build，也支持补丁和依赖升级验证 | 支持 |
-| GitHub Explore / Trending | 全站热度、编辑推荐 | 否 | 否 |
-| Trendshift | star 增速与趋势 | 否 | 否 |
-| daily.dev | 社区内容与标签 | 否 | 否 |
+| **RepoRadar** | Your stars, subscriptions, maintained projects and feedback | Clone / install / build in a Docker sandbox; patch and dependency-upgrade checks | Yes |
+| GitHub Explore / Trending | Global popularity and editorial picks | No | No |
+| Trendshift | Star velocity and trends | No | No |
+| daily.dev | Community posts and tags | No | No |
 
-## 界面预览
+## Screenshots
 
-| 首次打开 `/feed` | 项目情报页 |
+| First run on `/feed` | Project intelligence page |
 | --- | --- |
-| <img src="docs/assets/feed-onboarding.png" alt="首次打开 /feed 的引导" width="420"> | <img src="docs/assets/repo-page.png" alt="RepoRadar 项目情报页" width="420"> |
+| <img src="docs/assets/feed-onboarding.png" alt="RepoRadar first-run feed" width="420"> | <img src="docs/assets/repo-page.png" alt="RepoRadar project page" width="420"> |
 
-## 快速开始
+## Quick start
 
-### 前置条件
+### Requirements
 
 - Docker + Docker Compose
-- 一个 GitHub OAuth App（用于登录）
-- 推荐：`GITHUB_TOKEN`，避免 GitHub Search 限流和采集超时
-- 可选：任意 OpenAI 兼容模型 Key（不配置时只能使用采集、列表和基础雷达）
-- 本地开发还需要 Node.js 22+、pnpm 11.9+
+- A GitHub OAuth App for sign-in
+- Recommended: `GITHUB_TOKEN`, to avoid GitHub Search rate limits and collection timeouts
+- Optional: any OpenAI-compatible model key (without it, collection, lists and the basic radar still work)
+- Local development also needs Node.js 22+ and pnpm 11.9+
 
-### 只想先跑起来（Docker）
+### Docker
 
 ```bash
 cp .env.example .env
-# 至少设置 AUTH_SECRET、ADMIN_LOGINS、SETUP_TOKEN
-# 强烈建议同时设置 GITHUB_TOKEN，避免 GitHub Search 限流和采集超时
+# set AUTH_SECRET, ADMIN_LOGINS and SETUP_TOKEN
+# also strongly recommended: GITHUB_TOKEN, to avoid Search rate limits and timeouts
 docker compose up -d --build
 curl -fsS http://localhost:3000/api/health
 ```
 
-打开 `http://localhost:3000/setup` 配置 GitHub OAuth，然后登录、在设置页填入模型 API Key。没有模型 Key 也能使用采集、列表和基础雷达。
+Open `http://localhost:3000/setup` to configure GitHub OAuth, then add a model API key in Settings. The radar works without a model key, but report generation does not.
 
-可选：先写入一份演示数据，未采集前也能看到完整界面：
+Optional: seed demo data so the full UI is visible before collection has run:
 
 ```bash
 docker compose --profile demo run --rm demo-seed
 ```
 
-检查后台 worker：
+Check the background worker:
 
 ```bash
 docker compose logs -f worker
 ```
 
-完整部署、TLS、备份与安全边界见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+### Promotion / demo-only site
 
-### 本地开发
+If the site is only for promotion and a read-only demo, and you do not want visitors to create accounts on your instance:
+
+```bash
+RADAR_PROMO_MODE=1 RADAR_DEMO_MODE=1 docker compose --profile demo up -d --build
+```
+
+This mode:
+
+- shows a "promotion site · read-only demo" banner on the homepage
+- disables ordinary GitHub sign-in and keeps only the read-only `demo-radar` account for visitors
+- does not create visitor accounts or store their GitHub tokens or personal settings
+- sends suggestions, votes and the public roadmap to the external Feedback Desk service, not the RepoRadar database
+- points visitors to self-hosting for real use
+
+### External feedback desk
+
+The homepage reads the desktop Feedback Desk service and renders suggestions and the public roadmap with the site's own UI:
+
+```bash
+cd ~/Desktop/feedback-desk
+npm start
+```
+
+Configure the RepoRadar instance:
+
+```env
+FEEDBACK_DESK_URL=http://127.0.0.1:8787
+FEEDBACK_DESK_PROJECT=repo-radar
+```
+
+The site fetches the Feedback Desk public API from the visitor's browser, so `FEEDBACK_DESK_URL` must be reachable from the browser (for example an HTTPS reverse proxy or tunnel), not just `127.0.0.1` on the server. The CSP `connect-src` is derived from this value.
+
+Set `RADAR_PROMO_MODE=0` on the full instance that real users should use.
+
+### Local development
 
 ```bash
 docker compose up -d postgres
 pnpm install
 cp .env.example .env
 cp apps/web/.env.local.example apps/web/.env.local
-# 至少设置 AUTH_SECRET；本地想跳过 GitHub OAuth 可把 AUTH_DEV_MODE 改为 1
+# set AUTH_SECRET; set AUTH_DEV_MODE=1 to skip GitHub OAuth locally
 pnpm db:migrate
 pnpm dev:web        # http://localhost:3000
 ```
 
-命令、环境变量、模型配置和测试方式见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
+Detailed setup, commands and environment variables are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The detailed docs are currently in Chinese.
 
-### 备份与升级
+### Backup and upgrade
 
 ```bash
 bash scripts/db-backup.sh
-# 升级代码后重新构建并应用迁移
+# after pulling code
 docker compose up -d --build
 ```
 
-恢复会覆盖当前数据库，必须显式确认：
+Restore overwrites the current database and requires explicit confirmation:
 
 ```bash
 CONFIRM=YES bash scripts/db-restore.sh backups/xxx.dump
 ```
 
-## 文档
+## Documentation
 
-| 文档 | 内容 |
+| Document | Contents |
 | --- | --- |
-| [功能与页面](docs/FEATURES.md) | 雷达、接入、相似对比、维护周报、建议库、MCP 和各个页面 |
-| [评分与可解释性](docs/SCORING.md) | 推荐分数的组成、默认权重、版本和评测 |
-| [部署](docs/DEPLOYMENT.md) | Docker Compose、Caddy/Nginx、TLS、备份恢复 |
-| [运维与安全](docs/OPERATIONS.md) | 可观测性、GitHub 权限、通知、保留策略、限流配额 |
-| [开发与命令](docs/DEVELOPMENT.md) | CLI 命令、环境变量、项目结构、测试和沙箱验证 |
-| [路线图](docs/ROADMAP.md) | 下一阶段的验证和产品方向 |
-| [产品设计](docs/PRD.md) | 产品假设、数据模型和架构设计 |
+| [Features](docs/FEATURES.md) | Radar, integrations, comparisons, maintainer reports, library, MCP |
+| [Scoring](docs/SCORING.md) | Score components, default weights, versions and evaluation |
+| [Deployment](docs/DEPLOYMENT.md) | Docker Compose, Caddy/Nginx, TLS, backups |
+| [Operations](docs/OPERATIONS.md) | Observability, GitHub scopes, notifications, quotas |
+| [Development](docs/DEVELOPMENT.md) | CLI, environment variables, structure, tests, sandbox |
+| [Roadmap](docs/ROADMAP.md) | Next-stage validation and product direction |
 
-## 已知限制
+## Known limitations
 
-- 项目仍在早期，接口、报告格式和页面会继续调整；欢迎提 Issue，但不建议直接用于关键生产流程。
-- 仅支持自托管，不提供官方在线服务或托管 demo；可以先看上面的截图，或用 Docker 在本机启动。只读分享快照 `/radar/[token]` 已可用。
-- AI 功能需要自己配置模型 Key，会消耗 token；不配模型时只能使用采集、列表和基础雷达。
-- 沙箱验证会执行仓库里的构建脚本，属于不可信代码；生产环境请把 worker 隔离部署，不要和数据库共用主机。
-- 删除仓库需要单独授权 `delete_repo`；RepoRadar 不会自动删除任何仓库。
-- GitHub Search API 有速率限制，候选池需要几天积累才能形成稳定的趋势信号。
-- 它不会自动提交、推送或创建 PR；补丁和接入方案都需要人工审阅。
+- Early-stage project: interfaces and report formats will change.
+- Self-hosted only: there is no official hosted account service. You can run a read-only promotion site with `RADAR_PROMO_MODE=1`; for real use, deploy your own full instance.
+- AI features need your own model key and consume tokens.
+- Sandbox verification executes untrusted build scripts; isolate the worker in production.
+- Deleting repositories requires the separate `delete_repo` scope; RepoRadar never deletes anything automatically.
+- GitHub Search API rate limits mean trend signals need a few days of collection.
+- It does not auto-commit, push or open pull requests; patches and integration briefs need human review.
 
 ## Roadmap
 
-下一阶段聚焦自托管可靠性：v0.1 发布与文档完善、worker 与备份/升级路径、更多信号源（HN / Reddit / 更稳定的 GitHub 趋势）、团队技术雷达。RepoRadar 不计划提供官方托管服务。详见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+Next up: v0.1 documentation and self-hosted reliability, more signal sources (HN / Reddit / steadier GitHub trends), and a team radar. RepoRadar does not plan to offer an official hosted service. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
-## 许可证
+## License
 
-Apache-2.0，见 [LICENSE](LICENSE)。
+Apache-2.0. See [LICENSE](LICENSE).
