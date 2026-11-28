@@ -14,17 +14,17 @@
     "@repo-radar/worker": "workspace:*",
     "html-to-image": "^1.11.13",
     "jszip": "^3.10.2",
-    "next": "16.4.3",
+    "next": "16.4.6",
     "next-auth": "5.0.0-beta.32",
-    "nodemailer": "^10.3.0",
+    "nodemailer": "^10.6.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.20.7",
     "@types/nodemailer": "^8.0.2",
-    "@types/react": "^19.0.0",
+    "@types/react": "^19.3.3",
     "@types/react-dom": "^19.0.0",
     "@types/web-push": "^3.6.4",
     "typescript": "^7.0.2"
